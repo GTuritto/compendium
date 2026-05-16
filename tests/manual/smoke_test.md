@@ -1,0 +1,72 @@
+# Compendium — Manual Smoke-Test Playbook
+
+A cumulative, end-to-end manual test walk. It grows one section per phase as the
+build progresses. After a phase merges, its smoke-test section is final; the full
+walk from Phase 0 onward should still pass on every later phase.
+
+## How to use this file
+
+- Run from the repository root with the dev environment up (`docker compose up -d`).
+- Commands are copy-paste-ready. Python entrypoints are prefixed with `uv run`.
+- Paths are relative to the repo root.
+- A scenario passes only if the actual result matches the **Expected** column
+  exactly (output, exit code, and any database/index state described).
+- Each phase's section is authored in that phase's Phase Plan
+  (`Plans/phase-N-<name>.md`) and appended here as part of the phase.
+
+Scenarios are numbered `N.M` — phase `N`, scenario `M`.
+
+## Phase 0 — Project skeleton
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 0.1 | Cold start | `cp .env.example .env` and fill values; `uv run python -m compendium` | Prints `Compendium starting` and the resolved storage URLs (`POSTGRES_URL`, `OPENSEARCH_URL`, `QDRANT_URL`, `MEMGRAPH_URL`). Exit code 0. |
+| 0.2 | Missing required variable | Unset a required var (e.g. `POSTGRES_URL`); `uv run python -m compendium` | Non-zero exit code; error message names the missing variable; no Python traceback. |
+| 0.3 | Validation does no I/O | With all storage backends stopped (`docker compose down`), `uv run python -m compendium` | Still exits 0 — config validation only resolves and parses values, it never connects. |
+| 0.4 | Log structure | `uv run python -m compendium 2>&1 1>/dev/null \| jq .` | Each line is valid JSON with `event`, `level`, and an ISO-8601 `ts`. No secret values (API keys) appear in the output. |
+
+## Phase 1 — PostgreSQL operational backbone
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 1.1 | Dev database up | `docker compose up -d`; wait for healthy | The `postgres:16` container is running and accepts connections on `localhost:5432`. |
+| 1.2 | Upgrade builds full schema | From an empty database, `uv run alembic upgrade head` | Completes without error. All operational tables, the ten enum types, and the four `v_*` views exist. |
+| 1.3 | Downgrade reverses cleanly | `uv run alembic downgrade base` | Completes without error; every table, enum, and view created by the migrations is gone, leaving an empty schema. |
+| 1.4 | Stub round-trip | `uv run alembic upgrade head`; insert a stub `source` and a stub `wiki_page` through `compendium/db/`, then read them back | The read rows match what was inserted, including JSONB, array, and enum-typed columns. |
+| 1.5 | Operational views queryable | After `upgrade head`, select from `v_sync_lag`, `v_failed_sources`, `v_recent_traces`, and `v_open_curation_signals` | Each query succeeds and returns the documented columns (empty result sets are fine). |
+
+## Phase 2 — Ingestion pipeline
+
+_Smoke-test scenarios authored in `Plans/phase-2-ingestion.md` and appended here when Phase 2 is implemented._
+
+## Phase 3 — Wiki page generation and canonical frontmatter
+
+_Smoke-test scenarios authored in `Plans/phase-3-wiki-generation.md` and appended here when Phase 3 is implemented._
+
+## Phase 4 — Derived indexes (OpenSearch + Qdrant)
+
+_Smoke-test scenarios authored in `Plans/phase-4-derived-indexes.md` and appended here when Phase 4 is implemented._
+
+## Phase 5 — Page-first retrieval
+
+_Smoke-test scenarios authored in `Plans/phase-5-retrieval.md` and appended here when Phase 5 is implemented._
+
+## Phase 6 — Memgraph structural index
+
+_Smoke-test scenarios authored in `Plans/phase-6-memgraph.md` and appended here when Phase 6 is implemented._
+
+## Phase 7 — Query traces and revision tracking
+
+_Smoke-test scenarios authored in `Plans/phase-7-traces.md` and appended here when Phase 7 is implemented._
+
+## Phase 8 — TUI ops console
+
+_Smoke-test scenarios authored in `Plans/phase-8-tui.md` and appended here when Phase 8 is implemented._
+
+## Phase 9 — Knowledge graph curation loop
+
+_Smoke-test scenarios authored in `Plans/phase-9-curation-loop.md` and appended here when Phase 9 is implemented._
+
+## Phase 10 — Golden dataset and testing
+
+_Smoke-test scenarios authored in `Plans/phase-10-testing.md` and appended here when Phase 10 is implemented._

@@ -4,9 +4,9 @@ Compendium is a personal knowledge synthesis system for one user (Giuseppe Turit
 
 ## Status
 
-Design is complete; implementation has not started. The full design and build reference is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, and a 10-phase build plan. Treat it as the source of truth for v0.1 scope.
+Design is complete; implementation has not started. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and open questions.
 
-As of 2026-05-16: no code exists. The first change, `bootstrap-skeleton-and-postgres` (Phase 0 + Phase 1), is scaffolded under [openspec/changes/](openspec/changes/) with proposal, design, specs, and tasks ready for implementation. Run `/opsx:apply` to begin.
+As of 2026-05-16: the project is bootstrapped (git repo, private GitHub remote, `uv` project, first commit) but no phase is implemented. The build workflow is established. OpenSpec changes for the first two phases (`phase-0-project-skeleton`, `phase-1-postgres-backbone`) are scaffolded under [openspec/changes/](openspec/changes/). Phase 0 is next.
 
 ## What Compendium Is
 
@@ -55,31 +55,36 @@ User communication preferences:
 
 ## Workflow
 
-The build runs in 10 phases (below). Each phase is one OpenSpec change under `openspec/changes/`.
+The build runs in 11 phases (0–10), defined in [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md). Phases are strictly ordered: never start phase N+1 before phase N is merged. Each phase carries two spec artifacts — an **OpenSpec change** (`openspec/changes/phase-N-<name>/`: the requirement contract) and a **Phase Plan** (`Plans/phase-N-<name>.md`: the execution breakdown).
 
-- For each phase, create or continue an OpenSpec change with proposal, design, specs, and tasks before implementing. Use `/opsx:propose` to scaffold and `/opsx:apply` to implement.
-- Implement a phase on its own git branch named after the change (e.g. `bootstrap-skeleton-and-postgres`). Branch off the latest `main`.
-- Do not move to phase N+1 until phase N's acceptance criteria pass. If a phase is taking three weeks, the scope is wrong, not the plan.
-- The user reviews and merges. Do not merge to `main` yourself.
-- Archive the OpenSpec change once the phase is merged and accepted.
+The per-phase loop:
+
+1. **Branch** — `git checkout -b phase-N-<name>` off the latest `main`.
+2. **OpenSpec change** — create the change with proposal, design, specs, tasks (`/opsx:propose`).
+3. **Phase Plan** — author `Plans/phase-N-<name>.md` from [Plans/_TEMPLATE-phase-plan.md](Plans/_TEMPLATE-phase-plan.md): sub-phases, tasks, the per-phase smoke test, open questions.
+4. **Review gate** — the user revises and approves the Phase Plan. No implementation code is written until it is approved.
+5. **Draft PR** — after the first commit, open a draft PR against `main`, titled `Phase N — <Title>`, body linking the Phase Plan.
+6. **Implement** — one commit per sub-phase (`Phase Na — <sub-phase>`), green at HEAD; final commit `Phase N complete — <short title>`. Append the phase's smoke test to [tests/manual/smoke_test.md](tests/manual/smoke_test.md).
+7. **Verify** — run the phase's testing plan and smoke test; mark the PR ready for review.
+8. **Merge** — the user reviews and merges. Do not merge to `main` yourself.
+
+Every commit ends with the trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`. If a phase takes more than two focused weekends, the scope is wrong, not the plan.
 
 ## Build Phases (overview)
 
-Ten phases; full detail in [Compendium.md](docs/Compendium.md) Part IV. Each ships a working slice.
+Eleven phases (0–10); branch names and verbatim Goal/Acceptance in [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md). Each ships a working slice.
 
-- **Phase 0 — Project skeleton:** `uv` project, package layout, config loader, `structlog`, Alembic init.
-- **Phase 1 — PostgreSQL operational backbone:** the full operational schema as ordered Alembic migrations.
-- **Phase 2 — Ingestion pipeline:** source adapters, inspection, structure-aware chunking, idempotent storage.
-- **Phase 3 — Wiki page generation:** `source`/`concept`/`topic` pages, canonical frontmatter, lint, revisions.
-- **Phase 4 — Derived indexes:** OpenSearch and Qdrant populated from PostgreSQL and the vault, with sync tracking.
-- **Phase 5 — Page-first retrieval:** hybrid BM25 + dense, RRF fusion, chunk fallback, full query traces.
-- **Phase 6 — Memgraph structural index:** typed nodes and edges, populated and rebuildable.
-- **Phase 7 — Traces and revisions:** trace inspection and replay, revision diffs, promotion events.
-- **Phase 8 — TUI ops console:** keyboard-driven Textual console, one screen per operational concern.
-- **Phase 9 — Knowledge graph curation loop (ADR-009):** fast per-query expansion, slow scheduled signal generation, curator UI.
-- **Phase 10 — Golden dataset and testing:** golden dataset, test layers, CI.
-
-Phases 0 and 1 are combined into the first change, `bootstrap-skeleton-and-postgres`.
+- **Phase 0 — Project skeleton** (`phase-0-project-skeleton`): `uv` project, package layout, config loader, `structlog`, dev `docker-compose.yml`.
+- **Phase 1 — PostgreSQL operational backbone** (`phase-1-postgres-backbone`): the full operational schema as ordered Alembic migrations.
+- **Phase 2 — Ingestion pipeline** (`phase-2-ingestion`): source adapters, inspection, structure-aware chunking, idempotent storage.
+- **Phase 3 — Wiki page generation** (`phase-3-wiki-generation`): `source`/`concept`/`topic` pages, canonical frontmatter, lint, revisions.
+- **Phase 4 — Derived indexes** (`phase-4-derived-indexes`): OpenSearch and Qdrant populated from PostgreSQL and the vault, with sync tracking.
+- **Phase 5 — Page-first retrieval** (`phase-5-retrieval`): hybrid BM25 + dense, RRF fusion, chunk fallback, full query traces.
+- **Phase 6 — Memgraph structural index** (`phase-6-memgraph`): typed nodes and edges, populated and rebuildable.
+- **Phase 7 — Traces and revisions** (`phase-7-traces`): trace inspection and replay, revision diffs, promotion events.
+- **Phase 8 — TUI ops console** (`phase-8-tui`): keyboard-driven Textual console, one screen per operational concern.
+- **Phase 9 — Knowledge graph curation loop** (`phase-9-curation-loop`, ADR-009): fast per-query expansion, slow scheduled signal generation, curator UI.
+- **Phase 10 — Golden dataset and testing** (`phase-10-testing`): golden dataset, test layers, CI.
 
 ## Testing
 
