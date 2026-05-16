@@ -1,13 +1,18 @@
 # BUG-001: `ingest` of a single non-existent file path crashes with a traceback
 
 **Severity:** Low | **Priority:** P3 | **Type:** Functional / UX
-**Status:** Fixed
+**Status:** Closed
 
 ## Environment
 
 - **OS:** macOS 25.4.0
 - **Build:** `main`, post-Phase 2 (commit `655d849`)
 - **Component:** `compendium/ingest/pipeline.py`, `python -m compendium ingest`
+- **Observed in build:** `main` at commit `655d849`
+- **Fixed in commit:** `fb6f8af`
+- **Merged:** PR #4, merge commit `8c51d87`
+- **Verified on `main`:** TC-ING-009 re-run post-merge — clean `failed`
+  result, exit 1, no traceback
 
 ## Description
 
