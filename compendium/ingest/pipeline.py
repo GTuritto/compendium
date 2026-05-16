@@ -19,6 +19,7 @@ from compendium.ingest.adapters.dispatch import mime_type_for, parse_source
 from compendium.ingest.chunking import chunk_sections
 from compendium.ingest.hashing import hash_bytes
 from compendium.ingest.inspection import inspect
+from compendium.wiki.source_page import generate_source_page
 
 _DEFAULTS = {
     "max_source_bytes": 200 * 1024 * 1024,
@@ -43,8 +44,9 @@ def _is_url(path: str) -> bool:
     return path.startswith(("http://", "https://"))
 
 
-def _settings() -> dict[str, int]:
-    ingestion = load_config().settings.get("ingestion", {})
+def _settings() -> dict[str, object]:
+    config = load_config()
+    ingestion = config.settings.get("ingestion", {})
     chunk = ingestion.get("chunk", {})
     return {
         "max_source_bytes": ingestion.get(
@@ -55,6 +57,7 @@ def _settings() -> dict[str, int]:
         ),
         "target_tokens": chunk.get("target_tokens", _DEFAULTS["target_tokens"]),
         "overlap_tokens": chunk.get("overlap_tokens", _DEFAULTS["overlap_tokens"]),
+        "vault_path": config.vault_path,
     }
 
 
@@ -143,6 +146,8 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             inspection_status=result.status, inspection_notes=result.notes,
             chunks=chunks, prior_id=prior_id,
         )
+        if chunks:
+            generate_source_page(conn, source_id, vault_path=str(cfg["vault_path"]))
         status = "updated" if prior_id is not None else "ingested"
         return IngestResult(path, status, source_id, len(chunks), result.notes)
 

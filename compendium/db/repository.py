@@ -201,6 +201,59 @@ def count_chunks(conn: psycopg.Connection, source_id: UUID) -> int:
     return row["n"]
 
 
+def get_chunks_for_source(
+    conn: psycopg.Connection, source_id: str | UUID
+) -> list[dict[str, Any]]:
+    """Every chunk of a source, ordered by position."""
+    return conn.execute(
+        "SELECT * FROM chunks WHERE source_id = %s ORDER BY position",
+        (str(source_id),),
+    ).fetchall()
+
+
+def sources_without_page(conn: psycopg.Connection) -> list[UUID]:
+    """Ids of sources that have chunks but no ``source`` page yet."""
+    return [
+        row["source_id"]
+        for row in conn.execute(
+            """
+            SELECT DISTINCT c.source_id
+            FROM chunks c
+            WHERE NOT EXISTS (
+                SELECT 1 FROM wiki_pages w
+                WHERE w.source_id = c.source_id AND w.kind = 'source'
+            )
+            """
+        )
+    ]
+
+
+def search_chunks(
+    conn: psycopg.Connection, terms: list[str], limit: int
+) -> list[dict[str, Any]]:
+    """Chunks whose body matches any term (case-insensitive), with source title.
+
+    A naive pre-retrieval lexical match used by Phase 3 synthesis.
+    """
+    if not terms:
+        return []
+    clause = " OR ".join("c.body ILIKE %s" for _ in terms)
+    params = [f"%{t}%" for t in terms]
+    params.append(limit)
+    return conn.execute(
+        f"""
+        SELECT c.id, c.source_id, c.position, c.parent_section, c.body,
+               s.title AS source_title
+        FROM chunks c
+        JOIN sources s ON s.id = c.source_id
+        WHERE {clause}
+        ORDER BY c.source_id, c.position
+        LIMIT %s
+        """,
+        params,
+    ).fetchall()
+
+
 # --- wiki pages ------------------------------------------------------------
 
 

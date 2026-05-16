@@ -10,10 +10,12 @@ import argparse
 import sys
 
 from compendium.config import ConfigError, load_config
+from compendium.db import repository
 from compendium.db.connection import connection
 from compendium.ingest.pipeline import ingest
 from compendium.logging import get_logger
 from compendium.wiki.lint import errors_only, lint_vault, load_vault_pages
+from compendium.wiki.source_page import generate_source_page
 
 _SOURCE_KINDS = ["book", "article", "paper", "note", "web"]
 
@@ -90,6 +92,27 @@ def _lint() -> int:
     return 1 if errors else 0
 
 
+def _pages_build() -> int:
+    log = get_logger("compendium.pages")
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    built = 0
+    with connection() as conn:
+        for source_id in repository.sources_without_page(conn):
+            page = generate_source_page(
+                conn, source_id, vault_path=config.vault_path
+            )
+            if page is not None:
+                built += 1
+                log.info("source page built", slug=page.slug)
+    print(f"pages build: {built} source page(s) generated", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -106,12 +129,19 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("lint", help="lint the wiki vault")
 
+    pages_parser = subparsers.add_parser("pages", help="wiki page operations")
+    pages_parser.add_argument(
+        "action", choices=["build"], help="build: backfill missing source pages"
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
         return _ingest(args.path, args.kind, args.mine)
     if args.command == "lint":
         return _lint()
+    if args.command == "pages":
+        return _pages_build()
     return _startup()
 
 
