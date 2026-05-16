@@ -41,7 +41,7 @@ uv run pytest
 
 ## Configuration
 
-- `.env` holds secrets and storage URLs (`POSTGRES_URL`, `OPENSEARCH_URL`, `QDRANT_URL`, `MEMGRAPH_URL`, `OPENROUTER_API_KEY`, `EMBED_MODEL`, `VAULT_PATH`). Never committed.
+- `.env` holds secrets and per-machine values: the storage URLs (`POSTGRES_URL`, `OPENSEARCH_URL`, `QDRANT_URL`, `MEMGRAPH_URL`), `VAULT_PATH`, the synthesis LLM endpoint (`SYNTHESIS_ENDPOINT`, `SYNTHESIS_MODEL`, `OPENROUTER_API_KEY`), and the embeddings endpoint (`EMBEDDINGS_ENDPOINT`, `EMBED_MODEL`). Never committed.
 - `config/settings.yaml` holds non-secret behavior config (chunk sizes, retrieval thresholds, loop intervals) and references environment variables by name.
 
 ## Project layout
