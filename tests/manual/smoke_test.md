@@ -51,7 +51,17 @@ assume a freshly migrated, empty database.
 
 ## Phase 3 — Wiki page generation and canonical frontmatter
 
-_Smoke-test scenarios authored in `Plans/phase-3-wiki-generation.md` and appended here when Phase 3 is implemented._
+Run with the dev database migrated and a clean vault
+(`find vault -name '*.md' -delete`).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 3.1 | Source page on ingest | `uv run python -m compendium ingest tests/fixtures/sample.pdf --kind paper` | A `source` page appears in `vault/sources/`. |
+| 3.2 | Backfill source pages | Ingest `sample.epub` and `sample.md`, then `uv run python -m compendium pages build` | A `source` page exists for every ingested source (`pages build` reports `0` since the ingest hook already made them). |
+| 3.3 | Lint a clean vault | `uv run python -m compendium lint` | Reports zero errors; exit 0. |
+| 3.4 | Lint catches a bad page | Hand-edit a page to break the slug or drop a required field; `uv run python -m compendium lint` | The failing rule is reported as an error; exit 1. |
+| 3.5 | Concept synthesis | `COMPENDIUM_SYNTH_STUB=1 uv run python -m compendium synth concept "psychological safety"` | A `concept` page is written, passes lint, and its `## Grounding` section cites at least two chunks across at least two sources. |
+| 3.6 | Revision recorded | After 3.5, `PSQL "SELECT kind, generator FROM wiki_page_revisions JOIN wiki_pages ON wiki_pages.id = wiki_page_revisions.page_id"` | A revision row exists for the concept page with `generator = synth`. |
 
 ## Phase 4 — Derived indexes (OpenSearch + Qdrant)
 

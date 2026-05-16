@@ -98,8 +98,8 @@ def _swap_db(url: str, dbname: str) -> str:
 
 
 @pytest.fixture
-def ingest_db(monkeypatch) -> str:
-    """A migrated, empty compendium_test database; POSTGRES_URL points at it."""
+def ingest_db(monkeypatch, tmp_path) -> str:
+    """A migrated compendium_test database and a temporary vault."""
     base = load_config().postgres_url
     admin_url = _swap_db(base, "postgres")
     try:
@@ -116,7 +116,11 @@ def ingest_db(monkeypatch) -> str:
     cfg.cmd_opts = SimpleNamespace(x=[f"db_url={test_url}"])
     command.upgrade(cfg, "head")
 
+    vault = tmp_path / "vault"
+    for sub in ("concepts", "topics", "sources"):
+        (vault / sub).mkdir(parents=True)
     monkeypatch.setenv("POSTGRES_URL", test_url)
+    monkeypatch.setenv("VAULT_PATH", str(vault))
     yield test_url
 
     with psycopg.connect(admin_url, autocommit=True) as admin:
