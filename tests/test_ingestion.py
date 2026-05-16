@@ -79,6 +79,16 @@ def test_inspection_classifies():
     assert inspect(empty, b"", **args).status == FAILED
 
 
+def test_ingest_missing_file_is_failed_not_crash():
+    # Regression for BUG-001: a single non-existent path must return a failed
+    # result, not raise an uncaught exception.
+    results = ingest("/tmp/compendium-no-such-file-xyz.md", kind="note")
+    assert len(results) == 1
+    assert results[0].status == "failed"
+    assert results[0].source_id is None
+    assert "no such file" in results[0].detail
+
+
 # --- integration tests -----------------------------------------------------
 
 

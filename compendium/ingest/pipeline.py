@@ -60,19 +60,29 @@ def _settings() -> dict[str, int]:
 
 def ingest(path: str, *, kind: str, mine: bool = False) -> list[IngestResult]:
     """Ingest a file, a URL, or a directory; one result per source."""
-    if not _is_url(path) and Path(path).is_dir():
-        results: list[IngestResult] = []
-        for child in sorted(Path(path).iterdir()):
-            if not child.is_file():
-                continue
-            try:
-                results.append(_ingest_one(str(child), kind=kind, mine=mine))
-            except Exception as exc:  # keep ingesting the rest of the directory
-                results.append(
-                    IngestResult(str(child), "failed", None, 0, repr(exc))
-                )
-        return results
-    return [_ingest_one(path, kind=kind, mine=mine)]
+    if not _is_url(path):
+        target = Path(path)
+        if target.is_dir():
+            return [
+                _safe_ingest_one(str(child), kind, mine)
+                for child in sorted(target.iterdir())
+                if child.is_file()
+            ]
+        if not target.is_file():
+            return [IngestResult(path, "failed", None, 0, f"no such file: {path}")]
+    return [_safe_ingest_one(path, kind, mine)]
+
+
+def _safe_ingest_one(path: str, kind: str, mine: bool) -> IngestResult:
+    """Ingest one source, turning any unexpected error into a failed result.
+
+    This gives the single-file and directory paths identical handling: one
+    bad source never crashes the run or aborts the rest of a directory.
+    """
+    try:
+        return _ingest_one(path, kind=kind, mine=mine)
+    except Exception as exc:
+        return IngestResult(path, "failed", None, 0, repr(exc))
 
 
 def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
