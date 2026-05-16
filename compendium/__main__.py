@@ -10,8 +10,10 @@ import argparse
 import sys
 
 from compendium.config import ConfigError, load_config
+from compendium.db.connection import connection
 from compendium.ingest.pipeline import ingest
 from compendium.logging import get_logger
+from compendium.wiki.lint import errors_only, lint_vault, load_vault_pages
 
 _SOURCE_KINDS = ["book", "article", "paper", "note", "web"]
 
@@ -55,6 +57,39 @@ def _ingest(path: str, kind: str, mine: bool) -> int:
     return 1 if failed and failed == len(results) else 0
 
 
+def _lint() -> int:
+    log = get_logger("compendium.lint")
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    pages, issues = load_vault_pages(config.vault_path)
+    source_ids: set[str] | None = None
+    try:
+        with connection() as conn:
+            source_ids = {
+                str(row["id"]) for row in conn.execute("SELECT id FROM sources")
+            }
+    except Exception as exc:  # lint still runs, minus source-id-resolves
+        log.warning("lint: source-id-resolves skipped", error=str(exc))
+
+    issues = issues + lint_vault(pages, known_source_ids=source_ids)
+    errors = errors_only(issues)
+    for issue in issues:
+        print(
+            f"  {issue.severity}: [{issue.page}] {issue.rule}: {issue.message}",
+            file=sys.stderr,
+        )
+    print(
+        f"lint: {len(pages)} page(s), {len(errors)} error(s), "
+        f"{len(issues) - len(errors)} warning(s)",
+        file=sys.stderr,
+    )
+    return 1 if errors else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -68,10 +103,15 @@ def main(argv: list[str] | None = None) -> int:
     ingest_parser.add_argument(
         "--mine", action="store_true", help="mark the source as authored by you"
     )
+
+    subparsers.add_parser("lint", help="lint the wiki vault")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
         return _ingest(args.path, args.kind, args.mine)
+    if args.command == "lint":
+        return _lint()
     return _startup()
 
 
