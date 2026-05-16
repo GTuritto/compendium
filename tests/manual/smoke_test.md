@@ -37,7 +37,17 @@ Scenarios are numbered `N.M` — phase `N`, scenario `M`.
 
 ## Phase 2 — Ingestion pipeline
 
-_Smoke-test scenarios authored in `Plans/phase-2-ingestion.md` and appended here when Phase 2 is implemented._
+Run with the dev database migrated (`uv run alembic upgrade head`). Counts
+assume a freshly migrated, empty database.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 2.1 | Ingest a PDF | `uv run python -m compendium ingest tests/fixtures/sample.pdf --kind paper` | Reports `1 stored`; one `sources` row and one or more `chunks`. |
+| 2.2 | Ingest EPUB and HTML | `uv run python -m compendium ingest tests/fixtures/sample.epub --kind book` then `... ingest tests/fixtures/sample.html --kind web` | Two more sources; each reports `1 stored` with chunks. |
+| 2.3 | Re-ingest is idempotent | `uv run python -m compendium ingest tests/fixtures/sample.pdf --kind paper` | Reports `1 unchanged`; `sources` and `chunks` counts do not change. |
+| 2.4 | Failed source | `uv run python -m compendium ingest tests/fixtures/broken.pdf --kind paper` | Reports `1 failed`; the source has `inspection_status = failed` and appears in `v_failed_sources` with a reason. |
+| 2.5 | Authored provenance | `uv run python -m compendium ingest tests/fixtures/sample.md --kind note --mine` | `1 stored`; that source's `metadata` has `authored_by_me: true`. |
+| 2.6 | Directory ingest | `uv run python -m compendium ingest tests/fixtures/` | Every file in the directory is handled as its own source; run after 2.1–2.5, all five report `unchanged` (their content hashes are already stored). |
 
 ## Phase 3 — Wiki page generation and canonical frontmatter
 
