@@ -1,15 +1,15 @@
 ---
-id: 373ad262-5a56-4a91-9656-763fce6e2cc3
+id: 21315940-e145-4581-9c04-cbf3ff6294ed
 kind: source
 title: Retrieval and Synthesis
 slug: retrieval-and-synthesis
-created_at: '2026-05-16T17:37:19.022548+00:00'
-updated_at: '2026-05-16T17:37:19.022548+00:00'
+created_at: '2026-05-16T17:39:40.052993+00:00'
+updated_at: '2026-05-16T17:39:40.052993+00:00'
 content_hash: f2f4980bf5a2b16dc0854bb354088e9a2910760ce187a085d393338997b15445
 status: canonical
 generator: synth
-corpus_revision: rev-20260516T173718Z
-source_id: 26dac01a-9e58-46dc-bed9-e51cf11bdfde
+corpus_revision: rev-20260516T173940Z
+source_id: 8f4a6e5b-6766-4704-a31f-5c2f045c72fa
 source_kind: web
 source_metadata:
   author_detected: Test Author

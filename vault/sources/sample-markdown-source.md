@@ -1,15 +1,15 @@
 ---
-id: a1448e61-d1ed-44dc-8292-398b8a76f608
+id: 8c7e3cdb-1c46-4d35-9032-4f1b00cb35f2
 kind: source
 title: Sample Markdown Source
 slug: sample-markdown-source
-created_at: '2026-05-16T17:37:19.618362+00:00'
-updated_at: '2026-05-16T17:37:19.618362+00:00'
+created_at: '2026-05-16T17:39:40.681159+00:00'
+updated_at: '2026-05-16T17:39:40.681159+00:00'
 content_hash: 86dde047842c5bf7bbb66a6d9e0ffa24aa52e44fc7ba8b5bf54a47a6a5d10a1c
 status: canonical
 generator: synth
-corpus_revision: rev-20260516T173719Z
-source_id: 0fd283af-36a4-4da4-9949-b78bdfb8ba0b
+corpus_revision: rev-20260516T173940Z
+source_id: 58fd01b3-daeb-4212-9e9d-ebb82f13915b
 source_kind: note
 source_metadata:
   authored_by_me: true
