@@ -1,6 +1,6 @@
 # Compendium — Context for Claude Code Sessions
 
-Compendium is a personal knowledge synthesis system for one user (Giuseppe Turitto), running locally on a laptop or small box. v0.1 ingests sources (books, papers, articles, notes), synthesizes them into a canonical Markdown wiki of concept, topic, and source pages, and answers natural-language queries by retrieving from that wiki rather than from raw chunks. The core bet: a maintained wiki of stable, citable, deduplicated pages produces better answers over time than retrieval against static chunks. The Textual TUI is the ops console; Obsidian is a read-only view over the same vault.
+Compendium is a personal knowledge synthesis system for one user (Giuseppe Turitto), running locally on a laptop or small box. v0.1 ingests sources, both what you read (books, papers, articles, web) and what you write (your own notes, essays, and drafts), synthesizes them into a canonical Markdown wiki of concept, topic, and source pages, and answers natural-language queries by retrieving from that wiki rather than from raw chunks. The core bet: a maintained wiki of stable, citable, deduplicated pages produces better answers over time than retrieval against static chunks. The Textual TUI is the ops console; Obsidian is a read-only view over the same vault.
 
 ## Status
 
