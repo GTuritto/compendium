@@ -41,6 +41,12 @@ dist/
 .vscode/
 *.code-workspace
 
+# Generated wiki pages — the vault directory structure is tracked, but the
+# page content is generated at runtime and is per-user, not repo content.
+vault/concepts/*.md
+vault/topics/*.md
+vault/sources/*.md
+
 # OS cruft
 .DS_Store
 *.swp
