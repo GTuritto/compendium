@@ -1,0 +1,18 @@
+# Dev-only: local backing stores for Compendium development.
+# Not a production or production-like deployment. Later phases append the
+# OpenSearch, Qdrant, and Memgraph services here.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: compendium
+      POSTGRES_USER: compendium
+      POSTGRES_PASSWORD: compendium
+    ports:
+      - "5432:5432"
+    volumes:
+      - compendium-pgdata:/var/lib/postgresql/data
+
+volumes:
+  compendium-pgdata:
