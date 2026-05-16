@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Sample HTML Source</title>
+  <meta name="author" content="Test Author">
+</head>
+<body>
+  <nav>Home | About | Contact — this navigation is boilerplate</nav>
+  <header>Site banner that should be stripped</header>
+  <article>
+    <h1>Retrieval and Synthesis</h1>
+    <p>This is a small HTML fixture for the Phase 2 ingestion tests. The
+    article body should survive boilerplate removal while the navigation and
+    footer around it are discarded by the HTML adapter.</p>
+    <h2>Page-First Retrieval</h2>
+    <p>Page-first retrieval returns stable, citable wiki pages rather than raw
+    chunks. Chunks remain only as a fallback when page coverage is thin for a
+    given query, which keeps answers consistent as the corpus grows.</p>
+    <h2>Compounding Knowledge</h2>
+    <p>A maintained wiki compounds: every new source improves the pages it
+    touches, so the same query gets better answers over time instead of
+    drifting with whichever chunks happen to win.</p>
+  </article>
+  <footer>Copyright notice and more boilerplate to be removed</footer>
+</body>
+</html>
