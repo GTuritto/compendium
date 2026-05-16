@@ -172,6 +172,9 @@ inputs give a creation command in their preconditions.
 1. Run `uv run python -m compendium ingest /tmp/does-not-exist.md --kind note`
    **Expected:** The CLI reports `1 failed` with detail `no such file: <path>`
    and exits non-zero; no source row is created.
+2. `PSQL "SELECT COUNT(*) FROM source_documents WHERE path = '/tmp/does-not-exist.md'"`
+   **Expected:** `0` — no source document row created. (The `path` column is
+   on `source_documents`, not `sources`.)
 
 **Notes:** Resolved by BUG-001. Before that fix this surfaced as a Python
 traceback because the single-file path was not wrapped in the per-file guard
