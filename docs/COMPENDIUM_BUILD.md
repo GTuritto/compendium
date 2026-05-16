@@ -64,7 +64,9 @@ deliberate answer before Phase 0 code lands.
 1. **Embedding model.** BGE-M3 is a strong multilingual default but heavy. If the
    corpus is English-only in practice, a smaller model (BGE-small-en, GTE-small)
    cuts memory and latency. This fixes the Qdrant collection dimension, so decide
-   it before Phase 4 at the latest — ideally now.
+   it before Phase 4 at the latest, ideally now. The model is served locally via
+   Docker Model Runner; confirm it is available in the DMR catalog as a GGUF or
+   can be imported.
 2. **Where Compendium runs.** Laptop or Pi 5. The four-store stack on a Pi 5 with
    16GB is plausible but tight, and competes with the Ubongo box. Laptop is the
    comfortable choice.
@@ -73,8 +75,10 @@ deliberate answer before Phase 0 code lands.
    depend on the choice. Pick now.
 4. *(lower priority)* Chunk-strategy parameters — ship reasonable defaults, tune
    against the Phase 10 golden dataset.
-5. *(lower priority)* OpenRouter model for synthesis — set per-phase defaults,
-   let the curator override.
+5. *(lower priority)* Synthesis endpoint and model. The synthesis client is
+   OpenAI-compatible; the endpoint is config-selectable between OpenRouter
+   (cloud, Claude Sonnet) and Docker Model Runner (local). The default can be
+   deferred to Phase 3, when page quality is observable.
 
 ## Workstream view
 

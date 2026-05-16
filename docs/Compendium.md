@@ -1260,8 +1260,8 @@ Build v0.1 first. Use it for two weeks against real sources. Then reassess what 
 | Vector index | Qdrant | Lean, embeddable, good filter support, payload-rich |
 | Graph | Memgraph | Cypher-compatible, in-memory speed, smaller op footprint than Neo4j |
 | Markdown vault | Plain files + Obsidian | Canonical content; Obsidian is the read view |
-| Embeddings | Open-weight via local inference (BGE-M3 or similar) | Local-first, no per-query cost, deterministic for a given corpus rev |
-| LLM (synthesis) | OpenRouter as gateway | Single key, model swap without code changes |
+| Embeddings | Open-weight model served locally via Docker Model Runner (BGE-M3 or similar) | Local-first, no per-query cost, deterministic for a given corpus rev; OpenAI-compatible endpoint |
+| LLM (synthesis) | OpenAI-compatible client; endpoint is OpenRouter (cloud) or Docker Model Runner (local), selected by config | Swap endpoint and model without code changes; cloud for page quality, local to keep ingested notes on-device |
 | TUI | Textual | Python-native, good DX, matches one-user ops console scope |
 | Telemetry | structlog to stderr + JSON to Postgres `query_traces` | Local-first, no SaaS observability dependency |
 
@@ -1620,7 +1620,7 @@ Operating rules for the builder, whether Claude Code or otherwise:
 
 Open questions worth resolving before Phase 0. These came up across the design sessions and were left dangling; resolve at least the first three before starting.
 
-1. **Embedding model.** BGE-M3 is a strong default for multilingual, but it is heavy. If the corpus is English-only in practice, a smaller open model (BGE-small-en, GTE-small) cuts memory and latency materially. The decision impacts Qdrant collection dimensions, so do it now, not later.
+1. **Embedding model.** BGE-M3 is a strong default for multilingual, but it is heavy. If the corpus is English-only in practice, a smaller open model (BGE-small-en, GTE-small) cuts memory and latency materially. The decision impacts Qdrant collection dimensions, so do it now, not later. The model is served locally via Docker Model Runner; confirm the chosen model is available in the DMR catalog as a GGUF or can be imported.
 
 2. **Where does Compendium run?** Laptop or Pi 5. The Pi 5 is plausible for the Postgres / OpenSearch / Qdrant / Memgraph stack with 16GB if you tune carefully; it is not the comfortable choice. Laptop is the comfortable choice. If Pi 5, this competes with the Ubongo agent box, so reconcile.
 
@@ -1628,7 +1628,7 @@ Open questions worth resolving before Phase 0. These came up across the design s
 
 4. (Lower priority) **Chunk strategy parameters.** The default is structure-aware with sliding-window fallback; the exact window size and overlap are tunable, but the right values come from Phase 10's golden dataset. Ship reasonable defaults and tune later.
 
-5. (Lower priority) **OpenRouter model selection for synthesis.** Claude Sonnet is the default for synthesis quality. Cheaper models work for the lint-passes-let-me-see-something path but produce dull pages. Set per-phase defaults; let the curator override.
+5. (Lower priority) **Synthesis endpoint and model.** The synthesis client is OpenAI-compatible, so the endpoint is selectable by config: OpenRouter (cloud, Claude Sonnet default) for page quality, or Docker Model Runner (local) to keep ingested notes on-device. Cheaper or local models work for the lint-passes-let-me-see-something path but produce dull pages. Set per-phase defaults; let the curator override. The default endpoint can be deferred until Phase 3, when page quality is observable.
 
 ## Part V: Testing and Validation
 
