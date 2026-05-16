@@ -62,6 +62,13 @@ def test_chunking_dedupes_identical_bodies():
     assert len(chunk_sections(sections, target_tokens=512, overlap_tokens=64)) == 1
 
 
+def test_markdown_adapter_uses_first_h1_as_title():
+    from compendium.ingest.adapters.dispatch import parse_source
+
+    parsed = parse_source(str(_FIXTURES / "sample.md"))
+    assert parsed.metadata.get("title") == "Sample Markdown Source"
+
+
 def test_inspection_classifies():
     healthy = ParsedSource("word " * 2000, [], {})
     thin = ParsedSource("only a few words", [], {})
