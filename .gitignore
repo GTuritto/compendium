@@ -1,0 +1,46 @@
+# Secrets and local config
+.env
+.env.local
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv / virtualenv
+.venv/
+venv/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# AI assistant tooling — not tracked
+.agent/
+.codex/
+.gemini/
+.windsurf/
+.specstory/
+
+# Claude Code — ignore tool config, but keep this project's skills
+.claude/*
+!.claude/skills/
+
+# GitHub tooling (Copilot prompts, skills mirror) — not tracked;
+# canonical skills are kept under .claude/skills/
+.github/
+
+# Editor / IDE
+.vscode/
+*.code-workspace
+
+# OS cruft
+.DS_Store
+*.swp
