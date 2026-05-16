@@ -1,0 +1,41 @@
+# Compendium configuration.
+#
+# Secret and per-machine values come from environment variables (see
+# .env.example). This file references them with ${VAR} and holds the
+# non-secret behavior configuration. ${VAR:-default} supplies a default
+# when the variable is unset.
+
+storage:
+  postgres_url: ${POSTGRES_URL}
+  opensearch_url: ${OPENSEARCH_URL}
+  qdrant_url: ${QDRANT_URL}
+  memgraph_url: ${MEMGRAPH_URL}
+
+vault:
+  path: ${VAULT_PATH}
+
+synthesis:
+  endpoint: ${SYNTHESIS_ENDPOINT}
+  model: ${SYNTHESIS_MODEL}
+  api_key: ${OPENROUTER_API_KEY:-}
+
+embeddings:
+  endpoint: ${EMBEDDINGS_ENDPOINT}
+  model: ${EMBED_MODEL}
+
+# --- Non-secret behavior config ---
+
+ingestion:
+  max_source_bytes: 209715200   # 200 MB
+  min_text_tokens: 1000
+  chunk:
+    target_tokens: 512
+    overlap_tokens: 64
+
+retrieval:
+  rrf_k: 60
+  page_coverage_threshold: 0.5
+  top_k: 7
+
+loops:
+  slow_loop_interval_seconds: 3600
