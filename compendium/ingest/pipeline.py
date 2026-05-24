@@ -176,6 +176,7 @@ def _store(
             metadata=metadata, inspection_status=inspection_status,
             inspection_notes=inspection_notes,
         )
+        repository.dequeue_chunks_for_source(conn, prior_id)
         repository.delete_chunks(conn, prior_id)
         repository.delete_source_documents(conn, prior_id)
         source_id = prior_id
@@ -190,6 +191,13 @@ def _store(
     )
     if chunks:
         repository.insert_chunks(conn, source_id, chunks)
+        for chunk_id in repository.all_chunk_ids_for_source(conn, source_id):
+            repository.enqueue_index(
+                conn,
+                entity_kind="chunk",
+                entity_id=chunk_id,
+                index_kinds=("opensearch_chunks", "qdrant_chunks"),
+            )
     return source_id
 
 

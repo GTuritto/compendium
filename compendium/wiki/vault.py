@@ -109,4 +109,12 @@ def write_page(conn: psycopg.Connection, page: Page, *, vault_path: str) -> Page
         repository.set_page_topics(
             conn, page_uuid, [UUID(t) for t in page.topic_ids]
         )
+    # Enqueue the derived-index sync rows in the same transaction as the write
+    # (eventual consistency: `compendium index sync` drains them).
+    repository.enqueue_index(
+        conn,
+        entity_kind="page",
+        entity_id=page_uuid,
+        index_kinds=("opensearch_pages", "qdrant_pages"),
+    )
     return page
