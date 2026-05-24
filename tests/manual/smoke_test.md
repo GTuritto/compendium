@@ -65,7 +65,17 @@ Run with the dev database migrated and a clean vault
 
 ## Phase 4 — Derived indexes (OpenSearch + Qdrant)
 
-_Smoke-test scenarios authored in `Plans/phase-4-derived-indexes.md` and appended here when Phase 4 is implemented._
+Prerequisites: Phase 3's ingest fixtures available; the stub embedder is fine
+(`export COMPENDIUM_EMBED_STUB=1`) so no embeddings endpoint is needed.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 4.1 | Stores up | `docker compose up -d opensearch qdrant` | Both reachable: `curl :9200` and `curl :6333/collections` respond. |
+| 4.2 | Schemas created | `uv run python -m compendium reindex all` (empty corpus is fine) | The `pages`/`chunks` indexes and collections exist; command exits 0. |
+| 4.3 | Populate | Ingest `sample.md` and `sample.pdf`, then `uv run python -m compendium index sync` | `index status` shows pending 0 and indexed counts equal to the page and chunk totals. |
+| 4.4 | OpenSearch query | `curl ':9200/pages/_search?q=body:psychological'` | A relevant page appears in the hits. |
+| 4.5 | Qdrant query | `POST :6333/collections/pages/points/search` with an embedded query vector | A relevant page point is returned. |
+| 4.6 | Deterministic rebuild | Drop the indexes, `uv run python -m compendium reindex all` | Counts are restored; the 4.4 query returns the same top page (Qdrant top-K within a small Jaccard distance). |
 
 ## Phase 5 — Page-first retrieval
 
