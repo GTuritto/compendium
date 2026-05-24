@@ -141,6 +141,99 @@ def _synth(kind: str, name: str, aliases: list[str]) -> int:
     return 0
 
 
+def _reindex(target: str) -> int:
+    log = get_logger("compendium.reindex")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    from compendium.index.sync import reindex
+
+    report = reindex(target)
+    log.info(
+        "reindex",
+        target=target,
+        indexed=report.indexed,
+        failed=report.failed,
+        skipped=report.skipped,
+    )
+    for error in report.errors:
+        print(f"  failed: {error}", file=sys.stderr)
+    print(
+        f"reindex {target}: {report.indexed} indexed, "
+        f"{report.failed} failed, {report.skipped} skipped",
+        file=sys.stderr,
+    )
+    return 1 if report.failed else 0
+
+
+def _index_sync() -> int:
+    log = get_logger("compendium.index")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    from compendium.index.sync import sync_pending
+
+    report = sync_pending()
+    log.info(
+        "index sync",
+        indexed=report.indexed,
+        failed=report.failed,
+        skipped=report.skipped,
+    )
+    for error in report.errors:
+        print(f"  failed: {error}", file=sys.stderr)
+    print(
+        f"index sync: {report.indexed} indexed, "
+        f"{report.failed} failed, {report.skipped} skipped",
+        file=sys.stderr,
+    )
+    return 1 if report.failed else 0
+
+
+def _index_status() -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    from compendium.index import opensearch, qdrant
+    from compendium.index.clients import (
+        opensearch_client,
+        opensearch_reachable,
+        qdrant_client,
+        qdrant_reachable,
+    )
+
+    os_client = opensearch_client()
+    if opensearch_reachable(os_client):
+        for index in (opensearch.PAGES_INDEX, opensearch.CHUNKS_INDEX):
+            print(f"opensearch/{index}: {opensearch.count(os_client, index)}",
+                  file=sys.stderr)
+    else:
+        print("opensearch: unreachable", file=sys.stderr)
+
+    q_client = qdrant_client()
+    if qdrant_reachable(q_client):
+        for collection in (qdrant.PAGES_COLLECTION, qdrant.CHUNKS_COLLECTION):
+            print(f"qdrant/{collection}: {qdrant.count(q_client, collection)}",
+                  file=sys.stderr)
+    else:
+        print("qdrant: unreachable", file=sys.stderr)
+
+    with connection() as conn:
+        for row in repository.sync_lag(conn):
+            print(f"sync {row['index_kind']}/{row['state']}: {row['n']}",
+                  file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -172,6 +265,17 @@ def main(argv: list[str] | None = None) -> int:
         help="an alternate phrasing (repeatable)",
     )
 
+    reindex_parser = subparsers.add_parser(
+        "reindex", help="rebuild a derived index from PostgreSQL and the vault"
+    )
+    reindex_parser.add_argument("target", choices=["pages", "chunks", "all"])
+
+    index_parser = subparsers.add_parser("index", help="derived-index operations")
+    index_parser.add_argument(
+        "action", choices=["sync", "status"],
+        help="sync: drain the pending queue; status: counts and sync lag",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -182,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
         return _pages_build()
     if args.command == "synth":
         return _synth(args.kind, args.name, args.aliases)
+    if args.command == "reindex":
+        return _reindex(args.target)
+    if args.command == "index":
+        return _index_sync() if args.action == "sync" else _index_status()
     return _startup()
 
 
