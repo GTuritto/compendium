@@ -211,6 +211,19 @@ def get_chunks_for_source(
     ).fetchall()
 
 
+def all_chunk_ids_for_source(
+    conn: psycopg.Connection, source_id: str | UUID
+) -> list[UUID]:
+    """Ids of a source's chunks, ordered by position."""
+    return [
+        row["id"]
+        for row in conn.execute(
+            "SELECT id FROM chunks WHERE source_id = %s ORDER BY position",
+            (str(source_id),),
+        )
+    ]
+
+
 def sources_without_page(conn: psycopg.Connection) -> list[UUID]:
     """Ids of sources that have chunks but no ``source`` page yet."""
     return [
@@ -454,6 +467,148 @@ def set_page_topics(
             "VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (page_id, topic_id),
         )
+
+
+# --- index sync state ------------------------------------------------------
+
+
+def enqueue_index(
+    conn: psycopg.Connection,
+    *,
+    entity_kind: str,
+    entity_id: str | UUID,
+    index_kinds: Iterable[str],
+) -> None:
+    """Mark an entity ``pending`` for each named index.
+
+    Idempotent via the ``(entity_kind, entity_id, index_kind)`` unique
+    constraint: re-enqueuing an already-``indexed`` entity resets its rows to
+    ``pending`` and clears the prior error and attempt count.
+    """
+    for index_kind in index_kinds:
+        conn.execute(
+            """
+            INSERT INTO index_sync_state (entity_kind, entity_id, index_kind)
+            VALUES (%s, %s, %s::index_kind)
+            ON CONFLICT (entity_kind, entity_id, index_kind)
+            DO UPDATE SET state = 'pending', attempts = 0,
+                          last_error = NULL, updated_at = now()
+            """,
+            (entity_kind, str(entity_id), index_kind),
+        )
+
+
+def dequeue_chunks_for_source(conn: psycopg.Connection, source_id: str | UUID) -> None:
+    """Drop the sync rows of a source's chunks (before the chunks are deleted)."""
+    conn.execute(
+        """
+        DELETE FROM index_sync_state
+        WHERE entity_kind = 'chunk'
+          AND entity_id IN (SELECT id FROM chunks WHERE source_id = %s)
+        """,
+        (str(source_id),),
+    )
+
+
+def claim_pending_sync_rows(
+    conn: psycopg.Connection,
+    limit: int | None = None,
+    index_kinds: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Pending sync rows in id order (backed by the partial pending index)."""
+    sql = (
+        "SELECT id, entity_kind, entity_id, index_kind, attempts "
+        "FROM index_sync_state WHERE state = 'pending'"
+    )
+    params: list[Any] = []
+    if index_kinds is not None:
+        kinds = list(index_kinds)
+        sql += " AND index_kind = ANY(%s::index_kind[])"
+        params.append(kinds)
+    sql += " ORDER BY id"
+    if limit is not None:
+        sql += " LIMIT %s"
+        params.append(limit)
+    return conn.execute(sql, params).fetchall()
+
+
+def mark_sync_indexed(conn: psycopg.Connection, row_id: int) -> None:
+    """Flip a sync row to ``indexed``, clearing any prior error."""
+    conn.execute(
+        """
+        UPDATE index_sync_state
+        SET state = 'indexed', attempts = attempts + 1,
+            last_error = NULL, updated_at = now()
+        WHERE id = %s
+        """,
+        (row_id,),
+    )
+
+
+def mark_sync_failed(conn: psycopg.Connection, row_id: int, error: str) -> None:
+    """Flip a sync row to ``failed``, recording the error and bumping attempts."""
+    conn.execute(
+        """
+        UPDATE index_sync_state
+        SET state = 'failed', attempts = attempts + 1,
+            last_error = %s, updated_at = now()
+        WHERE id = %s
+        """,
+        (error[:2000], row_id),
+    )
+
+
+def delete_sync_row(conn: psycopg.Connection, row_id: int) -> None:
+    """Drop a sync row whose entity no longer exists (stale after re-ingest)."""
+    conn.execute("DELETE FROM index_sync_state WHERE id = %s", (row_id,))
+
+
+def sync_lag(conn: psycopg.Connection) -> list[dict[str, Any]]:
+    """The ``index_kind`` / ``state`` / count breakdown from ``v_sync_lag``."""
+    return conn.execute(
+        "SELECT index_kind, state, n FROM v_sync_lag ORDER BY index_kind, state"
+    ).fetchall()
+
+
+# --- index entity loaders --------------------------------------------------
+
+
+def get_page_topic_ids(conn: psycopg.Connection, page_id: str | UUID) -> list[str]:
+    """Topic ids a concept page belongs to, via ``wiki_pages_topics``."""
+    return [
+        str(row["topic_id"])
+        for row in conn.execute(
+            "SELECT topic_id FROM wiki_pages_topics WHERE page_id = %s",
+            (str(page_id),),
+        )
+    ]
+
+
+def get_chunk_for_index(
+    conn: psycopg.Connection, chunk_id: str | UUID
+) -> dict[str, Any] | None:
+    """A chunk row joined to its source's title and kind, or None if gone."""
+    return conn.execute(
+        """
+        SELECT c.id, c.source_id, c.position, c.parent_section, c.body,
+               c.token_count, c.created_at,
+               s.title AS source_title, s.kind AS source_kind
+        FROM chunks c
+        JOIN sources s ON s.id = c.source_id
+        WHERE c.id = %s
+        """,
+        (str(chunk_id),),
+    ).fetchone()
+
+
+def all_wiki_page_ids(conn: psycopg.Connection) -> list[UUID]:
+    """Every wiki page id, in insertion order."""
+    return [row["id"] for row in conn.execute("SELECT id FROM wiki_pages ORDER BY id")]
+
+
+def all_chunk_ids(conn: psycopg.Connection) -> list[UUID]:
+    """Every chunk id, in insertion order."""
+    return [row["id"] for row in conn.execute("SELECT id FROM chunks ORDER BY id")]
 
 
 def ensure_corpus_revision(conn: psycopg.Connection) -> str:
