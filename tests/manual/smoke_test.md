@@ -79,7 +79,18 @@ Prerequisites: Phase 3's ingest fixtures available; the stub embedder is fine
 
 ## Phase 5 — Page-first retrieval
 
-_Smoke-test scenarios authored in `Plans/phase-5-retrieval.md` and appended here when Phase 5 is implemented._
+Prerequisites: Phase 4's stores up (`docker compose up -d opensearch qdrant`),
+a migrated database, and Phase 3's `sample.md` ingested with its source page
+indexed (`uv run python -m compendium ingest tests/fixtures/sample.md --kind note`
+then `uv run python -m compendium reindex all`). The stub embedder is fine
+(`export COMPENDIUM_EMBED_STUB=1`).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; the `Sample Markdown Source` page is listed with a score; stderr reports `coverage 1.000` and no fallback. |
+| 5.2 | JSON output | `uv run python -m compendium query "psychological safety" --json` | Exit 0; a JSON object with `query`, `coverage_score`, `fallback_to_chunks`, a non-empty `pages` array, `citations`, and `gaps`. |
+| 5.3 | Gap → chunk fallback | Empty the pages indexes (`curl -X DELETE :9200/pages`; recreate the empty `pages` Qdrant collection), then `uv run python -m compendium query "psychological safety team learning"` | Exit 0; no pages, chunk citations from `Sample Markdown Source` are shown under "citations (chunk fallback)". |
+| 5.4 | Traces persisted | `PSQL "SELECT query_text, round(coverage_score::numeric,3), fallback_to_chunks, jsonb_array_length(gaps), array_length(query_embedding,1), graph_expansion FROM query_traces ORDER BY created_at"` | One row per query above: the covered queries show coverage `1.000`, fallback `f`, 0 gaps; the 5.3 query shows coverage `0.000`, fallback `t`, 1 gap; every row has `query_embedding` length 1024 and `graph_expansion` NULL. |
 
 ## Phase 6 — Memgraph structural index
 
