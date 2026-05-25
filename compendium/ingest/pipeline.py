@@ -196,7 +196,7 @@ def _store(
                 conn,
                 entity_kind="chunk",
                 entity_id=chunk_id,
-                index_kinds=("opensearch_chunks", "qdrant_chunks"),
+                index_kinds=("opensearch_chunks", "qdrant_chunks", "memgraph"),
             )
     return source_id
 

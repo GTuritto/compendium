@@ -183,10 +183,11 @@ def test_enqueue_idempotency_resets_indexed_rows(index_env):
                 "SELECT state FROM index_sync_state WHERE entity_id = %s", (page_id,)
             )
         )
-        # Re-enqueue resets them to pending with attempts cleared.
+        # Re-enqueue resets them to pending with attempts cleared. A page write
+        # enqueues all three page-relevant kinds (memgraph added in Phase 6).
         repository.enqueue_index(
             conn, entity_kind="page", entity_id=page_id,
-            index_kinds=("opensearch_pages", "qdrant_pages"),
+            index_kinds=("opensearch_pages", "qdrant_pages", "memgraph"),
         )
         reset = conn.execute(
             "SELECT state, attempts FROM index_sync_state WHERE entity_id = %s",
@@ -219,8 +220,11 @@ def test_drain_populates_both_indexes(index_env):
     assert qdrant.count(q_client, qdrant.CHUNKS_COLLECTION) == chunk_count
 
     with psycopg.connect(db_url) as conn:
+        # reindex drains only the OpenSearch/Qdrant kinds; the memgraph kind is
+        # drained separately (compendium graph rebuild), so exclude it here.
         pending = conn.execute(
-            "SELECT count(*) FROM index_sync_state WHERE state <> 'indexed'"
+            "SELECT count(*) FROM index_sync_state "
+            "WHERE state <> 'indexed' AND index_kind <> 'memgraph'"
         ).fetchone()[0]
     assert pending == 0
 

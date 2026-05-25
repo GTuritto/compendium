@@ -21,6 +21,8 @@ import psycopg
 from compendium.config import load_config
 from compendium.db import repository
 from compendium.db.connection import connection
+from compendium.graph import projection
+from compendium.graph.client import graph_driver
 from compendium.index import documents, opensearch, qdrant
 from compendium.index.clients import opensearch_client, qdrant_client
 from compendium.index.embedder import Embedder, get_embedder
@@ -56,11 +58,13 @@ class _Stores:
         q_client: Any,
         embedder: Embedder,
         vault_path: str,
+        graph: Any = None,
     ) -> None:
         self.os = os_client
         self.q = q_client
         self.embedder = embedder
         self.vault_path = vault_path
+        self.graph = graph  # Bolt driver, lazily connected; used by the memgraph kind
 
 
 def _load_page(conn: psycopg.Connection, page_id: str, vault_path: str):
@@ -83,6 +87,15 @@ def _write_one(conn: psycopg.Connection, stores: _Stores, row: dict[str, Any]) -
     """Project and write one entity to its index. Returns ``indexed``/``skipped``."""
     index_kind = row["index_kind"]
     entity_id = str(row["entity_id"])
+
+    if index_kind == "memgraph":
+        if row["entity_kind"] == "page":
+            ok = projection.project_page(
+                stores.graph, conn, entity_id, stores.vault_path
+            )
+        else:
+            ok = projection.project_chunk(stores.graph, conn, entity_id)
+        return "indexed" if ok else "skipped"
 
     if index_kind in _PAGE_KINDS:
         loaded = _load_page(conn, entity_id, stores.vault_path)
@@ -153,15 +166,19 @@ def _stores(vault_path: str) -> _Stores:
         q_client=qdrant_client(),
         embedder=get_embedder(),
         vault_path=vault_path,
+        graph=graph_driver(),  # lazy: connects only when a memgraph row is drained
     )
 
 
 def sync_pending(index_kinds: tuple[str, ...] | None = None) -> SyncReport:
-    """Drain the pending queue into both stores (``compendium index sync``)."""
+    """Drain the pending queue into the derived stores (``compendium index sync``)."""
     config = load_config()
     stores = _stores(config.vault_path)
-    with connection() as conn:
-        return _drain(conn, stores, index_kinds=index_kinds)
+    try:
+        with connection() as conn:
+            return _drain(conn, stores, index_kinds=index_kinds)
+    finally:
+        stores.graph.close()
 
 
 def reindex(target: str) -> SyncReport:
@@ -175,7 +192,13 @@ def reindex(target: str) -> SyncReport:
         raise ValueError(f"unknown reindex target: {target}")
     config = load_config()
     stores = _stores(config.vault_path)
+    try:
+        return _reindex(target, stores)
+    finally:
+        stores.graph.close()
 
+
+def _reindex(target: str, stores: _Stores) -> SyncReport:
     if target in ("pages", "all"):
         opensearch.recreate_index(stores.os, opensearch.PAGES_INDEX)
         qdrant.recreate_collection(stores.q, qdrant.PAGES_COLLECTION)
