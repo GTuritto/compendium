@@ -308,6 +308,42 @@ def _query(query_text: str, top_k: int | None, as_json: bool) -> int:
     return 0
 
 
+def _graph(action: str) -> int:
+    log = get_logger("compendium.graph")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    from compendium.graph.client import graph_driver, graph_reachable
+
+    driver = graph_driver()
+    try:
+        reachable = graph_reachable(driver)
+    finally:
+        driver.close()
+    if not reachable:
+        print("memgraph: unreachable", file=sys.stderr)
+        return 1
+
+    from compendium.graph.rebuild import rebuild, status
+
+    report = rebuild() if action == "rebuild" else status()
+    for label, n in report.nodes.items():
+        print(f"node {label}: {n}", file=sys.stderr)
+    for etype, n in report.edges.items():
+        if n or action == "status":
+            print(f"edge {etype}: {n}", file=sys.stderr)
+    log.info("graph", action=action, nodes=report.nodes, edges=report.edges)
+    print(
+        f"graph {action}: {sum(report.nodes.values())} node(s), "
+        f"{sum(report.edges.values())} edge(s)",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -350,6 +386,13 @@ def main(argv: list[str] | None = None) -> int:
         help="sync: drain the pending queue; status: counts and sync lag",
     )
 
+    graph_parser = subparsers.add_parser("graph", help="Memgraph structural index")
+    graph_parser.add_argument(
+        "action", choices=["rebuild", "status"],
+        help="rebuild: drop and repopulate from PostgreSQL + vault; "
+             "status: node/edge counts",
+    )
+
     query_parser = subparsers.add_parser(
         "query", help="page-first retrieval: return ranked wiki pages"
     )
@@ -375,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
         return _reindex(args.target)
     if args.command == "index":
         return _index_sync() if args.action == "sync" else _index_status()
+    if args.command == "graph":
+        return _graph(args.action)
     if args.command == "query":
         return _query(args.text, args.top_k, args.as_json)
     return _startup()
