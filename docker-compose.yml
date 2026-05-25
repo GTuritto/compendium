@@ -38,7 +38,9 @@ services:
   # defaults to 6533/6534 so Compendium coexists with other local Qdrant
   # instances (the container still listens on 6333/6334 internally).
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # Pinned to the 1.18 line to match the qdrant-client version and avoid the
+    # client/server compatibility warning.
+    image: qdrant/qdrant:v1.18.0
     ports:
       - "6533:6333"
       - "6534:6334"
