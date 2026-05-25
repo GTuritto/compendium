@@ -34,12 +34,14 @@ services:
     volumes:
       - compendium-osdata:/usr/share/opensearch/data
 
-  # Qdrant: dense vector index.
+  # Qdrant: dense vector index. Host ports are remapped off Qdrant's 6333/6334
+  # defaults to 6533/6534 so Compendium coexists with other local Qdrant
+  # instances (the container still listens on 6333/6334 internally).
   qdrant:
     image: qdrant/qdrant:v1.12.4
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "6533:6333"
+      - "6534:6334"
     volumes:
       - compendium-qdrantdata:/qdrant/storage
 
