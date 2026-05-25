@@ -124,7 +124,7 @@ Status as of 2026-05-25.
 | 3 | Wiki page generation & frontmatter | `phase-3-wiki-generation` | C, D | ✅ merged (PR #6) |
 | 4 | Derived indexes (OpenSearch + Qdrant) | `phase-4-derived-indexes` | E | ✅ merged (PR #7) |
 | 5 | Page-first retrieval | `phase-5-retrieval` | F | ✅ merged (PR #8) |
-| 6 | Memgraph structural index | `phase-6-memgraph` | G1 | 🔧 in progress (PR #11) |
+| 6 | Memgraph structural index | `phase-6-memgraph` | G1 | ✅ merged (PR #11) |
 | 7 | Query traces & revision tracking | `phase-7-traces` | I | ⬜ next |
 | 8 | TUI ops console | `phase-8-tui` | H | ⬜ not started |
 | 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | ⬜ not started |
