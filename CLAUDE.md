@@ -4,9 +4,19 @@ Compendium is a personal knowledge synthesis system for one user (Giuseppe Turit
 
 ## Status
 
-Design is complete; implementation has not started. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and open questions.
+Design is complete and the build is underway. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and resolved decisions.
 
-As of 2026-05-16: the project is bootstrapped (git repo, private GitHub remote, `uv` project, first commit) but no phase is implemented. The build workflow is established. OpenSpec changes for the first two phases (`phase-0-project-skeleton`, `phase-1-postgres-backbone`) are scaffolded under [openspec/changes/](openspec/changes/). Phase 0 is next.
+As of 2026-05-25: Phases 0 through 4 are implemented and merged to `main` (PRs #1–#4, #6, #7).
+
+- **Phase 0 — Project skeleton** (merged): `uv` project, package layout, config loader, `structlog`, dev `docker-compose.yml`.
+- **Phase 1 — PostgreSQL backbone** (merged): all 11 ordered Alembic migrations (`0001_enums` → `0011_operational_views`).
+- **Phase 2 — Ingestion** (merged): adapters, inspection, structure-aware chunking, idempotent storage, `compendium ingest`. Includes the BUG-001 fix (missing-path ingest returns a failed result, not a crash).
+- **Phase 3 — Wiki generation** (merged): `source`/`concept`/`topic` pages, canonical frontmatter, lint, vault writer, revisions.
+- **Phase 4 — Derived indexes** (merged): OpenSearch and Qdrant populated from PostgreSQL and the vault, embedding seam, sync worker, `compendium reindex`/`index` CLI.
+
+**Phase 5 — Page-first retrieval (`phase-5-retrieval`) is next.** Its module ([compendium/retrieve/](compendium/retrieve/)) is currently an empty stub. The directories for Phases 6–8 ([compendium/graph/](compendium/graph/), [compendium/trace/](compendium/trace/), [compendium/tui/](compendium/tui/)) are also stubs. Phases 9–10 are unstarted.
+
+Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. Open: PR #5 (C4 architecture docs, branch `docs-c4-architecture`) is still open and unmerged.
 
 ## What Compendium Is
 

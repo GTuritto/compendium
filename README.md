@@ -8,7 +8,7 @@ This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a
 
 ## Status
 
-In development. Phase 0 (project skeleton) and Phase 1 (PostgreSQL schema) are the current change; see `openspec/changes/`. Until those phases land, the setup steps below describe the target state.
+In development. Phases 0–4 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, and the OpenSearch + Qdrant derived indexes. Phase 5 (page-first retrieval) is next. The setup and run steps below are live as far as Phase 4; retrieval, the graph, traces, and the TUI are not yet wired up. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
 
 ## Requirements
 

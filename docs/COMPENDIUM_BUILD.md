@@ -114,19 +114,21 @@ payoff. Phase 10 (J) accretes throughout but its acceptance gate is at the end.
 
 ## Phase / branch table
 
-| Phase | Title | Branch | Workstream |
-|---|---|---|---|
-| 0 | Project skeleton | `phase-0-project-skeleton` | A |
-| 1 | PostgreSQL operational backbone | `phase-1-postgres-backbone` | A |
-| 2 | Ingestion pipeline | `phase-2-ingestion` | B |
-| 3 | Wiki page generation & frontmatter | `phase-3-wiki-generation` | C, D |
-| 4 | Derived indexes (OpenSearch + Qdrant) | `phase-4-derived-indexes` | E |
-| 5 | Page-first retrieval | `phase-5-retrieval` | F |
-| 6 | Memgraph structural index | `phase-6-memgraph` | G1 |
-| 7 | Query traces & revision tracking | `phase-7-traces` | I |
-| 8 | TUI ops console | `phase-8-tui` | H |
-| 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 |
-| 10 | Golden dataset & testing | `phase-10-testing` | J |
+Status as of 2026-05-25.
+
+| Phase | Title | Branch | Workstream | Status |
+|---|---|---|---|---|
+| 0 | Project skeleton | `phase-0-project-skeleton` | A | ✅ merged (PR #1) |
+| 1 | PostgreSQL operational backbone | `phase-1-postgres-backbone` | A | ✅ merged (PR #2) |
+| 2 | Ingestion pipeline | `phase-2-ingestion` | B | ✅ merged (PR #3, #4) |
+| 3 | Wiki page generation & frontmatter | `phase-3-wiki-generation` | C, D | ✅ merged (PR #6) |
+| 4 | Derived indexes (OpenSearch + Qdrant) | `phase-4-derived-indexes` | E | ✅ merged (PR #7) |
+| 5 | Page-first retrieval | `phase-5-retrieval` | F | ⬜ next |
+| 6 | Memgraph structural index | `phase-6-memgraph` | G1 | ⬜ not started |
+| 7 | Query traces & revision tracking | `phase-7-traces` | I | ⬜ not started |
+| 8 | TUI ops console | `phase-8-tui` | H | ⬜ not started |
+| 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | ⬜ not started |
+| 10 | Golden dataset & testing | `phase-10-testing` | J | ⬜ not started |
 
 ## Phased Build Plan
 
