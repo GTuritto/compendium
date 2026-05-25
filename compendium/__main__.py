@@ -234,6 +234,80 @@ def _index_status() -> int:
     return 0
 
 
+def _query(query_text: str, top_k: int | None, as_json: bool) -> int:
+    log = get_logger("compendium.query")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    from compendium.retrieve.pipeline import query as run_query
+
+    result = run_query(query_text)
+    pages = result.pages[:top_k] if top_k else result.pages
+
+    if as_json:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "query": result.query_text,
+                    "coverage_score": result.coverage_score,
+                    "fallback_to_chunks": result.fallback_to_chunks,
+                    "pages": [
+                        {
+                            "id": p.entity_id,
+                            "title": p.title,
+                            "slug": p.slug,
+                            "kind": p.kind,
+                            "status": p.status,
+                            "score": p.score,
+                        }
+                        for p in pages
+                    ],
+                    "citations": [
+                        {
+                            "id": c.entity_id,
+                            "source_title": c.source_title,
+                            "position": c.position,
+                            "score": c.score,
+                            "preview": c.preview,
+                        }
+                        for c in result.citations
+                    ],
+                    "gaps": result.gaps,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(
+            f"query: {len(pages)} page(s), coverage {result.coverage_score:.3f}"
+            f"{', chunk fallback' if result.fallback_to_chunks else ''}",
+            file=sys.stderr,
+        )
+        for rank, p in enumerate(pages, start=1):
+            flag = " [draft]" if p.status == "draft" else ""
+            print(
+                f"  {rank}. {p.title} ({p.kind}, {p.slug}){flag}  score={p.score:.5f}"
+            )
+        if result.fallback_to_chunks:
+            print("  citations (chunk fallback):", file=sys.stderr)
+            for c in result.citations:
+                src = c.source_title or c.entity_id
+                print(f"    - {src} #{c.position}: {c.preview}")
+
+    log.info(
+        "query",
+        pages=len(pages),
+        coverage=result.coverage_score,
+        fallback=result.fallback_to_chunks,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -276,6 +350,17 @@ def main(argv: list[str] | None = None) -> int:
         help="sync: drain the pending queue; status: counts and sync lag",
     )
 
+    query_parser = subparsers.add_parser(
+        "query", help="page-first retrieval: return ranked wiki pages"
+    )
+    query_parser.add_argument("text", help="the natural-language query")
+    query_parser.add_argument(
+        "--top-k", type=int, default=None, help="number of pages to show"
+    )
+    query_parser.add_argument(
+        "--json", action="store_true", dest="as_json", help="machine-readable output"
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -290,6 +375,8 @@ def main(argv: list[str] | None = None) -> int:
         return _reindex(args.target)
     if args.command == "index":
         return _index_sync() if args.action == "sync" else _index_status()
+    if args.command == "query":
+        return _query(args.text, args.top_k, args.as_json)
     return _startup()
 
 
