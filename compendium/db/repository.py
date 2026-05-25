@@ -611,6 +611,11 @@ def all_chunk_ids(conn: psycopg.Connection) -> list[UUID]:
     return [row["id"] for row in conn.execute("SELECT id FROM chunks ORDER BY id")]
 
 
+def all_source_ids(conn: psycopg.Connection) -> list[UUID]:
+    """Every source id, in insertion order."""
+    return [row["id"] for row in conn.execute("SELECT id FROM sources ORDER BY id")]
+
+
 # --- query traces ----------------------------------------------------------
 
 

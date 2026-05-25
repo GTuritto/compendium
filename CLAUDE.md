@@ -6,17 +6,19 @@ Compendium is a personal knowledge synthesis system for one user (Giuseppe Turit
 
 Design is complete and the build is underway. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and resolved decisions.
 
-As of 2026-05-25: Phases 0 through 4 are implemented and merged to `main` (PRs #1–#4, #6, #7).
+As of 2026-05-25: Phases 0 through 5 are implemented and merged to `main`; Phase 6 is in progress on `phase-6-memgraph` (PR #11).
 
 - **Phase 0 — Project skeleton** (merged): `uv` project, package layout, config loader, `structlog`, dev `docker-compose.yml`.
 - **Phase 1 — PostgreSQL backbone** (merged): all 11 ordered Alembic migrations (`0001_enums` → `0011_operational_views`).
 - **Phase 2 — Ingestion** (merged): adapters, inspection, structure-aware chunking, idempotent storage, `compendium ingest`. Includes the BUG-001 fix (missing-path ingest returns a failed result, not a crash).
 - **Phase 3 — Wiki generation** (merged): `source`/`concept`/`topic` pages, canonical frontmatter, lint, vault writer, revisions.
 - **Phase 4 — Derived indexes** (merged): OpenSearch and Qdrant populated from PostgreSQL and the vault, embedding seam, sync worker, `compendium reindex`/`index` CLI.
+- **Phase 5 — Page-first retrieval** (merged, PR #8): async OpenSearch + Qdrant fan-out, RRF fusion, normalized top-page coverage, chunk fallback with gap flagging, full query-trace persistence, `compendium query` CLI.
+- **Phase 6 — Memgraph structural index** (in progress, PR #11): four node types and the automatic `PART_OF`/`EVIDENCES`/`GROUNDS` edges populated from PostgreSQL + the vault, the `memgraph` sync kind, `compendium graph rebuild`/`status`. neo4j Bolt driver, no OGM.
 
-**Phase 5 — Page-first retrieval (`phase-5-retrieval`) is next.** Its module ([compendium/retrieve/](compendium/retrieve/)) is currently an empty stub. The directories for Phases 6–8 ([compendium/graph/](compendium/graph/), [compendium/trace/](compendium/trace/), [compendium/tui/](compendium/tui/)) are also stubs. Phases 9–10 are unstarted.
+**Phase 7 — Traces and revisions (`phase-7-traces`) is next** once Phase 6 merges. The directories for Phases 7–8 ([compendium/trace/](compendium/trace/), [compendium/tui/](compendium/tui/)) are still stubs; Phases 9–10 are unstarted.
 
-Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. Open: PR #5 (C4 architecture docs, branch `docs-c4-architecture`) is still open and unmerged.
+Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. Dev backing-store host ports are remapped to avoid collisions with a local bibliomind stack: Qdrant on **6533/6534** and Memgraph on **7688/7445** (containers still listen on the defaults internally). The graph layer uses the `neo4j` Bolt driver with raw Cypher (no OGM), the analog of `compendium/db/` over `psycopg`.
 
 ## What Compendium Is
 

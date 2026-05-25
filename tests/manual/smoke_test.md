@@ -101,7 +101,19 @@ corpus.
 
 ## Phase 6 — Memgraph structural index
 
-_Smoke-test scenarios authored in `Plans/phase-6-memgraph.md` and appended here when Phase 6 is implemented._
+Prerequisites: Memgraph up (`docker compose up -d memgraph`, reachable on
+`bolt://localhost:7688`), a migrated database, and Phase 3's `sample.md`
+ingested with a synthesized `concept` page (`COMPENDIUM_SYNTH_STUB=1 uv run
+python -m compendium synth concept "psychological safety"`).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 6.1 | Memgraph up | `docker compose up -d memgraph` | reachable on `bolt://localhost:7688`. |
+| 6.2 | Rebuild | `uv run python -m compendium graph rebuild` | Exit 0; reports node counts (`Source`, `Concept`, `Chunk`) and edge counts (`PART_OF`, `EVIDENCES`, `GROUNDS`) matching the corpus. |
+| 6.3 | Status | `uv run python -m compendium graph status` | per-label node counts and per-type edge counts; only `PART_OF`/`EVIDENCES`/`GROUNDS` are non-zero (the four semantic edges are defined but unpopulated in v0.1). |
+| 6.4 | Acceptance traversal | Cypher (e.g. via `mgconsole` or the driver) `MATCH (s:Source)<-[:PART_OF]-(:Chunk)<-[:GROUNDS]-(c:Concept) RETURN DISTINCT s.title, c.title` | returns the seeded source/concept pair(s), e.g. `Sample Markdown Source` / `psychological safety`. |
+| 6.5 | Sync after write | re-ingest a fixture, then `uv run python -m compendium index sync` | the entity's node and automatic edges appear in the graph; `v_sync_lag` shows the `memgraph` kind drained to `indexed`. |
+| 6.6 | Unreachable handling | stop Memgraph, `uv run python -m compendium graph status` | prints `memgraph: unreachable` and exits 1 (no traceback). |
 
 ## Phase 7 — Query traces and revision tracking
 

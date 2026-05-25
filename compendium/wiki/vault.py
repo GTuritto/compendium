@@ -115,6 +115,6 @@ def write_page(conn: psycopg.Connection, page: Page, *, vault_path: str) -> Page
         conn,
         entity_kind="page",
         entity_id=page_uuid,
-        index_kinds=("opensearch_pages", "qdrant_pages"),
+        index_kinds=("opensearch_pages", "qdrant_pages", "memgraph"),
     )
     return page

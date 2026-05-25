@@ -47,7 +47,21 @@ services:
     volumes:
       - compendium-qdrantdata:/qdrant/storage
 
+  # Memgraph: typed structural index (ADR-006). Lean image (DB + Bolt only; no
+  # Lab UI or MAGE). Host ports remapped off Memgraph's 7687/7444 defaults to
+  # 7688/7445 so Compendium coexists with other local Memgraph instances (the
+  # container still listens on 7687/7444 internally).
+  memgraph:
+    image: memgraph/memgraph:2.18.1
+    command: ["--log-level=WARNING"]
+    ports:
+      - "7688:7687"
+      - "7445:7444"
+    volumes:
+      - compendium-memgraphdata:/var/lib/memgraph
+
 volumes:
   compendium-pgdata:
   compendium-osdata:
   compendium-qdrantdata:
+  compendium-memgraphdata:
