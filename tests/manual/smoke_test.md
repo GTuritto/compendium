@@ -70,11 +70,11 @@ Prerequisites: Phase 3's ingest fixtures available; the stub embedder is fine
 
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| 4.1 | Stores up | `docker compose up -d opensearch qdrant` | Both reachable: `curl :9200` and `curl :6333/collections` respond. |
+| 4.1 | Stores up | `docker compose up -d opensearch qdrant` | Both reachable: `curl :9200` and `curl :6533/collections` respond (Qdrant's host port is remapped to 6533 in `docker-compose.yml`). |
 | 4.2 | Schemas created | `uv run python -m compendium reindex all` (empty corpus is fine) | The `pages`/`chunks` indexes and collections exist; command exits 0. |
 | 4.3 | Populate | Ingest `sample.md` and `sample.pdf`, then `uv run python -m compendium index sync` | `index status` shows pending 0 and indexed counts equal to the page and chunk totals. |
 | 4.4 | OpenSearch query | `curl ':9200/pages/_search?q=body:psychological'` | A relevant page appears in the hits. |
-| 4.5 | Qdrant query | `POST :6333/collections/pages/points/search` with an embedded query vector | A relevant page point is returned. |
+| 4.5 | Qdrant query | `POST :6533/collections/pages/points/search` with an embedded query vector | A relevant page point is returned. |
 | 4.6 | Deterministic rebuild | Drop the indexes, `uv run python -m compendium reindex all` | Counts are restored; the 4.4 query returns the same top page (Qdrant top-K within a small Jaccard distance). |
 
 ## Phase 5 — Page-first retrieval
@@ -85,12 +85,19 @@ indexed (`uv run python -m compendium ingest tests/fixtures/sample.md --kind not
 then `uv run python -m compendium reindex all`). The stub embedder is fine
 (`export COMPENDIUM_EMBED_STUB=1`).
 
+The coverage values below assume this minimal corpus (only `sample.md` indexed,
+so a single source page). Coverage is the normalized top-k mean, so it is
+corpus-dependent: with more pages indexed the page list is longer and coverage
+is lower than 1.000. Run from a clean vault + `reindex all` to reproduce the
+single-source numbers, or read the values as "high, no fallback" on a larger
+corpus.
+
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; the `Sample Markdown Source` page is listed with a score; stderr reports `coverage 1.000` and no fallback. |
+| 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; the `Sample Markdown Source` page is listed with a score; stderr reports a high coverage and no fallback (`coverage 1.000` on the single-source corpus; lower but still no-fallback on a larger one). |
 | 5.2 | JSON output | `uv run python -m compendium query "psychological safety" --json` | Exit 0; a JSON object with `query`, `coverage_score`, `fallback_to_chunks`, a non-empty `pages` array, `citations`, and `gaps`. |
 | 5.3 | Gap → chunk fallback | Empty the pages indexes (`curl -X DELETE :9200/pages`; recreate the empty `pages` Qdrant collection), then `uv run python -m compendium query "psychological safety team learning"` | Exit 0; no pages, chunk citations from `Sample Markdown Source` are shown under "citations (chunk fallback)". |
-| 5.4 | Traces persisted | `PSQL "SELECT query_text, round(coverage_score::numeric,3), fallback_to_chunks, jsonb_array_length(gaps), array_length(query_embedding,1), graph_expansion FROM query_traces ORDER BY created_at"` | One row per query above: the covered queries show coverage `1.000`, fallback `f`, 0 gaps; the 5.3 query shows coverage `0.000`, fallback `t`, 1 gap; every row has `query_embedding` length 1024 and `graph_expansion` NULL. |
+| 5.4 | Traces persisted | `PSQL "SELECT query_text, round(coverage_score::numeric,3), fallback_to_chunks, jsonb_array_length(gaps), array_length(query_embedding,1), graph_expansion FROM query_traces ORDER BY created_at"` | One row per query above: the covered queries show a high coverage (`1.000` on the single-source corpus), fallback `f`, 0 gaps; the 5.3 query shows coverage `0.000`, fallback `t`, 1 gap; every row has `query_embedding` length 1024 and `graph_expansion` NULL. |
 
 ## Phase 6 — Memgraph structural index
 
