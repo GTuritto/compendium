@@ -233,6 +233,37 @@ async def run(
     )
 
 
-def query(query_text: str, **kwargs: Any) -> RetrievalResult:
-    """Synchronous wrapper over ``run`` for the CLI. Trace persistence: Phase 5d."""
-    return asyncio.run(run(query_text, **kwargs))
+def query(
+    query_text: str, *, persist: bool = True, **kwargs: Any
+) -> RetrievalResult:
+    """Synchronous wrapper over ``run`` for the CLI.
+
+    When ``persist`` is true (the default), resolve the corpus revision and
+    write exactly one ``query_traces`` row, regardless of outcome. Unit tests
+    that inject fake clients pass ``persist=False`` to stay off the database.
+    """
+    if not persist:
+        return asyncio.run(run(query_text, **kwargs))
+
+    from compendium.db import repository
+    from compendium.db.connection import connection
+
+    with connection() as conn:
+        corpus_revision = repository.ensure_corpus_revision(conn)
+        result = asyncio.run(run(query_text, corpus_revision=corpus_revision, **kwargs))
+        t = result.trace
+        repository.insert_query_trace(
+            conn,
+            query_text=t["query_text"],
+            embedding_model=t["embedding_model"],
+            query_embedding=t["query_embedding"],
+            pipeline=t["pipeline"],
+            final_ranking=t["final_ranking"],
+            latencies_ms=t["latencies_ms"],
+            coverage_score=t["coverage_score"],
+            fallback_to_chunks=t["fallback_to_chunks"],
+            gaps=t["gaps"],
+            corpus_revision=t["corpus_revision"],
+            graph_expansion=t["graph_expansion"],
+        )
+    return result

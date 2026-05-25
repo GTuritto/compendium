@@ -611,6 +611,62 @@ def all_chunk_ids(conn: psycopg.Connection) -> list[UUID]:
     return [row["id"] for row in conn.execute("SELECT id FROM chunks ORDER BY id")]
 
 
+# --- query traces ----------------------------------------------------------
+
+
+def insert_query_trace(
+    conn: psycopg.Connection,
+    *,
+    query_text: str,
+    embedding_model: str,
+    query_embedding: list[float] | None,
+    pipeline: dict[str, Any],
+    final_ranking: list[dict[str, Any]],
+    latencies_ms: dict[str, Any],
+    coverage_score: float | None,
+    fallback_to_chunks: bool,
+    gaps: list[dict[str, Any]],
+    corpus_revision: str | None = None,
+    graph_expansion: dict[str, Any] | None = None,
+) -> UUID:
+    """Insert one ``query_traces`` row and return its id.
+
+    ``query_embedding`` is stored as ``REAL[]`` (pgvector deferred); the JSONB
+    columns are adapted with ``Json``. Every query writes exactly one trace,
+    regardless of outcome.
+    """
+    row = conn.execute(
+        """
+        INSERT INTO query_traces (
+            corpus_revision, query_text, embedding_model, query_embedding,
+            pipeline, final_ranking, latencies_ms, coverage_score,
+            fallback_to_chunks, gaps, graph_expansion
+        )
+        VALUES (
+            %s, %s, %s, %s::real[],
+            %s, %s, %s, %s,
+            %s, %s, %s
+        )
+        RETURNING id
+        """,
+        (
+            corpus_revision,
+            query_text,
+            embedding_model,
+            query_embedding,
+            Json(pipeline),
+            Json(final_ranking),
+            Json(latencies_ms),
+            coverage_score,
+            fallback_to_chunks,
+            Json(gaps),
+            Json(graph_expansion) if graph_expansion is not None else None,
+        ),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
 def ensure_corpus_revision(conn: psycopg.Connection) -> str:
     """Return the current corpus revision id, creating one if none exists."""
     row = conn.execute(
