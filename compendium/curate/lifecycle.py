@@ -22,7 +22,7 @@ import psycopg
 
 from compendium.db import repository
 from compendium.graph import projection, schema
-from compendium.graph.client import graph_driver, graph_reachable
+from compendium.graph.client import graph_connection, graph_reachable
 from compendium.wiki.page import parse_markdown
 
 
@@ -71,14 +71,11 @@ def address_on_promote(
             chunk_ids = projection.parse_grounding_chunk_ids(body)
             source_ids = repository.source_ids_for_chunks(conn, chunk_ids)
             if source_ids:
-                driver = graph_driver()
-                try:
+                with graph_connection() as driver:
                     if graph_reachable(driver):
                         for source_id in source_ids:
                             schema.upsert_edge(
                                 driver, "SYNTHESIZES",
                                 "Concept", str(page["id"]), "Source", source_id,
                             )
-                finally:
-                    driver.close()
     return str(signal["id"])

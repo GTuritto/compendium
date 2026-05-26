@@ -16,7 +16,7 @@ from compendium.config import load_config
 from compendium.db import repository
 from compendium.db.connection import connection
 from compendium.graph import projection, schema
-from compendium.graph.client import graph_driver
+from compendium.graph.client import graph_connection
 
 
 @dataclass
@@ -30,8 +30,7 @@ class GraphReport:
 def rebuild() -> GraphReport:
     """Drop, re-index, and repopulate the graph from PostgreSQL plus the vault."""
     config = load_config()
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         schema.drop_all(driver)
         schema.ensure_indexes(driver)
         with connection() as conn:
@@ -47,17 +46,12 @@ def rebuild() -> GraphReport:
                     driver, conn, str(page_id), config.vault_path
                 )
         return _report(driver)
-    finally:
-        driver.close()
 
 
 def status() -> GraphReport:
     """Current node/edge counts without modifying the graph."""
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         return _report(driver)
-    finally:
-        driver.close()
 
 
 def _report(driver: Any) -> GraphReport:

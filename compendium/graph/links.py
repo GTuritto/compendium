@@ -11,7 +11,7 @@ from __future__ import annotations
 from compendium.db import repository
 from compendium.db.connection import connection
 from compendium.graph import schema
-from compendium.graph.client import graph_driver
+from compendium.graph.client import graph_connection
 
 SEMANTIC_EDGES = schema.SEMANTIC_EDGES  # RELATED_TO/PREREQUISITE_FOR/SYNTHESIZES/CONTRADICTS
 
@@ -42,10 +42,7 @@ def link(from_slug: str, to_slug: str, edge_type: str, *, weight: float = 1.0) -
         b_id = str(b["source_id"]) if b["kind"] == "source" else str(b["id"])
         a_label, b_label = _LABEL[a["kind"]], _LABEL[b["kind"]]
 
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         schema.upsert_edge(
             driver, edge_type, a_label, a_id, b_label, b_id, {"weight": weight}
         )
-    finally:
-        driver.close()

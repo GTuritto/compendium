@@ -218,13 +218,10 @@ def _graph(action: str, fmt: str) -> int:
     except ConfigError as exc:
         return _config_error(exc)
 
-    from compendium.graph.client import graph_driver, graph_reachable
+    from compendium.graph.client import graph_connection, graph_reachable
 
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         reachable = graph_reachable(driver)
-    finally:
-        driver.close()
     if not reachable:
         print("memgraph: unreachable", file=sys.stderr)
         return 1

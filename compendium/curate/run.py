@@ -40,21 +40,19 @@ def run() -> CurateReport:
         skipped: list[str] = []
 
         # Graph-backed generators: skip gracefully if Memgraph is unreachable.
-        from compendium.graph.client import graph_driver, graph_reachable
+        from compendium.graph.client import graph_connection, graph_reachable
 
         graph_kinds = ["thin_grounding", "dangling_concept", "unresolved_contradiction"]
-        driver = graph_driver()
-        try:
-            if graph_reachable(driver):
-                candidates += gen.from_thin_grounding(driver, thin_min)
-                candidates += gen.from_dangling(driver)
-                candidates += gen.from_contradictions(driver)
-            else:
+        with graph_connection() as driver:
+            try:
+                if graph_reachable(driver):
+                    candidates += gen.from_thin_grounding(driver, thin_min)
+                    candidates += gen.from_dangling(driver)
+                    candidates += gen.from_contradictions(driver)
+                else:
+                    skipped = list(graph_kinds)
+            except Exception:  # a graph query failed; keep the Postgres signals
                 skipped = list(graph_kinds)
-        except Exception:  # a graph query failed; keep the Postgres signals
-            skipped = list(graph_kinds)
-        finally:
-            driver.close()
 
         open_keys = repository.open_signal_keys(conn)
         report = CurateReport(run_id=str(run_id), skipped_generators=skipped)

@@ -87,29 +87,23 @@ def run_query(text: str):
 def graph_search(term: str) -> list[dict[str, Any]]:
     """Search graph nodes by title/slug. Empty list if Memgraph is unreachable."""
     from compendium.graph import browse
-    from compendium.graph.client import graph_driver, graph_reachable
+    from compendium.graph.client import graph_connection, graph_reachable
 
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         if not graph_reachable(driver):
             raise GraphUnreachable()
         return browse.search_nodes(driver, term)
-    finally:
-        driver.close()
 
 
 def graph_walk(node_id: str, hops: int = 2) -> dict[str, Any]:
     """Walk typed edges N hops from a node."""
     from compendium.graph import browse
-    from compendium.graph.client import graph_driver, graph_reachable
+    from compendium.graph.client import graph_connection, graph_reachable
 
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         if not graph_reachable(driver):
             raise GraphUnreachable()
         return browse.walk(driver, node_id, hops)
-    finally:
-        driver.close()
 
 
 class GraphUnreachable(Exception):
