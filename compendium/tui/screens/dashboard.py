@@ -6,15 +6,15 @@ from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.screen import Screen
 from textual import work
 from textual.widgets import DataTable, Footer, Header, Static
 
 from compendium.cli import render
 from compendium.tui import data as tui_data
+from compendium.tui.screens.base import DataScreen
 
 
-class DashboardScreen(Screen):
+class DashboardScreen(DataScreen):
     """Point-in-time operational state, refreshable with ``r``."""
 
     BINDINGS = [("r", "refresh", "Refresh")]
@@ -42,12 +42,11 @@ class DashboardScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def load(self) -> None:
-        try:
-            payload = tui_data.dashboard()
-        except Exception as exc:  # DB down or query failed
-            self.app.call_from_thread(self._error, str(exc))
-            return
-        self.app.call_from_thread(self._populate, payload)
+        self.run_threaded(
+            tui_data.dashboard,
+            on_ok=self._populate,
+            on_error=lambda exc: self._error(str(exc)),
+        )
 
     def _populate(self, payload: dict[str, Any]) -> None:
         counts = payload["counts"]

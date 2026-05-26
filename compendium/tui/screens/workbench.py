@@ -11,13 +11,13 @@ from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from compendium.cli import render
+from compendium.tui.screens.base import DataScreen
 
 
-class WorkbenchScreen(Screen):
+class WorkbenchScreen(DataScreen):
     """A query box over the live retrieval pipeline.
 
     Press ``/`` to focus the query box; after a run focus returns to the results
@@ -52,14 +52,11 @@ class WorkbenchScreen(Screen):
     def run_query(self, text: str) -> None:
         from compendium.tui import data as tui_data
 
-        try:
-            result = tui_data.run_query(text)
-        except Exception as exc:
-            self.app.call_from_thread(
-                self.query_one("#summary", Static).update, f"[error] {exc}"
-            )
-            return
-        self.app.call_from_thread(self._populate, result)
+        self.run_threaded(
+            lambda: tui_data.run_query(text),
+            on_ok=self._populate,
+            on_error=lambda exc: self.query_one("#summary", Static).update(f"[error] {exc}"),
+        )
 
     def _populate(self, result: Any) -> None:
         gaps = f", {len(result.gaps)} gap(s)" if result.gaps else ""

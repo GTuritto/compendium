@@ -11,11 +11,12 @@ from typing import Any
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
+from compendium.tui.screens.base import DataScreen
 
-class GraphScreen(Screen):
+
+class GraphScreen(DataScreen):
     """Node search (top) and an N-hop edge walk of the selection (bottom).
 
     Press ``/`` to focus the search box; after a search, focus moves to the node
@@ -57,14 +58,11 @@ class GraphScreen(Screen):
     def search(self, term: str) -> None:
         from compendium.tui import data as tui_data
 
-        try:
-            nodes = tui_data.graph_search(term)
-        except tui_data.GraphUnreachable:
-            self.app.call_from_thread(
-                self.query_one("#status", Static).update, "[memgraph unreachable]"
-            )
-            return
-        self.app.call_from_thread(self._show_nodes, nodes)
+        self.run_threaded(
+            lambda: tui_data.graph_search(term),
+            on_ok=self._show_nodes,
+            on_error=lambda exc: self._graph_error(exc),
+        )
 
     def _show_nodes(self, nodes: list[dict[str, Any]]) -> None:
         table = self.query_one("#nodes", DataTable)
@@ -89,14 +87,21 @@ class GraphScreen(Screen):
     def walk(self, node_id: str) -> None:
         from compendium.tui import data as tui_data
 
-        try:
-            graph = tui_data.graph_walk(node_id, hops=2)
-        except tui_data.GraphUnreachable:
-            self.app.call_from_thread(
-                self.query_one("#status", Static).update, "[memgraph unreachable]"
-            )
-            return
-        self.app.call_from_thread(self._show_edges, graph)
+        self.run_threaded(
+            lambda: tui_data.graph_walk(node_id, hops=2),
+            on_ok=self._show_edges,
+            on_error=lambda exc: self._graph_error(exc),
+        )
+
+    def _graph_error(self, exc: Exception) -> None:
+        from compendium.tui import data as tui_data
+
+        msg = (
+            "[memgraph unreachable]"
+            if isinstance(exc, tui_data.GraphUnreachable)
+            else f"[error] {exc}"
+        )
+        self.query_one("#status", Static).update(msg)
 
     def _show_edges(self, graph: dict[str, Any]) -> None:
         table = self.query_one("#edges", DataTable)

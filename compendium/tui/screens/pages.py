@@ -6,18 +6,18 @@ from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
 from compendium.cli import render
 from compendium.tui import data as tui_data
+from compendium.tui.screens.base import DataScreen
 from compendium.tui.screens.widgets import FormModal
 
 _KIND_CYCLE = [None, "source", "concept", "topic"]
 _STATUS_CYCLE = [None, "draft", "canonical", "deprecated"]
 
 
-class PagesScreen(Screen):
+class PagesScreen(DataScreen):
     """Wiki pages; ``k``/``t`` cycle kind/status filters, ``y`` synths, ``r`` refreshes."""
 
     BINDINGS = [
@@ -60,12 +60,11 @@ class PagesScreen(Screen):
     @work(thread=True, exclusive=True)
     def load(self) -> None:
         kind, status = self._filters()
-        try:
-            rows = tui_data.pages(kind=kind, status=status)
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"load failed: {exc}", severity="error")
-            return
-        self.app.call_from_thread(self._populate, rows, kind, status)
+        self.run_threaded(
+            lambda: tui_data.pages(kind=kind, status=status),
+            on_ok=lambda rows: self._populate(rows, kind, status),
+            error_label="load",
+        )
 
     def _populate(self, rows: list[dict[str, Any]], kind: str | None, status: str | None) -> None:
         table = self.query_one("#pages", DataTable)
@@ -92,10 +91,10 @@ class PagesScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def _run_synth(self, kind: str, name: str) -> None:
-        try:
-            slug = tui_data.synth(kind, name)
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"synth failed: {exc}", severity="error")
-            return
-        self.app.call_from_thread(self.notify, f"synth: wrote {kind} '{slug}'")
-        self.app.call_from_thread(self.load)
+        def done(slug: str) -> None:
+            self.notify(f"synth: wrote {kind} '{slug}'")
+            self.load()
+
+        self.run_threaded(
+            lambda: tui_data.synth(kind, name), on_ok=done, error_label="synth"
+        )
