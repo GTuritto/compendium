@@ -8,7 +8,7 @@ This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a
 
 ## Status
 
-In development. Phases 0–9 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), and the knowledge-graph curation loop (`compendium curate`). Phase 10 (golden dataset & testing — the final phase) is in progress. With it, all eleven phases are complete. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
+v0.1 is feature-complete. All eleven phases (0–10) are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), the knowledge-graph curation loop (`compendium curate`), and the golden dataset & testing tier with CI (Phase 10). See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
 
 ## Requirements
 
