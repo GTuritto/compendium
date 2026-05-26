@@ -50,4 +50,7 @@ def synth_from_signal(signal_id: str) -> str:
         except SynthesisError as exc:
             raise SynthError(str(exc)) from exc
         repository.set_signal_status(conn, signal_id, "in_progress")
+        # Tag the signal with the page it produced, so promoting that page
+        # addresses this signal (the promote hook looks it up by slug).
+        repository.attach_synth_page(conn, signal_id, page.id, page.slug)
     return page.slug

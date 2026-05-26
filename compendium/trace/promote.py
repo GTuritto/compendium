@@ -72,7 +72,8 @@ def promote(slug: str, to_status: str, *, vault_path: str, notes: str | None = N
         model.generator = "human"
         write_page(conn, model, vault_path=vault_path)
 
-        to_revision_id = repository.get_wiki_page(conn, page_id)["current_revision_id"]
+        updated = repository.get_wiki_page(conn, page_id)
+        to_revision_id = updated["current_revision_id"]
         event_id = repository.record_promotion(
             conn,
             page_id=page_id,
@@ -81,6 +82,12 @@ def promote(slug: str, to_status: str, *, vault_path: str, notes: str | None = N
             to_revision_id=to_revision_id,
             notes=notes or f"promote to {to_status}",
         )
+
+        # Curation loop (Phase 9): if this page addresses an open signal, close
+        # it and add SYNTHESIZES edges. No-op for ordinary promotions.
+        from compendium.curate.promote_hook import address_on_promote
+
+        address_on_promote(conn, updated, str(to_revision_id), vault_path)
 
     return PromotionResult(
         slug=slug,

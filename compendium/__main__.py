@@ -308,6 +308,25 @@ def _query(query_text: str, top_k: int | None, as_json: bool) -> int:
     return 0
 
 
+def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
+    log = get_logger("compendium.graph")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+    from compendium.graph.links import LinkError, link
+
+    try:
+        link(from_slug, to_slug, edge_type)
+    except LinkError as exc:
+        print(f"link error: {exc}", file=sys.stderr)
+        return 1
+    log.info("graph link", **{"from": from_slug, "to": to_slug, "type": edge_type})
+    print(f"graph link: {from_slug} -[{edge_type}]-> {to_slug}", file=sys.stderr)
+    return 0
+
+
 def _graph(action: str) -> int:
     log = get_logger("compendium.graph")
     try:
@@ -588,10 +607,15 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     graph_parser = subparsers.add_parser("graph", help="Memgraph structural index")
-    graph_parser.add_argument(
-        "action", choices=["rebuild", "status"],
-        help="rebuild: drop and repopulate from PostgreSQL + vault; "
-             "status: node/edge counts",
+    graph_sub = graph_parser.add_subparsers(dest="graph_action", required=True)
+    graph_sub.add_parser("rebuild", help="drop and repopulate from PostgreSQL + vault")
+    graph_sub.add_parser("status", help="node/edge counts")
+    graph_link = graph_sub.add_parser("link", help="add a curator semantic edge")
+    graph_link.add_argument("from_slug")
+    graph_link.add_argument("to_slug")
+    graph_link.add_argument(
+        "--type", dest="edge_type", required=True,
+        choices=["RELATED_TO", "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS"],
     )
 
     query_parser = subparsers.add_parser(
@@ -659,7 +683,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "index":
         return _index_sync() if args.action == "sync" else _index_status()
     if args.command == "graph":
-        return _graph(args.action)
+        if args.graph_action == "link":
+            return _graph_link(args.from_slug, args.to_slug, args.edge_type)
+        return _graph(args.graph_action)
     if args.command == "query":
         return _query(args.text, args.top_k, args.as_json)
     if args.command == "trace":

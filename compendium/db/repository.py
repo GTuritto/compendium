@@ -954,6 +954,42 @@ def signal_for_revision(
     ).fetchone()
 
 
+def attach_synth_page(
+    conn: psycopg.Connection, signal_id: str | UUID, page_id: str | UUID, slug: str
+) -> None:
+    """Record on the signal which page its synth produced (for the promote hook)."""
+    conn.execute(
+        "UPDATE graph_curation_signals "
+        "SET payload = payload || jsonb_build_object('synth_page_id', %s, 'synth_slug', %s) "
+        "WHERE id = %s",
+        (str(page_id), slug, str(signal_id)),
+    )
+
+
+def find_in_progress_signal_by_synth_slug(
+    conn: psycopg.Connection, slug: str
+) -> dict[str, Any] | None:
+    """An in-progress signal whose synth produced the page with this slug, or None."""
+    return conn.execute(
+        "SELECT * FROM graph_curation_signals "
+        "WHERE status = 'in_progress' AND payload->>'synth_slug' = %s LIMIT 1",
+        (slug,),
+    ).fetchone()
+
+
+def source_ids_for_chunks(
+    conn: psycopg.Connection, chunk_ids: list[str]
+) -> list[str]:
+    """Distinct source ids for a set of chunk ids."""
+    if not chunk_ids:
+        return []
+    rows = conn.execute(
+        "SELECT DISTINCT source_id FROM chunks WHERE id = ANY(%s::uuid[])",
+        (chunk_ids,),
+    ).fetchall()
+    return [str(r["source_id"]) for r in rows]
+
+
 def low_coverage_traces(
     conn: psycopg.Connection, threshold: float, limit: int = 500
 ) -> list[dict[str, Any]]:
