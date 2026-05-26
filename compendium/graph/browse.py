@@ -35,6 +35,33 @@ def search_nodes(driver: Driver, term: str, limit: int = 25) -> list[dict[str, A
     ]
 
 
+_SEMANTIC_RELS = "RELATED_TO|PREREQUISITE_FOR|SYNTHESIZES"
+
+
+def walk_semantic(driver: Driver, seed_ids: list[str], max_hops: int) -> list[dict[str, Any]]:
+    """Pages reachable from the seeds over semantic edges (fast-loop expansion).
+
+    Returns rows ``{seed_id, id, title, slug, kind, hop}`` where ``hop`` is the
+    shortest semantic-edge distance from that seed. Excludes the seeds.
+    """
+    if not seed_ids:
+        return []
+    hops = max(1, min(int(max_hops), 5))
+    rows = run_cypher(
+        driver,
+        f"UNWIND $seeds AS sid "
+        f"MATCH p = (s {{id: sid}})-[:{_SEMANTIC_RELS}*1..{hops}]->(m) "
+        f"WHERE m.id <> sid "
+        f"RETURN sid AS seed_id, m.id AS id, "
+        f"coalesce(m.title, m.slug) AS title, m.slug AS slug, "
+        f"labels(m) AS labels, min(size(relationships(p))) AS hop",
+        seeds=seed_ids,
+    )
+    for r in rows:
+        r["kind"] = next((lbl for lbl in r.pop("labels", []) if lbl in NODE_LABELS), "")
+    return rows
+
+
 def walk(driver: Driver, node_id: str, hops: int = 2) -> dict[str, Any]:
     """Nodes and typed edges reachable within ``hops`` of ``node_id``.
 

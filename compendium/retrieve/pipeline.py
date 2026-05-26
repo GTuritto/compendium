@@ -77,6 +77,18 @@ def _retrieval_params() -> tuple[int, float, int]:
     return rrf_k, threshold, top_k
 
 
+def _expansion_params() -> dict[str, Any]:
+    """Graph-expansion config (ADR-009 fast loop), with defaults."""
+    cfg = load_config().settings.get("graph_expansion", {})
+    return {
+        "enabled": bool(cfg.get("enabled", True)),
+        "seed_k": int(cfg.get("seed_k", 3)),
+        "max_hops": int(cfg.get("max_hops", 2)),
+        "decay": float(cfg.get("decay", 0.5)),
+        "weight": float(cfg.get("weight", 0.3)),
+    }
+
+
 def _embedding_model_name() -> str:
     """The model label recorded in the trace."""
     if os.environ.get("COMPENDIUM_EMBED_STUB"):
@@ -156,6 +168,35 @@ async def run(
         coverage = coverage_score([f.score for f in fused_pages], top_k)
         pages = [_page_result(f) for f in fused_pages[:top_k]]
 
+        # Fast-loop graph expansion (ADR-009): walk semantic edges from the top
+        # seeds and merge reached pages. No-op when disabled / no edges / graph
+        # down, leaving the base ranking and a null graph_expansion.
+        graph_expansion_payload: dict[str, Any] | None = None
+        exp = _expansion_params()
+        if exp["enabled"] and fused_pages:
+            from compendium.retrieve import expansion
+
+            seed_scores = {f.entity_id: f.score for f in fused_pages[: exp["seed_k"]]}
+            t = time.perf_counter()
+            outcome = await asyncio.to_thread(
+                expansion.expand, seed_scores,
+                max_hops=exp["max_hops"], decay=exp["decay"], weight=exp["weight"],
+            )
+            latencies["expansion"] = (time.perf_counter() - t) * 1000
+            if outcome.reached:
+                present = {p.entity_id for p in pages}
+                extra = [
+                    PageResult(
+                        entity_id=r["entity_id"], title=r["title"], slug=r["slug"],
+                        kind=r["kind"], status="", score=r["score"],
+                        ranks={"expansion_hop": r["hop"]},
+                    )
+                    for r in outcome.reached if r["entity_id"] not in present
+                ]
+                if extra:
+                    pages = sorted(pages + extra, key=lambda p: -p.score)[:top_k]
+                graph_expansion_payload = outcome.payload
+
         fallback = coverage < threshold
         citations: list[ChunkCitation] = []
         gaps: list[dict[str, Any]] = []
@@ -219,7 +260,7 @@ async def run(
         "coverage_score": coverage,
         "fallback_to_chunks": fallback,
         "gaps": gaps,
-        "graph_expansion": None,
+        "graph_expansion": graph_expansion_payload,
     }
 
     return RetrievalResult(
