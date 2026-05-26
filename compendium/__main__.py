@@ -344,6 +344,148 @@ def _graph(action: str) -> int:
     return 0
 
 
+def _trace(action: str, trace_id: str | None, persist: bool) -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "list":
+        with connection() as conn:
+            rows = repository.list_query_traces(conn)
+        for r in rows:
+            cov = f"{r['coverage_score']:.3f}" if r["coverage_score"] is not None else "-"
+            fb = "fallback" if r["fallback_to_chunks"] else "ok"
+            print(f"  {r['id']}  cov={cov}  {fb}  gaps={r['gap_count']}  "
+                  f"{r['created_at']:%Y-%m-%d %H:%M}  {r['query_text'][:50]}",
+                  file=sys.stderr)
+        return 0
+
+    if action == "show":
+        with connection() as conn:
+            t = repository.get_query_trace(conn, trace_id)
+        if t is None:
+            print(f"trace not found: {trace_id}", file=sys.stderr)
+            return 1
+        import json
+        print(json.dumps({
+            "id": str(t["id"]), "query_text": t["query_text"],
+            "coverage_score": t["coverage_score"],
+            "fallback_to_chunks": t["fallback_to_chunks"],
+            "corpus_revision": t["corpus_revision"],
+            "final_ranking": t["final_ranking"], "gaps": t["gaps"],
+            "latencies_ms": t["latencies_ms"], "pipeline": t["pipeline"],
+        }, indent=2, default=str))
+        return 0
+
+    # replay
+    from compendium.trace.replay import replay, TraceNotFound
+    try:
+        result = replay(trace_id, persist=persist)
+    except TraceNotFound:
+        print(f"trace not found: {trace_id}", file=sys.stderr)
+        return 1
+    d = result.diff
+    print(f"replay {result.trace_id}: \"{result.query_text}\"", file=sys.stderr)
+    print(f"  coverage {result.original_coverage} -> {result.replayed_coverage:.3f} "
+          f"(delta {d.coverage_delta:+.3f}){' [fallback changed]' if d.fallback_changed else ''}",
+          file=sys.stderr)
+    if d.unchanged:
+        print("  ranking unchanged", file=sys.stderr)
+    for a in d.added:
+        print(f"  + {a['title']} (now rank {a['rank']})", file=sys.stderr)
+    for r in d.removed:
+        print(f"  - {r['title']} (was rank {r['rank']})", file=sys.stderr)
+    for m in d.moved:
+        print(f"  ~ {m['title']} (rank {m['from_rank']} -> {m['to_rank']})", file=sys.stderr)
+    if persist:
+        print("  (persisted a new trace)", file=sys.stderr)
+    return 0
+
+
+def _page(action: str, slug: str, args: argparse.Namespace) -> int:
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "revisions":
+        with connection() as conn:
+            page = repository.resolve_page_by_slug(conn, slug)
+            if page is None:
+                print(f"page not found: {slug}", file=sys.stderr)
+                return 1
+            revs = repository.get_page_revisions(conn, page["id"])
+        for i, r in enumerate(revs, start=1):
+            note = f"  {r['notes']}" if r["notes"] else ""
+            print(f"  {i}. {r['id']}  {r['generator']}  {r['created_at']:%Y-%m-%d %H:%M}{note}",
+                  file=sys.stderr)
+        return 0
+
+    if action == "diff":
+        from compendium.trace.revisions import body_diff, frontmatter_delta, resolve_revision
+        with connection() as conn:
+            page = repository.resolve_page_by_slug(conn, slug)
+            if page is None:
+                print(f"page not found: {slug}", file=sys.stderr)
+                return 1
+            revs = repository.get_page_revisions(conn, page["id"])
+            try:
+                ra = repository.get_revision(conn, resolve_revision(revs, args.rev_a)["id"])
+                rb = repository.get_revision(conn, resolve_revision(revs, args.rev_b)["id"])
+            except ValueError as exc:
+                print(f"revision error: {exc}", file=sys.stderr)
+                return 1
+        bd = body_diff(ra["body"], rb["body"], label_a=args.rev_a, label_b=args.rev_b)
+        fd = frontmatter_delta(ra["frontmatter"], rb["frontmatter"])
+        print(bd if bd else "  (body unchanged)")
+        if fd.empty:
+            print("  (frontmatter unchanged)", file=sys.stderr)
+        else:
+            for k, v in fd.added.items():
+                print(f"  frontmatter + {k}: {v}", file=sys.stderr)
+            for k, v in fd.removed.items():
+                print(f"  frontmatter - {k}: {v}", file=sys.stderr)
+            for k, (old, new) in fd.changed.items():
+                print(f"  frontmatter ~ {k}: {old} -> {new}", file=sys.stderr)
+        return 0
+
+    # promote
+    from compendium.trace.promote import promote, InvalidTransition, PageNotFound
+    try:
+        res = promote(slug, args.to_status, vault_path=config.vault_path)
+    except PageNotFound:
+        print(f"page not found: {slug}", file=sys.stderr)
+        return 1
+    except InvalidTransition as exc:
+        print(f"invalid transition: {exc}", file=sys.stderr)
+        return 1
+    get_logger("compendium.promote").info(
+        "promoted", slug=slug, kind=res.promotion_kind,
+        from_status=res.from_status, to_status=res.to_status,
+    )
+    print(f"promoted {slug}: {res.from_status} -> {res.to_status} ({res.promotion_kind})",
+          file=sys.stderr)
+    return 0
+
+
+def _promotions(slug: str | None) -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+    with connection() as conn:
+        events = repository.list_promotion_events(conn, slug=slug)
+    for e in events:
+        print(f"  {e['created_at']:%Y-%m-%d %H:%M}  {e['kind']}  "
+              f"{e['page_kind']}/{e['slug']}", file=sys.stderr)
+    print(f"promotions: {len(events)} event(s)", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -404,6 +546,36 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", dest="as_json", help="machine-readable output"
     )
 
+    trace_parser = subparsers.add_parser("trace", help="query-trace inspection and replay")
+    trace_sub = trace_parser.add_subparsers(dest="trace_action", required=True)
+    trace_sub.add_parser("list", help="recent traces")
+    trace_show = trace_sub.add_parser("show", help="show one trace")
+    trace_show.add_argument("id", help="trace id")
+    trace_replay = trace_sub.add_parser("replay", help="replay a trace and diff")
+    trace_replay.add_argument("id", help="trace id")
+    trace_replay.add_argument(
+        "--persist", action="store_true", help="record the replay as a new trace"
+    )
+
+    page_parser = subparsers.add_parser("page", help="single-page operations")
+    page_sub = page_parser.add_subparsers(dest="page_action", required=True)
+    page_rev = page_sub.add_parser("revisions", help="list a page's revisions")
+    page_rev.add_argument("slug")
+    page_diff = page_sub.add_parser("diff", help="diff two revisions of a page")
+    page_diff.add_argument("slug")
+    page_diff.add_argument("rev_a", help="ordinal (1=oldest) or id prefix")
+    page_diff.add_argument("rev_b", help="ordinal (1=oldest) or id prefix")
+    page_promote = page_sub.add_parser("promote", help="promote/deprecate a page")
+    page_promote.add_argument("slug")
+    page_promote.add_argument(
+        "--to", dest="to_status", required=True, choices=["canonical", "deprecated"]
+    )
+
+    promotions_parser = subparsers.add_parser("promotions", help="promotion events")
+    promotions_sub = promotions_parser.add_subparsers(dest="promotions_action", required=True)
+    promotions_list = promotions_sub.add_parser("list", help="list promotion events")
+    promotions_list.add_argument("--slug", default=None, help="filter to one page")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -422,6 +594,13 @@ def main(argv: list[str] | None = None) -> int:
         return _graph(args.action)
     if args.command == "query":
         return _query(args.text, args.top_k, args.as_json)
+    if args.command == "trace":
+        return _trace(args.trace_action, getattr(args, "id", None),
+                      getattr(args, "persist", False))
+    if args.command == "page":
+        return _page(args.page_action, args.slug, args)
+    if args.command == "promotions":
+        return _promotions(args.slug)
     return _startup()
 
 
