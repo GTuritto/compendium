@@ -132,7 +132,21 @@ query "psychological safety team learning"`).
 
 ## Phase 8 — TUI ops console
 
-_Smoke-test scenarios authored in `Plans/phase-8-tui.md` and appended here when Phase 8 is implemented._
+Prerequisites: the full stack up and a seeded corpus (ingest a fixture, synth a
+concept, `reindex all`, `graph rebuild`). Launch in a real terminal. Navigation
+is keyboard-only: `d` dashboard, `s` sources, `p` pages, `w` workbench,
+`c` curation, `g` graph, `?` help, `q` quit. On the workbench and graph screens,
+press `/` to focus the search box (so the nav letters are not typed into it).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 8.1 | Launch + navigate | `uv run python -m compendium tui`, press `d`/`s`/`p`/`w`/`c`/`g`, then `?` | each screen renders; the footer lists the bindings; `?` shows the help modal; no mouse used. |
+| 8.2 | Dashboard | open dashboard, press `r` | table counts, sync-lag rows, and recent traces render. |
+| 8.3 | Ingest a source | sources (`s`) → `i` → enter `tests/fixtures/sample.md`, kind `note` → Enter | the source appears with its inspection status after the worker completes. |
+| 8.4 | Run a synth | pages (`p`) → `y` → kind `concept`, name `psychological safety` (`COMPENDIUM_SYNTH_STUB=1`) → Enter | the concept page appears in the list. |
+| 8.5 | Workbench query | workbench (`w`) → `/` → type `psychological safety` → Enter | ranked pages + coverage render; a new trace appears on the dashboard. |
+| 8.6 | Browse the graph | graph (`g`) → `/` → type `Sample` → Enter → select a node row → Enter | matching nodes list; walking the selection renders the reachable nodes and typed edges. |
+| 8.7 | Quit | press `q` | the app exits cleanly to the shell. |
 
 ## Phase 9 — Knowledge graph curation loop
 

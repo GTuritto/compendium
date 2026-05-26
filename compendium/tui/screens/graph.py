@@ -18,8 +18,12 @@ from textual.widgets import DataTable, Footer, Header, Input, Static
 class GraphScreen(Screen):
     """Node search (top) and an N-hop edge walk of the selection (bottom).
 
-    Search in the box (Enter), then select a node row (Enter) to walk its edges.
+    Press ``/`` to focus the search box; after a search, focus moves to the node
+    list so the navigation keys are not swallowed by the input. Select a node row
+    (Enter) to walk its edges.
     """
+
+    BINDINGS = [("slash", "focus_search", "Search")]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -38,6 +42,9 @@ class GraphScreen(Screen):
         edges = self.query_one("#edges", DataTable)
         edges.add_columns("from", "type", "to")
         edges.border_title = "Edges"
+        nodes.focus()  # nav keys work; '/' focuses the search box
+
+    def action_focus_search(self) -> None:
         self.query_one("#q", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:

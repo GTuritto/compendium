@@ -16,7 +16,13 @@ from textual.widgets import DataTable, Footer, Header, Input, Static
 
 
 class WorkbenchScreen(Screen):
-    """A query box over the live retrieval pipeline."""
+    """A query box over the live retrieval pipeline.
+
+    Press ``/`` to focus the query box; after a run focus returns to the results
+    so the single-letter navigation keys are not swallowed by the input.
+    """
+
+    BINDINGS = [("slash", "focus_query", "Search")]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -28,6 +34,9 @@ class WorkbenchScreen(Screen):
     def on_mount(self) -> None:
         table = self.query_one("#results", DataTable)
         table.add_columns("rank", "title", "kind", "score")
+        table.focus()  # nav keys work; '/' focuses the query box
+
+    def action_focus_query(self) -> None:
         self.query_one("#q", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -35,6 +44,7 @@ class WorkbenchScreen(Screen):
         if text:
             self.query_one("#summary", Static).update("running…")
             self.run_query(text)
+        self.query_one("#results", DataTable).focus()  # release the input
 
     @work(thread=True, exclusive=True)
     def run_query(self, text: str) -> None:
