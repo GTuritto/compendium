@@ -127,7 +127,7 @@ Status as of 2026-05-25.
 | 6 | Memgraph structural index | `phase-6-memgraph` | G1 | ✅ merged (PR #11) |
 | 7 | Query traces & revision tracking | `phase-7-traces` | I | ✅ merged (PR #13) |
 | 8 | TUI ops console | `phase-8-tui` | H | ✅ merged (PR #14) |
-| 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | 🔧 in progress (PR #16) |
+| 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | ✅ merged (PR #16) |
 | 10 | Golden dataset & testing | `phase-10-testing` | J | ⬜ next |
 
 ## Phased Build Plan
