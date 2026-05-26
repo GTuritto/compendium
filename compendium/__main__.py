@@ -1,7 +1,10 @@
-"""Application entrypoint: ``python -m compendium [ingest <path>]``.
+"""Application entrypoint: ``python -m compendium [<command> ...]``.
 
 With no subcommand, loads and validates configuration, reports startup, and
-exits. The ``ingest`` subcommand runs the ingestion pipeline.
+exits. Each subcommand handler is parse-call-render-print: it calls a module,
+passes the result object to :mod:`compendium.cli.render`, and prints the
+rendered payload to stdout. Read commands accept ``--format text|json``.
+``structlog`` remains the operational channel on stderr.
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from compendium.cli import render
 from compendium.config import ConfigError, load_config
 from compendium.db import repository
 from compendium.db.connection import connection
@@ -21,24 +25,27 @@ from compendium.wiki.synth import SynthesisError, synthesize_concept, synthesize
 _SOURCE_KINDS = ["book", "article", "paper", "note", "web"]
 
 
+def _config_error(exc: ConfigError) -> int:
+    print(f"Configuration error: {exc}", file=sys.stderr)
+    return 1
+
+
 def _startup() -> int:
     log = get_logger("compendium")
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
     log.info("Compendium starting", **config.storage_urls())
     return 0
 
 
-def _ingest(path: str, kind: str, mine: bool) -> int:
+def _ingest(path: str, kind: str, mine: bool, fmt: str) -> int:
     log = get_logger("compendium.ingest")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     results = ingest(path, kind=kind, mine=mine)
     for result in results:
@@ -49,47 +56,29 @@ def _ingest(path: str, kind: str, mine: bool) -> int:
             chunks=result.chunk_count,
             detail=result.detail,
         )
-    stored = sum(1 for r in results if r.status in ("ingested", "updated"))
-    unchanged = sum(1 for r in results if r.status == "unchanged")
+    print(render.ingest(results, fmt))
     failed = sum(1 for r in results if r.status == "failed")
-    print(
-        f"{len(results)} source(s): {stored} stored, "
-        f"{unchanged} unchanged, {failed} failed",
-        file=sys.stderr,
-    )
     return 1 if failed and failed == len(results) else 0
 
 
-def _lint() -> int:
+def _lint(fmt: str) -> int:
     log = get_logger("compendium.lint")
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     pages, issues = load_vault_pages(config.vault_path)
     source_ids: set[str] | None = None
     try:
         with connection() as conn:
-            source_ids = {
-                str(row["id"]) for row in conn.execute("SELECT id FROM sources")
-            }
+            source_ids = {str(sid) for sid in repository.all_source_ids(conn)}
     except Exception as exc:  # lint still runs, minus source-id-resolves
         log.warning("lint: source-id-resolves skipped", error=str(exc))
 
     issues = issues + lint_vault(pages, known_source_ids=source_ids)
     errors = errors_only(issues)
-    for issue in issues:
-        print(
-            f"  {issue.severity}: [{issue.page}] {issue.rule}: {issue.message}",
-            file=sys.stderr,
-        )
-    print(
-        f"lint: {len(pages)} page(s), {len(errors)} error(s), "
-        f"{len(issues) - len(errors)} warning(s)",
-        file=sys.stderr,
-    )
+    print(render.lint(len(pages), issues, errors, fmt))
     return 1 if errors else 0
 
 
@@ -98,19 +87,16 @@ def _pages_build() -> int:
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     built = 0
     with connection() as conn:
         for source_id in repository.sources_without_page(conn):
-            page = generate_source_page(
-                conn, source_id, vault_path=config.vault_path
-            )
+            page = generate_source_page(conn, source_id, vault_path=config.vault_path)
             if page is not None:
                 built += 1
                 log.info("source page built", slug=page.slug)
-    print(f"pages build: {built} source page(s) generated", file=sys.stderr)
+    print(render.pages_build(built))
     return 0
 
 
@@ -119,8 +105,7 @@ def _synth(kind: str, name: str, aliases: list[str]) -> int:
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     try:
         with connection() as conn:
@@ -129,176 +114,76 @@ def _synth(kind: str, name: str, aliases: list[str]) -> int:
                     conn, name, aliases=aliases, vault_path=config.vault_path
                 )
             else:
-                page = synthesize_topic(
-                    conn, name, vault_path=config.vault_path
-                )
+                page = synthesize_topic(conn, name, vault_path=config.vault_path)
     except SynthesisError as exc:
         print(f"Synthesis error: {exc}", file=sys.stderr)
         return 1
 
     log.info("synthesized", kind=kind, slug=page.slug)
-    print(f"synth: wrote {kind} page '{page.slug}'", file=sys.stderr)
+    print(render.synth(kind, page.slug))
     return 0
 
 
-def _reindex(target: str) -> int:
+def _reindex(target: str, fmt: str) -> int:
     log = get_logger("compendium.reindex")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     from compendium.index.sync import reindex
 
     report = reindex(target)
     log.info(
-        "reindex",
-        target=target,
-        indexed=report.indexed,
-        failed=report.failed,
-        skipped=report.skipped,
+        "reindex", target=target,
+        indexed=report.indexed, failed=report.failed, skipped=report.skipped,
     )
-    for error in report.errors:
-        print(f"  failed: {error}", file=sys.stderr)
-    print(
-        f"reindex {target}: {report.indexed} indexed, "
-        f"{report.failed} failed, {report.skipped} skipped",
-        file=sys.stderr,
-    )
+    print(render.sync(report, f"reindex {target}", fmt))
     return 1 if report.failed else 0
 
 
-def _index_sync() -> int:
+def _index_sync(fmt: str) -> int:
     log = get_logger("compendium.index")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     from compendium.index.sync import sync_pending
 
     report = sync_pending()
     log.info(
         "index sync",
-        indexed=report.indexed,
-        failed=report.failed,
-        skipped=report.skipped,
+        indexed=report.indexed, failed=report.failed, skipped=report.skipped,
     )
-    for error in report.errors:
-        print(f"  failed: {error}", file=sys.stderr)
-    print(
-        f"index sync: {report.indexed} indexed, "
-        f"{report.failed} failed, {report.skipped} skipped",
-        file=sys.stderr,
-    )
+    print(render.sync(report, "index sync", fmt))
     return 1 if report.failed else 0
 
 
-def _index_status() -> int:
+def _index_status(fmt: str) -> int:
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
-    from compendium.index import opensearch, qdrant
-    from compendium.index.clients import (
-        opensearch_client,
-        opensearch_reachable,
-        qdrant_client,
-        qdrant_reachable,
-    )
+    from compendium.index.sync import status
 
-    os_client = opensearch_client()
-    if opensearch_reachable(os_client):
-        for index in (opensearch.PAGES_INDEX, opensearch.CHUNKS_INDEX):
-            print(f"opensearch/{index}: {opensearch.count(os_client, index)}",
-                  file=sys.stderr)
-    else:
-        print("opensearch: unreachable", file=sys.stderr)
-
-    q_client = qdrant_client()
-    if qdrant_reachable(q_client):
-        for collection in (qdrant.PAGES_COLLECTION, qdrant.CHUNKS_COLLECTION):
-            print(f"qdrant/{collection}: {qdrant.count(q_client, collection)}",
-                  file=sys.stderr)
-    else:
-        print("qdrant: unreachable", file=sys.stderr)
-
-    with connection() as conn:
-        for row in repository.sync_lag(conn):
-            print(f"sync {row['index_kind']}/{row['state']}: {row['n']}",
-                  file=sys.stderr)
+    print(render.index_status(status(), fmt))
     return 0
 
 
-def _query(query_text: str, top_k: int | None, as_json: bool) -> int:
+def _query(query_text: str, top_k: int | None, fmt: str) -> int:
     log = get_logger("compendium.query")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     from compendium.retrieve.pipeline import query as run_query
 
     result = run_query(query_text)
     pages = result.pages[:top_k] if top_k else result.pages
-
-    if as_json:
-        import json
-
-        print(
-            json.dumps(
-                {
-                    "query": result.query_text,
-                    "coverage_score": result.coverage_score,
-                    "fallback_to_chunks": result.fallback_to_chunks,
-                    "pages": [
-                        {
-                            "id": p.entity_id,
-                            "title": p.title,
-                            "slug": p.slug,
-                            "kind": p.kind,
-                            "status": p.status,
-                            "score": p.score,
-                        }
-                        for p in pages
-                    ],
-                    "citations": [
-                        {
-                            "id": c.entity_id,
-                            "source_title": c.source_title,
-                            "position": c.position,
-                            "score": c.score,
-                            "preview": c.preview,
-                        }
-                        for c in result.citations
-                    ],
-                    "gaps": result.gaps,
-                },
-                indent=2,
-            )
-        )
-    else:
-        print(
-            f"query: {len(pages)} page(s), coverage {result.coverage_score:.3f}"
-            f"{', chunk fallback' if result.fallback_to_chunks else ''}",
-            file=sys.stderr,
-        )
-        for rank, p in enumerate(pages, start=1):
-            flag = " [draft]" if p.status == "draft" else ""
-            print(
-                f"  {rank}. {p.title} ({p.kind}, {p.slug}){flag}  score={p.score:.5f}"
-            )
-        if result.fallback_to_chunks:
-            print("  citations (chunk fallback):", file=sys.stderr)
-            for c in result.citations:
-                src = c.source_title or c.entity_id
-                print(f"    - {src} #{c.position}: {c.preview}")
-
+    print(render.query(result, pages, fmt))
     log.info(
         "query",
         pages=len(pages),
@@ -313,8 +198,7 @@ def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
     from compendium.graph.links import LinkError, link
 
     try:
@@ -323,17 +207,16 @@ def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
         print(f"link error: {exc}", file=sys.stderr)
         return 1
     log.info("graph link", **{"from": from_slug, "to": to_slug, "type": edge_type})
-    print(f"graph link: {from_slug} -[{edge_type}]-> {to_slug}", file=sys.stderr)
+    print(render.graph_link(from_slug, to_slug, edge_type))
     return 0
 
 
-def _graph(action: str) -> int:
+def _graph(action: str, fmt: str) -> int:
     log = get_logger("compendium.graph")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     from compendium.graph.client import graph_driver, graph_reachable
 
@@ -349,36 +232,21 @@ def _graph(action: str) -> int:
     from compendium.graph.rebuild import rebuild, status
 
     report = rebuild() if action == "rebuild" else status()
-    for label, n in report.nodes.items():
-        print(f"node {label}: {n}", file=sys.stderr)
-    for etype, n in report.edges.items():
-        if n or action == "status":
-            print(f"edge {etype}: {n}", file=sys.stderr)
     log.info("graph", action=action, nodes=report.nodes, edges=report.edges)
-    print(
-        f"graph {action}: {sum(report.nodes.values())} node(s), "
-        f"{sum(report.edges.values())} edge(s)",
-        file=sys.stderr,
-    )
+    print(render.graph(report, action, fmt))
     return 0
 
 
-def _trace(action: str, trace_id: str | None, persist: bool) -> int:
+def _trace(action: str, trace_id: str | None, persist: bool, fmt: str) -> int:
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     if action == "list":
         with connection() as conn:
             rows = repository.list_query_traces(conn)
-        for r in rows:
-            cov = f"{r['coverage_score']:.3f}" if r["coverage_score"] is not None else "-"
-            fb = "fallback" if r["fallback_to_chunks"] else "ok"
-            print(f"  {r['id']}  cov={cov}  {fb}  gaps={r['gap_count']}  "
-                  f"{r['created_at']:%Y-%m-%d %H:%M}  {r['query_text'][:50]}",
-                  file=sys.stderr)
+        print(render.trace_list(rows, fmt))
         return 0
 
     if action == "show":
@@ -387,48 +255,27 @@ def _trace(action: str, trace_id: str | None, persist: bool) -> int:
         if t is None:
             print(f"trace not found: {trace_id}", file=sys.stderr)
             return 1
-        import json
-        print(json.dumps({
-            "id": str(t["id"]), "query_text": t["query_text"],
-            "coverage_score": t["coverage_score"],
-            "fallback_to_chunks": t["fallback_to_chunks"],
-            "corpus_revision": t["corpus_revision"],
-            "final_ranking": t["final_ranking"], "gaps": t["gaps"],
-            "latencies_ms": t["latencies_ms"], "pipeline": t["pipeline"],
-        }, indent=2, default=str))
+        print(render.trace_show(t))
         return 0
 
     # replay
-    from compendium.trace.replay import replay, TraceNotFound
+    from compendium.trace.replay import TraceNotFound, replay
+
     try:
         result = replay(trace_id, persist=persist)
     except TraceNotFound:
         print(f"trace not found: {trace_id}", file=sys.stderr)
         return 1
-    d = result.diff
-    print(f"replay {result.trace_id}: \"{result.query_text}\"", file=sys.stderr)
-    print(f"  coverage {result.original_coverage} -> {result.replayed_coverage:.3f} "
-          f"(delta {d.coverage_delta:+.3f}){' [fallback changed]' if d.fallback_changed else ''}",
-          file=sys.stderr)
-    if d.unchanged:
-        print("  ranking unchanged", file=sys.stderr)
-    for a in d.added:
-        print(f"  + {a['title']} (now rank {a['rank']})", file=sys.stderr)
-    for r in d.removed:
-        print(f"  - {r['title']} (was rank {r['rank']})", file=sys.stderr)
-    for m in d.moved:
-        print(f"  ~ {m['title']} (rank {m['from_rank']} -> {m['to_rank']})", file=sys.stderr)
-    if persist:
-        print("  (persisted a new trace)", file=sys.stderr)
+    print(render.trace_replay(result, persist, fmt))
     return 0
 
 
 def _page(action: str, slug: str, args: argparse.Namespace) -> int:
+    fmt = getattr(args, "format", "text")
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     if action == "revisions":
         with connection() as conn:
@@ -437,14 +284,16 @@ def _page(action: str, slug: str, args: argparse.Namespace) -> int:
                 print(f"page not found: {slug}", file=sys.stderr)
                 return 1
             revs = repository.get_page_revisions(conn, page["id"])
-        for i, r in enumerate(revs, start=1):
-            note = f"  {r['notes']}" if r["notes"] else ""
-            print(f"  {i}. {r['id']}  {r['generator']}  {r['created_at']:%Y-%m-%d %H:%M}{note}",
-                  file=sys.stderr)
+        print(render.page_revisions(revs, fmt))
         return 0
 
     if action == "diff":
-        from compendium.trace.revisions import body_diff, frontmatter_delta, resolve_revision
+        from compendium.trace.revisions import (
+            body_diff,
+            frontmatter_delta,
+            resolve_revision,
+        )
+
         with connection() as conn:
             page = repository.resolve_page_by_slug(conn, slug)
             if page is None:
@@ -459,20 +308,12 @@ def _page(action: str, slug: str, args: argparse.Namespace) -> int:
                 return 1
         bd = body_diff(ra["body"], rb["body"], label_a=args.rev_a, label_b=args.rev_b)
         fd = frontmatter_delta(ra["frontmatter"], rb["frontmatter"])
-        print(bd if bd else "  (body unchanged)")
-        if fd.empty:
-            print("  (frontmatter unchanged)", file=sys.stderr)
-        else:
-            for k, v in fd.added.items():
-                print(f"  frontmatter + {k}: {v}", file=sys.stderr)
-            for k, v in fd.removed.items():
-                print(f"  frontmatter - {k}: {v}", file=sys.stderr)
-            for k, (old, new) in fd.changed.items():
-                print(f"  frontmatter ~ {k}: {old} -> {new}", file=sys.stderr)
+        print(render.page_diff(bd, fd, args.rev_a, args.rev_b, fmt))
         return 0
 
     # promote
-    from compendium.trace.promote import promote, InvalidTransition, PageNotFound
+    from compendium.trace.promote import InvalidTransition, PageNotFound, promote
+
     try:
         res = promote(slug, args.to_status, vault_path=config.vault_path)
     except PageNotFound:
@@ -485,61 +326,48 @@ def _page(action: str, slug: str, args: argparse.Namespace) -> int:
         "promoted", slug=slug, kind=res.promotion_kind,
         from_status=res.from_status, to_status=res.to_status,
     )
-    print(f"promoted {slug}: {res.from_status} -> {res.to_status} ({res.promotion_kind})",
-          file=sys.stderr)
+    print(render.promote(res))
     return 0
 
 
-def _promotions(slug: str | None) -> int:
+def _promotions(slug: str | None, fmt: str) -> int:
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
     with connection() as conn:
         events = repository.list_promotion_events(conn, slug=slug)
-    for e in events:
-        print(f"  {e['created_at']:%Y-%m-%d %H:%M}  {e['kind']}  "
-              f"{e['page_kind']}/{e['slug']}", file=sys.stderr)
-    print(f"promotions: {len(events)} event(s)", file=sys.stderr)
+    print(render.promotions(events, fmt))
     return 0
 
 
-def _curate(action: str, signal_id: str | None) -> int:
+def _curate(action: str, signal_id: str | None, fmt: str) -> int:
     log = get_logger("compendium.curate")
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
 
     if action == "run":
         from compendium.curate.run import run as curate_run
 
         report = curate_run()
-        log.info("curate run", run_id=report.run_id, inserted=report.inserted,
-                 by_kind=report.by_kind, skipped=report.skipped_generators)
-        for kind, n in report.by_kind.items():
-            print(f"  {kind}: {n}", file=sys.stderr)
-        if report.skipped_generators:
-            print(f"  skipped (memgraph down): {', '.join(report.skipped_generators)}",
-                  file=sys.stderr)
-        print(f"curate run: {report.inserted} new signal(s) [run {report.run_id}]",
-              file=sys.stderr)
+        log.info(
+            "curate run", run_id=report.run_id, inserted=report.inserted,
+            by_kind=report.by_kind, skipped=report.skipped_generators,
+        )
+        print(render.curate_run(report, fmt))
         return 0
 
     if action == "list":
         with connection() as conn:
             rows = repository.list_open_curation_signals(conn)
-        for r in rows:
-            import json
-            print(f"  [{r['priority']}] {r['kind']}  {json.dumps(r['payload'])[:60]}",
-                  file=sys.stderr)
-        print(f"curate list: {len(rows)} open signal(s)", file=sys.stderr)
+        print(render.curate_list(rows, fmt))
         return 0
 
     # synth
-    from compendium.curate.synth import synth_from_signal, SignalNotFound, SynthError
+    from compendium.curate.synth import SignalNotFound, SynthError, synth_from_signal
+
     try:
         slug = synth_from_signal(signal_id)
     except SignalNotFound:
@@ -549,7 +377,7 @@ def _curate(action: str, signal_id: str | None) -> int:
         print(f"synth error: {exc}", file=sys.stderr)
         return 1
     log.info("curate synth", signal=signal_id, slug=slug)
-    print(f"curate synth: drafted '{slug}' (signal in_progress)", file=sys.stderr)
+    print(render.curate_synth(slug))
     return 0
 
 
@@ -557,8 +385,7 @@ def _tui() -> int:
     try:
         load_config()
     except ConfigError as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
+        return _config_error(exc)
     from compendium.tui.app import run
 
     return run()
@@ -567,8 +394,16 @@ def _tui() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
+
+    # Shared --format flag for commands whose output is data to read or pipe.
+    fmt = argparse.ArgumentParser(add_help=False)
+    fmt.add_argument(
+        "--format", choices=["text", "json"], default="text",
+        help="output format (default: text)",
+    )
+
     ingest_parser = subparsers.add_parser(
-        "ingest", help="ingest a file, URL, or directory"
+        "ingest", help="ingest a file, URL, or directory", parents=[fmt]
     )
     ingest_parser.add_argument("path", help="file path, URL, or directory")
     ingest_parser.add_argument(
@@ -578,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         "--mine", action="store_true", help="mark the source as authored by you"
     )
 
-    subparsers.add_parser("lint", help="lint the wiki vault")
+    subparsers.add_parser("lint", help="lint the wiki vault", parents=[fmt])
 
     pages_parser = subparsers.add_parser("pages", help="wiki page operations")
     pages_parser.add_argument(
@@ -596,11 +431,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     reindex_parser = subparsers.add_parser(
-        "reindex", help="rebuild a derived index from PostgreSQL and the vault"
+        "reindex", help="rebuild a derived index from PostgreSQL and the vault",
+        parents=[fmt],
     )
     reindex_parser.add_argument("target", choices=["pages", "chunks", "all"])
 
-    index_parser = subparsers.add_parser("index", help="derived-index operations")
+    index_parser = subparsers.add_parser(
+        "index", help="derived-index operations", parents=[fmt]
+    )
     index_parser.add_argument(
         "action", choices=["sync", "status"],
         help="sync: drain the pending queue; status: counts and sync lag",
@@ -608,8 +446,8 @@ def main(argv: list[str] | None = None) -> int:
 
     graph_parser = subparsers.add_parser("graph", help="Memgraph structural index")
     graph_sub = graph_parser.add_subparsers(dest="graph_action", required=True)
-    graph_sub.add_parser("rebuild", help="drop and repopulate from PostgreSQL + vault")
-    graph_sub.add_parser("status", help="node/edge counts")
+    graph_sub.add_parser("rebuild", help="drop and repopulate from PostgreSQL + vault", parents=[fmt])
+    graph_sub.add_parser("status", help="node/edge counts", parents=[fmt])
     graph_link = graph_sub.add_parser("link", help="add a curator semantic edge")
     graph_link.add_argument("from_slug")
     graph_link.add_argument("to_slug")
@@ -619,22 +457,19 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     query_parser = subparsers.add_parser(
-        "query", help="page-first retrieval: return ranked wiki pages"
+        "query", help="page-first retrieval: return ranked wiki pages", parents=[fmt]
     )
     query_parser.add_argument("text", help="the natural-language query")
     query_parser.add_argument(
         "--top-k", type=int, default=None, help="number of pages to show"
     )
-    query_parser.add_argument(
-        "--json", action="store_true", dest="as_json", help="machine-readable output"
-    )
 
     trace_parser = subparsers.add_parser("trace", help="query-trace inspection and replay")
     trace_sub = trace_parser.add_subparsers(dest="trace_action", required=True)
-    trace_sub.add_parser("list", help="recent traces")
-    trace_show = trace_sub.add_parser("show", help="show one trace")
+    trace_sub.add_parser("list", help="recent traces", parents=[fmt])
+    trace_show = trace_sub.add_parser("show", help="show one trace", parents=[fmt])
     trace_show.add_argument("id", help="trace id")
-    trace_replay = trace_sub.add_parser("replay", help="replay a trace and diff")
+    trace_replay = trace_sub.add_parser("replay", help="replay a trace and diff", parents=[fmt])
     trace_replay.add_argument("id", help="trace id")
     trace_replay.add_argument(
         "--persist", action="store_true", help="record the replay as a new trace"
@@ -642,9 +477,9 @@ def main(argv: list[str] | None = None) -> int:
 
     page_parser = subparsers.add_parser("page", help="single-page operations")
     page_sub = page_parser.add_subparsers(dest="page_action", required=True)
-    page_rev = page_sub.add_parser("revisions", help="list a page's revisions")
+    page_rev = page_sub.add_parser("revisions", help="list a page's revisions", parents=[fmt])
     page_rev.add_argument("slug")
-    page_diff = page_sub.add_parser("diff", help="diff two revisions of a page")
+    page_diff = page_sub.add_parser("diff", help="diff two revisions of a page", parents=[fmt])
     page_diff.add_argument("slug")
     page_diff.add_argument("rev_a", help="ordinal (1=oldest) or id prefix")
     page_diff.add_argument("rev_b", help="ordinal (1=oldest) or id prefix")
@@ -656,49 +491,52 @@ def main(argv: list[str] | None = None) -> int:
 
     promotions_parser = subparsers.add_parser("promotions", help="promotion events")
     promotions_sub = promotions_parser.add_subparsers(dest="promotions_action", required=True)
-    promotions_list = promotions_sub.add_parser("list", help="list promotion events")
+    promotions_list = promotions_sub.add_parser("list", help="list promotion events", parents=[fmt])
     promotions_list.add_argument("--slug", default=None, help="filter to one page")
 
     subparsers.add_parser("tui", help="launch the keyboard-driven ops console")
 
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
-    curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)")
-    curate_sub.add_parser("list", help="list open curation signals")
+    curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
+    curate_sub.add_parser("list", help="list open curation signals", parents=[fmt])
     curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
     curate_synth.add_argument("signal_id", help="curation signal id")
 
     args = parser.parse_args(argv)
+    fmt_arg = getattr(args, "format", "text")
 
     if args.command == "ingest":
-        return _ingest(args.path, args.kind, args.mine)
+        return _ingest(args.path, args.kind, args.mine, fmt_arg)
     if args.command == "lint":
-        return _lint()
+        return _lint(fmt_arg)
     if args.command == "pages":
         return _pages_build()
     if args.command == "synth":
         return _synth(args.kind, args.name, args.aliases)
     if args.command == "reindex":
-        return _reindex(args.target)
+        return _reindex(args.target, fmt_arg)
     if args.command == "index":
-        return _index_sync() if args.action == "sync" else _index_status()
+        return _index_sync(fmt_arg) if args.action == "sync" else _index_status(fmt_arg)
     if args.command == "graph":
         if args.graph_action == "link":
             return _graph_link(args.from_slug, args.to_slug, args.edge_type)
-        return _graph(args.graph_action)
+        return _graph(args.graph_action, fmt_arg)
     if args.command == "query":
-        return _query(args.text, args.top_k, args.as_json)
+        return _query(args.text, args.top_k, fmt_arg)
     if args.command == "trace":
-        return _trace(args.trace_action, getattr(args, "id", None),
-                      getattr(args, "persist", False))
+        return _trace(
+            args.trace_action, getattr(args, "id", None),
+            getattr(args, "persist", False), fmt_arg,
+        )
     if args.command == "page":
         return _page(args.page_action, args.slug, args)
     if args.command == "promotions":
-        return _promotions(args.slug)
+        return _promotions(args.slug, fmt_arg)
     if args.command == "tui":
         return _tui()
     if args.command == "curate":
-        return _curate(args.curate_action, getattr(args, "signal_id", None))
+        return _curate(args.curate_action, getattr(args, "signal_id", None), fmt_arg)
     return _startup()
 
 
