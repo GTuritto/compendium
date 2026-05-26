@@ -16,6 +16,7 @@ from compendium.tui.screens.dashboard import DashboardScreen
 from compendium.tui.screens.pages import PagesScreen
 from compendium.tui.screens.placeholder import PlaceholderScreen
 from compendium.tui.screens.sources import SourcesScreen
+from compendium.tui.screens.workbench import WorkbenchScreen
 
 # Navigation order: (key, screen name, label).
 _NAV = [
@@ -46,6 +47,7 @@ def _screen_for(name: str):
         "dashboard": DashboardScreen,
         "sources": SourcesScreen,
         "pages": PagesScreen,
+        "workbench": WorkbenchScreen,
     }
     if name in builders:
         return builders[name]()
