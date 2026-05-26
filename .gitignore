@@ -37,6 +37,9 @@ dist/
 # canonical skills are kept under .claude/skills/
 .github/
 
+# Understand-Anything plugin scratch (generated scan/batch cache)
+.understand-anything/
+
 # Editor / IDE
 .vscode/
 *.code-workspace
