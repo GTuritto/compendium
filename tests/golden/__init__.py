@@ -26,6 +26,7 @@ class GoldenQuery:
     query: str
     expectations: dict[str, Any]
     filters: dict[str, Any] = field(default_factory=dict)
+    setup: str | None = None  # e.g. "empty_pages" to reproduce a gap hermetically
 
 
 def load_dataset(path: Path | None = None) -> list[GoldenQuery]:
@@ -50,6 +51,7 @@ def load_dataset(path: Path | None = None) -> list[GoldenQuery]:
                 query=entry["query"],
                 expectations=entry["expectations"],
                 filters=entry.get("filters") or {},
+                setup=entry.get("setup"),
             )
         )
     return queries

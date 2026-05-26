@@ -25,6 +25,10 @@
 
 - id: q_c_unrelated
   category: C
+  # With the stub embedder, dense search returns the nearest pages for any query,
+  # so a gap is reproduced hermetically by querying with the pages indexes empty
+  # (the runner empties them for this entry, then restores via reindex).
+  setup: empty_pages
   query: "quantum chromodynamics lattice gauge theory"
   expectations:
     fallback_to_chunks: true
