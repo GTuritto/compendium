@@ -125,8 +125,8 @@ Status as of 2026-05-25.
 | 4 | Derived indexes (OpenSearch + Qdrant) | `phase-4-derived-indexes` | E | ✅ merged (PR #7) |
 | 5 | Page-first retrieval | `phase-5-retrieval` | F | ✅ merged (PR #8) |
 | 6 | Memgraph structural index | `phase-6-memgraph` | G1 | ✅ merged (PR #11) |
-| 7 | Query traces & revision tracking | `phase-7-traces` | I | ⬜ next |
-| 8 | TUI ops console | `phase-8-tui` | H | ⬜ not started |
+| 7 | Query traces & revision tracking | `phase-7-traces` | I | 🔧 in progress (PR #13) |
+| 8 | TUI ops console | `phase-8-tui` | H | ⬜ next |
 | 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | ⬜ not started |
 | 10 | Golden dataset & testing | `phase-10-testing` | J | ⬜ not started |
 
