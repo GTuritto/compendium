@@ -94,8 +94,8 @@ corpus.
 
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; the `Sample Markdown Source` page is listed with a score; stderr reports a high coverage and no fallback (`coverage 1.000` on the single-source corpus; lower but still no-fallback on a larger one). |
-| 5.2 | JSON output | `uv run python -m compendium query "psychological safety" --json` | Exit 0; a JSON object with `query`, `coverage_score`, `fallback_to_chunks`, a non-empty `pages` array, `citations`, and `gaps`. |
+| 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; on stdout, a `query:` summary line reporting a high coverage and no fallback (`coverage 1.000` on the single-source corpus; lower but still no-fallback on a larger one), then the `Sample Markdown Source` page listed with a score. |
+| 5.2 | JSON output | `uv run python -m compendium query "psychological safety" --format json` | Exit 0; a JSON object with `query`, `coverage_score`, `fallback_to_chunks`, a non-empty `pages` array, `citations`, and `gaps`. (`--format json` replaces the former `--json`; available on every read command.) |
 | 5.3 | Gap → chunk fallback | Empty the pages indexes (`curl -X DELETE :9200/pages`; recreate the empty `pages` Qdrant collection), then `uv run python -m compendium query "psychological safety team learning"` | Exit 0; no pages, chunk citations from `Sample Markdown Source` are shown under "citations (chunk fallback)". |
 | 5.4 | Traces persisted | `PSQL "SELECT query_text, round(coverage_score::numeric,3), fallback_to_chunks, jsonb_array_length(gaps), array_length(query_embedding,1), graph_expansion FROM query_traces ORDER BY created_at"` | One row per query above: the covered queries show a high coverage (`1.000` on the single-source corpus), fallback `f`, 0 gaps; the 5.3 query shows coverage `0.000`, fallback `t`, 1 gap; every row has `query_embedding` length 1024 and `graph_expansion` NULL. |
 

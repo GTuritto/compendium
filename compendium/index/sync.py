@@ -24,7 +24,12 @@ from compendium.db.connection import connection
 from compendium.graph import projection
 from compendium.graph.client import graph_driver
 from compendium.index import documents, opensearch, qdrant
-from compendium.index.clients import opensearch_client, qdrant_client
+from compendium.index.clients import (
+    opensearch_client,
+    opensearch_reachable,
+    qdrant_client,
+    qdrant_reachable,
+)
 from compendium.index.embedder import Embedder, get_embedder
 from compendium.wiki.page import parse_markdown
 
@@ -46,6 +51,20 @@ class SyncReport:
     failed: int = 0
     skipped: int = 0  # stale rows whose entity was gone
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class IndexStatusReport:
+    """Derived-index counts and sync-queue lag.
+
+    ``opensearch`` and ``qdrant`` map index/collection name to document count,
+    or are ``None`` when that store is unreachable. ``sync_lag`` is the rows of
+    the ``v_sync_lag`` view (one per index_kind/state).
+    """
+
+    opensearch: dict[str, int] | None = None
+    qdrant: dict[str, int] | None = None
+    sync_lag: list[dict[str, Any]] = field(default_factory=list)
 
 
 class _Stores:
@@ -196,6 +215,33 @@ def reindex(target: str) -> SyncReport:
         return _reindex(target, stores)
     finally:
         stores.graph.close()
+
+
+def status() -> IndexStatusReport:
+    """Counts per index/collection (or unreachable), plus sync-queue lag.
+
+    Owns client construction and reachability so callers render a report rather
+    than wiring stores themselves.
+    """
+    report = IndexStatusReport()
+
+    os_client = opensearch_client()
+    if opensearch_reachable(os_client):
+        report.opensearch = {
+            index: opensearch.count(os_client, index)
+            for index in (opensearch.PAGES_INDEX, opensearch.CHUNKS_INDEX)
+        }
+
+    q_client = qdrant_client()
+    if qdrant_reachable(q_client):
+        report.qdrant = {
+            collection: qdrant.count(q_client, collection)
+            for collection in (qdrant.PAGES_COLLECTION, qdrant.CHUNKS_COLLECTION)
+        }
+
+    with connection() as conn:
+        report.sync_lag = list(repository.sync_lag(conn))
+    return report
 
 
 def _reindex(target: str, stores: _Stores) -> SyncReport:
