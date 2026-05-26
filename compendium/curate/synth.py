@@ -1,14 +1,15 @@
 """Synth-from-signal (ADR-009, Phase 9).
 
 Derive a synthesis target from a curation signal's payload and run the existing
-Phase 3 synthesizer to produce a draft concept page, moving the signal to
-``in_progress``. The promotion side (marking the signal ``addressed`` and adding
-``SYNTHESIZES`` edges) lives in the Phase 7 ``promote`` path, extended in 9c.
+Phase 3 synthesizer to produce a draft concept page. The signal's state
+transitions (``open`` → ``in_progress`` here, and the promotion side) are owned
+by :mod:`compendium.curate.lifecycle`.
 """
 
 from __future__ import annotations
 
 from compendium.config import load_config
+from compendium.curate import lifecycle
 from compendium.db import repository
 from compendium.db.connection import connection
 from compendium.wiki.synth import SynthesisError, synthesize_concept
@@ -49,8 +50,5 @@ def synth_from_signal(signal_id: str) -> str:
             page = synthesize_concept(conn, name, aliases=[], vault_path=vault)
         except SynthesisError as exc:
             raise SynthError(str(exc)) from exc
-        repository.set_signal_status(conn, signal_id, "in_progress")
-        # Tag the signal with the page it produced, so promoting that page
-        # addresses this signal (the promote hook looks it up by slug).
-        repository.attach_synth_page(conn, signal_id, page.id, page.slug)
+        lifecycle.begin(conn, signal_id, synth_page_id=page.id, synth_slug=page.slug)
     return page.slug

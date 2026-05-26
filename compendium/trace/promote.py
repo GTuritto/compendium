@@ -83,11 +83,12 @@ def promote(slug: str, to_status: str, *, vault_path: str, notes: str | None = N
             notes=notes or f"promote to {to_status}",
         )
 
-        # Curation loop (Phase 9): if this page addresses an open signal, close
-        # it and add SYNTHESIZES edges. No-op for ordinary promotions.
-        from compendium.curate.promote_hook import address_on_promote
+        # Curation loop (Phase 9): if this page addresses an in-progress signal,
+        # the lifecycle module closes it and adds SYNTHESIZES edges, returning
+        # the signal id (None for an ordinary promotion).
+        from compendium.curate import lifecycle
 
-        address_on_promote(conn, updated, str(to_revision_id), vault_path)
+        lifecycle.address_on_promote(conn, updated, str(to_revision_id), vault_path)
 
     return PromotionResult(
         slug=slug,
