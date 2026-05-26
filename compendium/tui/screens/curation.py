@@ -11,13 +11,14 @@ from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
 from compendium.cli import render
+from compendium.tui import data as tui_data
+from compendium.tui.screens.base import DataScreen
 
 
-class CurationScreen(Screen):
+class CurationScreen(DataScreen):
     """Open curation signals, highest priority first.
 
     Select a signal and press ``y`` to synthesize a draft from it (Phase 9); the
@@ -45,14 +46,9 @@ class CurationScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def load(self) -> None:
-        from compendium.tui import data as tui_data
-
-        try:
-            rows = tui_data.curation_signals()
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"load failed: {exc}", severity="error")
-            return
-        self.app.call_from_thread(self._populate, rows)
+        self.run_threaded(
+            tui_data.curation_signals, on_ok=self._populate, error_label="load"
+        )
 
     def _populate(self, rows: list[dict[str, Any]]) -> None:
         table = self.query_one("#signals", DataTable)
@@ -76,12 +72,10 @@ class CurationScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def _synth(self, signal_id: str) -> None:
-        from compendium.tui import data as tui_data
+        def done(slug: str) -> None:
+            self.notify(f"synth: drafted '{slug}'")
+            self.load()
 
-        try:
-            slug = tui_data.synth_signal(signal_id)
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"synth failed: {exc}", severity="error")
-            return
-        self.app.call_from_thread(self.notify, f"synth: drafted '{slug}'")
-        self.app.call_from_thread(self.load)
+        self.run_threaded(
+            lambda: tui_data.synth_signal(signal_id), on_ok=done, error_label="synth"
+        )

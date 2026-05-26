@@ -6,17 +6,17 @@ from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
 from compendium.cli import render
 from compendium.tui import data as tui_data
+from compendium.tui.screens.base import DataScreen
 from compendium.tui.screens.widgets import FormModal
 
 _SOURCE_KINDS = "book, article, paper, note, web"
 
 
-class SourcesScreen(Screen):
+class SourcesScreen(DataScreen):
     """Sources with inspection status; ``i`` ingests, ``r`` refreshes."""
 
     BINDINGS = [("i", "ingest", "Ingest"), ("r", "refresh", "Refresh")]
@@ -37,12 +37,7 @@ class SourcesScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def load(self) -> None:
-        try:
-            rows = tui_data.sources()
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"load failed: {exc}", severity="error")
-            return
-        self.app.call_from_thread(self._populate, rows)
+        self.run_threaded(tui_data.sources, on_ok=self._populate, error_label="load")
 
     def _populate(self, rows: list[dict[str, Any]]) -> None:
         table = self.query_one("#sources", DataTable)
@@ -68,11 +63,12 @@ class SourcesScreen(Screen):
 
     @work(thread=True, exclusive=True)
     def _run_ingest(self, path: str, kind: str) -> None:
-        try:
-            results = tui_data.ingest_path(path, kind=kind)
-        except Exception as exc:
-            self.app.call_from_thread(self.notify, f"ingest failed: {exc}", severity="error")
-            return
-        stored = sum(1 for r in results if r.status in ("ingested", "updated"))
-        self.app.call_from_thread(self.notify, f"ingest: {stored} stored, {len(results)} source(s)")
-        self.app.call_from_thread(self.load)
+        def done(results: list[Any]) -> None:
+            stored = sum(1 for r in results if r.status in ("ingested", "updated"))
+            self.notify(f"ingest: {stored} stored, {len(results)} source(s)")
+            self.load()
+
+        self.run_threaded(
+            lambda: tui_data.ingest_path(path, kind=kind),
+            on_ok=done, error_label="ingest",
+        )
