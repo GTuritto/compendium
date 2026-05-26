@@ -8,7 +8,7 @@ This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a
 
 ## Status
 
-In development. Phases 0–6 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), and the Memgraph structural index (`compendium graph rebuild`). Phase 7 (query traces and revision tracking — `compendium trace`/`page diff`/`promotions`) is in progress. The setup and run steps below are live through Phase 6; the TUI is still landing. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
+In development. Phases 0–7 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), and operational telemetry (`compendium trace`/`page diff`/`promotions`). Phase 8 (the Textual ops console, `compendium tui`) is in progress. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
 
 ## Requirements
 
