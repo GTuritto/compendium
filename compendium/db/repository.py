@@ -849,6 +849,18 @@ def list_open_curation_signals(
 # --- curation loop (Phase 9) -----------------------------------------------
 
 
+def list_open_signals(
+    conn: psycopg.Connection, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Open signals (with id) by priority — for the TUI, which acts on them."""
+    return conn.execute(
+        "SELECT id, kind, priority, payload, status, created_at "
+        "FROM graph_curation_signals WHERE status = 'open' "
+        "ORDER BY priority DESC, created_at DESC LIMIT %s",
+        (limit,),
+    ).fetchall()
+
+
 def open_analysis_run(conn: psycopg.Connection) -> UUID:
     """Open a ``graph_analysis_runs`` row and return its id."""
     row = conn.execute(
@@ -934,13 +946,17 @@ def set_signal_status(
     conn.execute(
         """
         UPDATE graph_curation_signals
-        SET status = %s::curation_signal_status,
-            addressed_revision_id = COALESCE(%s, addressed_revision_id),
-            addressed_at = CASE WHEN %s = 'addressed' THEN now() ELSE addressed_at END
-        WHERE id = %s
+        SET status = %(status)s::curation_signal_status,
+            addressed_revision_id = COALESCE(%(rev)s::uuid, addressed_revision_id),
+            addressed_at = CASE WHEN %(status)s::text = 'addressed'
+                                THEN now() ELSE addressed_at END
+        WHERE id = %(id)s::uuid
         """,
-        (status, str(addressed_revision_id) if addressed_revision_id else None,
-         status, str(signal_id)),
+        {
+            "status": status,
+            "rev": str(addressed_revision_id) if addressed_revision_id else None,
+            "id": str(signal_id),
+        },
     )
 
 
@@ -960,8 +976,9 @@ def attach_synth_page(
     """Record on the signal which page its synth produced (for the promote hook)."""
     conn.execute(
         "UPDATE graph_curation_signals "
-        "SET payload = payload || jsonb_build_object('synth_page_id', %s, 'synth_slug', %s) "
-        "WHERE id = %s",
+        "SET payload = payload || jsonb_build_object("
+        "'synth_page_id', %s::text, 'synth_slug', %s::text) "
+        "WHERE id = %s::uuid",
         (str(page_id), slug, str(signal_id)),
     )
 

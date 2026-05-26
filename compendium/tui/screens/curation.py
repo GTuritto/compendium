@@ -17,9 +17,13 @@ from textual.widgets import DataTable, Footer, Header, Static
 
 
 class CurationScreen(Screen):
-    """Open curation signals, highest priority first; read-only in v0.1."""
+    """Open curation signals, highest priority first.
 
-    BINDINGS = [("r", "refresh", "Refresh")]
+    Select a signal and press ``y`` to synthesize a draft from it (Phase 9); the
+    signal moves to ``in_progress`` and leaves the open queue.
+    """
+
+    BINDINGS = [("r", "refresh", "Refresh"), ("y", "synth", "Synth from signal")]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -30,6 +34,9 @@ class CurationScreen(Screen):
     def on_mount(self) -> None:
         table = self.query_one("#signals", DataTable)
         table.add_columns("priority", "kind", "summary", "created")
+        table.cursor_type = "row"
+        self._signal_ids: list[str] = []
+        table.focus()  # so the cursor is on a row and 'y' acts on the selection
         self.load()
 
     def action_refresh(self) -> None:
@@ -49,9 +56,30 @@ class CurationScreen(Screen):
     def _populate(self, rows: list[dict[str, Any]]) -> None:
         table = self.query_one("#signals", DataTable)
         table.clear()
+        self._signal_ids = []
         for r in rows:
             created = r["created_at"].strftime("%Y-%m-%d %H:%M") if r["created_at"] else "-"
             summary = json.dumps(r["payload"])[:50] if r["payload"] else ""
             table.add_row(str(r["priority"]), r["kind"], summary, created)
-        note = "no open signals (Phase 9 feeds this queue)" if not rows else f"{len(rows)} open signal(s)"
+            self._signal_ids.append(str(r["id"]))
+        note = "no open signals" if not rows else f"{len(rows)} open signal(s) — y to synth"
         self.query_one("#status", Static).update(note)
+
+    def action_synth(self) -> None:
+        table = self.query_one("#signals", DataTable)
+        row = table.cursor_row
+        if row is None or row >= len(self._signal_ids):
+            return
+        self._synth(self._signal_ids[row])
+
+    @work(thread=True, exclusive=True)
+    def _synth(self, signal_id: str) -> None:
+        from compendium.tui import data as tui_data
+
+        try:
+            slug = tui_data.synth_signal(signal_id)
+        except Exception as exc:
+            self.app.call_from_thread(self.notify, f"synth failed: {exc}", severity="error")
+            return
+        self.app.call_from_thread(self.notify, f"synth: drafted '{slug}'")
+        self.app.call_from_thread(self.load)
