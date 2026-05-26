@@ -14,6 +14,7 @@ from textual.widgets import Footer, Static
 
 from compendium.tui.screens.dashboard import DashboardScreen
 from compendium.tui.screens.placeholder import PlaceholderScreen
+from compendium.tui.screens.sources import SourcesScreen
 
 # Navigation order: (key, screen name, label).
 _NAV = [
@@ -42,6 +43,7 @@ def _screen_for(name: str):
     """The real screen for a built concern, else a placeholder."""
     builders = {
         "dashboard": DashboardScreen,
+        "sources": SourcesScreen,
     }
     if name in builders:
         return builders[name]()
