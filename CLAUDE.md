@@ -6,7 +6,7 @@ Compendium is a personal knowledge synthesis system for one user (Giuseppe Turit
 
 Design is complete and the build is underway. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and resolved decisions.
 
-As of 2026-05-26: Phases 0 through 8 are implemented and merged to `main`; Phase 9 is in progress on `phase-9-curation-loop` (PR #16).
+As of 2026-05-26: Phases 0 through 9 are implemented and merged to `main`.
 
 - **Phase 0 — Project skeleton** (merged): `uv` project, package layout, config loader, `structlog`, dev `docker-compose.yml`.
 - **Phase 1 — PostgreSQL backbone** (merged): all 11 ordered Alembic migrations (`0001_enums` → `0011_operational_views`).
@@ -17,9 +17,9 @@ As of 2026-05-26: Phases 0 through 8 are implemented and merged to `main`; Phase
 - **Phase 6 — Memgraph structural index** (merged, PR #11): four node types and the automatic `PART_OF`/`EVIDENCES`/`GROUNDS` edges populated from PostgreSQL + the vault, the `memgraph` sync kind, `compendium graph rebuild`/`status`. neo4j Bolt driver, no OGM.
 - **Phase 7 — Query traces and revision tracking** (merged, PR #13): trace inspection + read-only replay with a final-ranking diff (`compendium trace list`/`show`/`replay`), wiki-page revision history + diff (`compendium page revisions`/`diff`), and promotion as a recorded transition (`compendium page promote`, `compendium promotions list`). No migration; `difflib` only.
 - **Phase 8 — TUI ops console** (merged, PR #14): a keyboard-driven Textual console (`compendium tui`) with six screens — dashboard, sources (+ ingest), pages (+ synth), query workbench, curation queue, graph browser — over a thin `compendium/tui/data.py` provider layer, blocking work in `@work(thread=True)`. New dependency: `textual`.
-- **Phase 9 — Knowledge graph curation loop** (in progress, PR #16): the fast loop (query-time graph expansion logged in `query_traces.graph_expansion`), the on-demand slow loop (`compendium curate run` → `graph_curation_signals` + `graph_analysis_runs`), synth-from-signal with auto-`SYNTHESIZES` on promotion, curator-explicit semantic edges (`compendium graph link`), and the TUI curation actions. No migration; no daemon.
+- **Phase 9 — Knowledge graph curation loop** (merged, PR #16): the fast loop (query-time graph expansion logged in `query_traces.graph_expansion`), the on-demand slow loop (`compendium curate run` → `graph_curation_signals` + `graph_analysis_runs`), synth-from-signal with auto-`SYNTHESIZES` on promotion, curator-explicit semantic edges (`compendium graph link`), and the TUI curation actions. No migration; no daemon.
 
-**Phase 10 — Golden dataset & testing (`phase-10-testing`) is the last phase** once Phase 9 merges: a fixed golden dataset, the test layers, and CI that replays a trace set to assert quality has not regressed.
+**Phase 10 — Golden dataset & testing (`phase-10-testing`) is the last phase, and is next.** A fixed golden dataset, the test layers, and CI that replays a trace set to assert quality has not regressed. It is the only remaining phase; Phases 0–9 are complete.
 
 Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. Dev backing-store host ports are remapped to avoid collisions with a local bibliomind stack: Qdrant on **6533/6534** and Memgraph on **7688/7445** (containers still listen on the defaults internally). The graph layer uses the `neo4j` Bolt driver with raw Cypher (no OGM), the analog of `compendium/db/` over `psycopg`.
 
