@@ -150,7 +150,21 @@ press `/` to focus the search box (so the nav letters are not typed into it).
 
 ## Phase 9 — Knowledge graph curation loop
 
-_Smoke-test scenarios authored in `Plans/phase-9-curation-loop.md` and appended here when Phase 9 is implemented._
+Prerequisites: the full stack up, a migrated database, `sample.md` ingested,
+`reindex all` + `graph rebuild` done. Stub embedder/synth are fine
+(`export COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`). The loop is the
+acceptance: a gap → a signal → a synth'd draft → promotion → an improved replay.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 9.1 | Create a gap | empty the pages indexes (`curl -X DELETE :9200/pages`; recreate the empty `pages` Qdrant collection), `uv run python -m compendium query "psychological safety"`, then `reindex all` | a coverage-0 / fallback trace is recorded for the query |
+| 9.2 | Slow loop | `uv run python -m compendium curate run` | a `graph_analysis_runs` row; new open signal(s) including a `low_coverage_query` for the query |
+| 9.3 | List signals | `uv run python -m compendium curate list` | open signals by priority with kind + summary |
+| 9.4 | Synth from signal | `uv run python -m compendium curate synth <signal-id>` | a draft concept page that lint-passes and cites chunks; the signal moves to `in_progress` |
+| 9.5 | Promote closes the loop | `uv run python -m compendium page promote <slug> --to canonical`, then `reindex all` | the signal becomes `addressed` with `addressed_revision_id`; a `SYNTHESIZES` edge is added (`graph status` shows it) |
+| 9.6 | Replay improved | `uv run python -m compendium trace replay <gap-trace-id>` | the replay shows the new page added and a positive coverage delta vs the original gap |
+| 9.7 | Fast-loop expansion | `uv run python -m compendium graph link <a-slug> <b-slug> --type RELATED_TO`, then `query` a term hitting page a | the trace's `graph_expansion` is populated; page b is merged into the ranking |
+| 9.8 | Curator in the TUI | `compendium tui` → `c` → select a signal → `y` | the synth runs; the signal leaves the open queue (moves to `in_progress`) |
 
 ## Phase 10 — Golden dataset and testing
 

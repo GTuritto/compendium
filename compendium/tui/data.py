@@ -38,9 +38,16 @@ def pages(kind: str | None = None, status: str | None = None) -> list[dict[str, 
 
 
 def curation_signals() -> list[dict[str, Any]]:
-    """Open curation signals (empty until Phase 9 feeds the slow loop)."""
+    """Open curation signals (with ids, so the screen can act on them)."""
     with connection() as conn:
-        return repository.list_open_curation_signals(conn)
+        return repository.list_open_signals(conn)
+
+
+def synth_signal(signal_id: str) -> str:
+    """Synthesize a draft from a signal (moves it to in_progress); returns slug."""
+    from compendium.curate.synth import synth_from_signal
+
+    return synth_from_signal(signal_id)
 
 
 # --- write actions (run in a worker) ---------------------------------------

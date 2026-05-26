@@ -308,6 +308,25 @@ def _query(query_text: str, top_k: int | None, as_json: bool) -> int:
     return 0
 
 
+def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
+    log = get_logger("compendium.graph")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+    from compendium.graph.links import LinkError, link
+
+    try:
+        link(from_slug, to_slug, edge_type)
+    except LinkError as exc:
+        print(f"link error: {exc}", file=sys.stderr)
+        return 1
+    log.info("graph link", **{"from": from_slug, "to": to_slug, "type": edge_type})
+    print(f"graph link: {from_slug} -[{edge_type}]-> {to_slug}", file=sys.stderr)
+    return 0
+
+
 def _graph(action: str) -> int:
     log = get_logger("compendium.graph")
     try:
@@ -486,6 +505,54 @@ def _promotions(slug: str | None) -> int:
     return 0
 
 
+def _curate(action: str, signal_id: str | None) -> int:
+    log = get_logger("compendium.curate")
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    if action == "run":
+        from compendium.curate.run import run as curate_run
+
+        report = curate_run()
+        log.info("curate run", run_id=report.run_id, inserted=report.inserted,
+                 by_kind=report.by_kind, skipped=report.skipped_generators)
+        for kind, n in report.by_kind.items():
+            print(f"  {kind}: {n}", file=sys.stderr)
+        if report.skipped_generators:
+            print(f"  skipped (memgraph down): {', '.join(report.skipped_generators)}",
+                  file=sys.stderr)
+        print(f"curate run: {report.inserted} new signal(s) [run {report.run_id}]",
+              file=sys.stderr)
+        return 0
+
+    if action == "list":
+        with connection() as conn:
+            rows = repository.list_open_curation_signals(conn)
+        for r in rows:
+            import json
+            print(f"  [{r['priority']}] {r['kind']}  {json.dumps(r['payload'])[:60]}",
+                  file=sys.stderr)
+        print(f"curate list: {len(rows)} open signal(s)", file=sys.stderr)
+        return 0
+
+    # synth
+    from compendium.curate.synth import synth_from_signal, SignalNotFound, SynthError
+    try:
+        slug = synth_from_signal(signal_id)
+    except SignalNotFound:
+        print(f"signal not found: {signal_id}", file=sys.stderr)
+        return 1
+    except SynthError as exc:
+        print(f"synth error: {exc}", file=sys.stderr)
+        return 1
+    log.info("curate synth", signal=signal_id, slug=slug)
+    print(f"curate synth: drafted '{slug}' (signal in_progress)", file=sys.stderr)
+    return 0
+
+
 def _tui() -> int:
     try:
         load_config()
@@ -540,10 +607,15 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     graph_parser = subparsers.add_parser("graph", help="Memgraph structural index")
-    graph_parser.add_argument(
-        "action", choices=["rebuild", "status"],
-        help="rebuild: drop and repopulate from PostgreSQL + vault; "
-             "status: node/edge counts",
+    graph_sub = graph_parser.add_subparsers(dest="graph_action", required=True)
+    graph_sub.add_parser("rebuild", help="drop and repopulate from PostgreSQL + vault")
+    graph_sub.add_parser("status", help="node/edge counts")
+    graph_link = graph_sub.add_parser("link", help="add a curator semantic edge")
+    graph_link.add_argument("from_slug")
+    graph_link.add_argument("to_slug")
+    graph_link.add_argument(
+        "--type", dest="edge_type", required=True,
+        choices=["RELATED_TO", "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS"],
     )
 
     query_parser = subparsers.add_parser(
@@ -589,6 +661,13 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("tui", help="launch the keyboard-driven ops console")
 
+    curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
+    curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
+    curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)")
+    curate_sub.add_parser("list", help="list open curation signals")
+    curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
+    curate_synth.add_argument("signal_id", help="curation signal id")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -604,7 +683,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "index":
         return _index_sync() if args.action == "sync" else _index_status()
     if args.command == "graph":
-        return _graph(args.action)
+        if args.graph_action == "link":
+            return _graph_link(args.from_slug, args.to_slug, args.edge_type)
+        return _graph(args.graph_action)
     if args.command == "query":
         return _query(args.text, args.top_k, args.as_json)
     if args.command == "trace":
@@ -616,6 +697,8 @@ def main(argv: list[str] | None = None) -> int:
         return _promotions(args.slug)
     if args.command == "tui":
         return _tui()
+    if args.command == "curate":
+        return _curate(args.curate_action, getattr(args, "signal_id", None))
     return _startup()
 
 
