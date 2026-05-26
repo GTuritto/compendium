@@ -9,7 +9,8 @@ when Memgraph is down, mirroring the Phase 4 store-reachability pattern.
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 from neo4j import Driver, GraphDatabase
 
@@ -20,10 +21,30 @@ _AUTH = ("", "")
 
 
 def graph_driver(url: str | None = None) -> Driver:
-    """Open a Bolt driver. The URL defaults to MEMGRAPH_URL from config."""
+    """Open a Bolt driver. The URL defaults to MEMGRAPH_URL from config.
+
+    Prefer :func:`graph_connection` for short-lived use so the driver is always
+    closed; call this directly only when a driver must outlive a single block
+    (e.g. held open across a sync drain).
+    """
     if url is None:
         url = load_config().memgraph_url
     return GraphDatabase.driver(url, auth=_AUTH)
+
+
+@contextmanager
+def graph_connection(url: str | None = None) -> Iterator[Driver]:
+    """A Bolt driver that always closes on exit, the analog of ``db.connection``.
+
+    Unlike Postgres there is no transaction to commit or roll back here; this
+    just guarantees the driver is closed, replacing the per-call-site
+    ``driver = graph_driver(); try: ... finally: driver.close()`` boilerplate.
+    """
+    driver = graph_driver(url)
+    try:
+        yield driver
+    finally:
+        driver.close()
 
 
 def run_cypher(

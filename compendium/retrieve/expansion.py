@@ -75,15 +75,13 @@ def expand(
     nothing is reached, so the caller leaves the base ranking unchanged.
     """
     from compendium.graph import browse
-    from compendium.graph.client import graph_driver, graph_reachable
+    from compendium.graph.client import graph_connection, graph_reachable
 
-    driver = graph_driver()
-    try:
+    with graph_connection() as driver:
         if not graph_reachable(driver):
             return ExpansionOutcome(reached=[], payload=None)
-        rows = browse.walk_semantic(driver, list(seed_scores.keys()), max_hops)
-    except Exception:
-        return ExpansionOutcome(reached=[], payload=None)
-    finally:
-        driver.close()
+        try:
+            rows = browse.walk_semantic(driver, list(seed_scores.keys()), max_hops)
+        except Exception:
+            return ExpansionOutcome(reached=[], payload=None)
     return score_reached(seed_scores, rows, decay=decay, weight=weight)
