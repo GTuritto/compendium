@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
+from compendium.cli import render
 from compendium.tui import data as tui_data
 from compendium.tui.screens.widgets import FormModal
 
@@ -47,8 +48,10 @@ class SourcesScreen(Screen):
         table = self.query_one("#sources", DataTable)
         table.clear()
         for r in rows:
-            ingested = r["ingested_at"].strftime("%Y-%m-%d %H:%M") if r["ingested_at"] else "-"
-            table.add_row(r["kind"], (r["title"] or "")[:50], r["inspection_status"] or "-", ingested)
+            table.add_row(
+                r["kind"], (r["title"] or "")[:50], r["inspection_status"] or "-",
+                render.fmt_ts(r["ingested_at"]),
+            )
 
     def action_ingest(self) -> None:
         self.app.push_screen(

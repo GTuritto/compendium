@@ -36,6 +36,37 @@ def to_json(payload: Any) -> str:
     return json.dumps(payload, indent=2, default=str)
 
 
+# ---------------------------------------------------------------------------
+# scalar formatters — shared by the CLI renderers below and the TUI screens
+# (compendium/tui/screens/*), so each format lives in exactly one place.
+# ---------------------------------------------------------------------------
+
+
+def fmt_coverage(score: float | None) -> str:
+    """A coverage score to three places, or ``-`` when absent."""
+    return f"{score:.3f}" if score is not None else "-"
+
+
+def fmt_ts(dt: Any) -> str:
+    """A timestamp as ``YYYY-MM-DD HH:MM``, or ``-`` when absent."""
+    return dt.strftime("%Y-%m-%d %H:%M") if dt else "-"
+
+
+def fmt_fallback(flag: bool) -> str:
+    """The list/dashboard fallback flag: ``fallback`` or ``ok``."""
+    return "fallback" if flag else "ok"
+
+
+def fmt_fallback_suffix(flag: bool) -> str:
+    """The query-summary fallback suffix: ``, chunk fallback`` or empty."""
+    return ", chunk fallback" if flag else ""
+
+
+def fmt_payload(payload: Any, limit: int = 60) -> str:
+    """A signal payload as truncated compact JSON, or empty when absent."""
+    return json.dumps(payload)[:limit] if payload else ""
+
+
 def _aligned(columns: list[str], rows: list[list[str]]) -> str:
     """A simple left-aligned text table; empty body renders as the header only."""
     widths = [len(c) for c in columns]
@@ -201,9 +232,9 @@ def query(result: Any, pages: list[Any], fmt: Format = "text") -> str:
                 "gaps": result.gaps,
             }
         )
-    fallback = ", chunk fallback" if result.fallback_to_chunks else ""
     lines = [
-        f"query: {len(pages)} page(s), coverage {result.coverage_score:.3f}{fallback}"
+        f"query: {len(pages)} page(s), coverage {fmt_coverage(result.coverage_score)}"
+        f"{fmt_fallback_suffix(result.fallback_to_chunks)}"
     ]
     for rank, p in enumerate(pages, start=1):
         flag = " [draft]" if p.status == "draft" else ""
@@ -221,11 +252,10 @@ def trace_list(rows: list[dict], fmt: Format = "text") -> str:
         return to_json(rows)
     lines = []
     for r in rows:
-        cov = f"{r['coverage_score']:.3f}" if r["coverage_score"] is not None else "-"
-        fb = "fallback" if r["fallback_to_chunks"] else "ok"
         lines.append(
-            f"  {r['id']}  cov={cov}  {fb}  gaps={r['gap_count']}  "
-            f"{r['created_at']:%Y-%m-%d %H:%M}  {r['query_text'][:50]}"
+            f"  {r['id']}  cov={fmt_coverage(r['coverage_score'])}  "
+            f"{fmt_fallback(r['fallback_to_chunks'])}  gaps={r['gap_count']}  "
+            f"{fmt_ts(r['created_at'])}  {r['query_text'][:50]}"
         )
     return "\n".join(lines)
 
@@ -291,8 +321,7 @@ def page_revisions(rows: list[dict], fmt: Format = "text") -> str:
     for i, r in enumerate(rows, start=1):
         note = f"  {r['notes']}" if r["notes"] else ""
         lines.append(
-            f"  {i}. {r['id']}  {r['generator']}  "
-            f"{r['created_at']:%Y-%m-%d %H:%M}{note}"
+            f"  {i}. {r['id']}  {r['generator']}  {fmt_ts(r['created_at'])}{note}"
         )
     return "\n".join(lines)
 
@@ -328,8 +357,7 @@ def promotions(events: list[dict], fmt: Format = "text") -> str:
     if fmt == "json":
         return to_json(events)
     lines = [
-        f"  {e['created_at']:%Y-%m-%d %H:%M}  {e['kind']}  "
-        f"{e['page_kind']}/{e['slug']}"
+        f"  {fmt_ts(e['created_at'])}  {e['kind']}  {e['page_kind']}/{e['slug']}"
         for e in events
     ]
     lines.append(f"promotions: {len(events)} event(s)")
@@ -340,7 +368,7 @@ def curate_list(rows: list[dict], fmt: Format = "text") -> str:
     if fmt == "json":
         return to_json(rows)
     lines = [
-        f"  [{r['priority']}] {r['kind']}  {json.dumps(r['payload'])[:60]}"
+        f"  [{r['priority']}] {r['kind']}  {fmt_payload(r['payload'])}"
         for r in rows
     ]
     lines.append(f"curate list: {len(rows)} open signal(s)")

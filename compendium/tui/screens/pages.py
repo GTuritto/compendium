@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
+from compendium.cli import render
 from compendium.tui import data as tui_data
 from compendium.tui.screens.widgets import FormModal
 
@@ -70,8 +71,10 @@ class PagesScreen(Screen):
         table = self.query_one("#pages", DataTable)
         table.clear()
         for r in rows:
-            updated = r["updated_at"].strftime("%Y-%m-%d %H:%M") if r["updated_at"] else "-"
-            table.add_row(r["kind"], (r["title"] or "")[:40], r["slug"], r["status"], updated)
+            table.add_row(
+                r["kind"], (r["title"] or "")[:40], r["slug"], r["status"],
+                render.fmt_ts(r["updated_at"]),
+            )
         table.border_title = f"Pages  kind={kind or 'all'}  status={status or 'all'}"
 
     def action_synth(self) -> None:

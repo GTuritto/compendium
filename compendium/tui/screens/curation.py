@@ -7,13 +7,14 @@ mark addressed) land in Phase 9.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
+
+from compendium.cli import render
 
 
 class CurationScreen(Screen):
@@ -58,9 +59,10 @@ class CurationScreen(Screen):
         table.clear()
         self._signal_ids = []
         for r in rows:
-            created = r["created_at"].strftime("%Y-%m-%d %H:%M") if r["created_at"] else "-"
-            summary = json.dumps(r["payload"])[:50] if r["payload"] else ""
-            table.add_row(str(r["priority"]), r["kind"], summary, created)
+            summary = render.fmt_payload(r["payload"], 50)
+            table.add_row(
+                str(r["priority"]), r["kind"], summary, render.fmt_ts(r["created_at"])
+            )
             self._signal_ids.append(str(r["id"]))
         note = "no open signals" if not rows else f"{len(rows)} open signal(s) — y to synth"
         self.query_one("#status", Static).update(note)

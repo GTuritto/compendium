@@ -10,6 +10,7 @@ from textual.screen import Screen
 from textual import work
 from textual.widgets import DataTable, Footer, Header, Static
 
+from compendium.cli import render
 from compendium.tui import data as tui_data
 
 
@@ -60,9 +61,11 @@ class DashboardScreen(Screen):
         traces = self.query_one("#recent_traces", DataTable)
         traces.clear()
         for t in payload["recent_traces"]:
-            cov = f"{t['coverage_score']:.3f}" if t["coverage_score"] is not None else "-"
-            fb = "fallback" if t["fallback_to_chunks"] else "ok"
-            traces.add_row(cov, fb, t["query_text"][:40])
+            traces.add_row(
+                render.fmt_coverage(t["coverage_score"]),
+                render.fmt_fallback(t["fallback_to_chunks"]),
+                t["query_text"][:40],
+            )
 
     def _error(self, message: str) -> None:
         self.query_one("#counts", Static).update(f"[error] {message}")

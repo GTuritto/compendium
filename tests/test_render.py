@@ -26,6 +26,20 @@ from compendium.wiki.lint import LintIssue
 _TS = datetime(2026, 5, 26, 9, 30)
 
 
+def test_scalar_formatters_shared_with_tui():
+    assert render.fmt_coverage(0.8123) == "0.812"
+    assert render.fmt_coverage(None) == "-"
+    assert render.fmt_ts(_TS) == "2026-05-26 09:30"
+    assert render.fmt_ts(None) == "-"
+    assert render.fmt_fallback(True) == "fallback"
+    assert render.fmt_fallback(False) == "ok"
+    assert render.fmt_fallback_suffix(True) == ", chunk fallback"
+    assert render.fmt_fallback_suffix(False) == ""
+    assert render.fmt_payload({"a": 1}) == '{"a": 1}'
+    assert render.fmt_payload(None) == ""
+    assert render.fmt_payload({"k": "x" * 100}, 10) == '{"k": "xxx'
+
+
 def test_to_json_handles_dataclass_and_non_json_scalars():
     report = SyncReport(indexed=3, failed=1, skipped=0, errors=["boom"])
     out = json.loads(render.to_json(report))
