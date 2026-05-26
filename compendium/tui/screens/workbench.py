@@ -14,6 +14,8 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
+from compendium.cli import render
+
 
 class WorkbenchScreen(Screen):
     """A query box over the live retrieval pipeline.
@@ -60,10 +62,10 @@ class WorkbenchScreen(Screen):
         self.app.call_from_thread(self._populate, result)
 
     def _populate(self, result: Any) -> None:
-        fb = ", chunk fallback" if result.fallback_to_chunks else ""
         gaps = f", {len(result.gaps)} gap(s)" if result.gaps else ""
         self.query_one("#summary", Static).update(
-            f"{len(result.pages)} page(s)  coverage {result.coverage_score:.3f}{fb}{gaps}"
+            f"{len(result.pages)} page(s)  coverage {render.fmt_coverage(result.coverage_score)}"
+            f"{render.fmt_fallback_suffix(result.fallback_to_chunks)}{gaps}"
         )
         table = self.query_one("#results", DataTable)
         table.clear()
