@@ -168,4 +168,14 @@ acceptance: a gap → a signal → a synth'd draft → promotion → an improved
 
 ## Phase 10 — Golden dataset and testing
 
-_Smoke-test scenarios authored in `Plans/phase-10-testing.md` and appended here when Phase 10 is implemented._
+Prerequisites: the full stack up. The golden suite is hermetic (stub embedder) —
+`export COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`. It seeds its own
+`compendium_golden` database and `.golden_vault`, and skips if a store is down.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 10.1 | Full suite | `COMPENDIUM_EMBED_STUB=1 uv run pytest` | the whole suite passes (unit + integration + pipeline + graph + golden) |
+| 10.2 | Golden only | `COMPENDIUM_EMBED_STUB=1 uv run pytest -m golden` | the golden dataset (categories A/C/D) passes on the baseline |
+| 10.3 | Fast tier | `COMPENDIUM_EMBED_STUB=1 uv run pytest -m "not golden"` | the fast tier passes, including the golden smoke; the golden full/regression tests are deselected |
+| 10.4 | Regression trips | `COMPENDIUM_EMBED_STUB=1 uv run pytest tests/test_golden.py::test_regression_detector` | passes — i.e. with the ranker (RRF) deliberately disabled, a golden assertion fails and the detector catches it |
+| 10.5 | CI workflow | inspect `.github/workflows/ci.yml` (or `act -n`) | a `test` job (push/PR) and a `nightly` job (schedule), each declaring Postgres/OpenSearch/Qdrant/Memgraph service containers with the stub embedder |
