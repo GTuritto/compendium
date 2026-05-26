@@ -1,0 +1,39 @@
+# Golden dataset (Phase 10) — a small, fixed query set over the existing
+# tests/fixtures/ corpus, run hermetically with the stub embedder. Pages are
+# addressed by slug (stable across reseeds). Categories: A direct retrieval,
+# C fallback/gap, D graph-expansion win. Categories B (cross-source synthesis)
+# and E (filters) are deferred to v0.2.
+#
+# The runner seeds: ingest sample.md (+ its source page + chunks), synthesize the
+# `psychological-safety` concept, reindex, and rebuild the graph.
+
+- id: q_a_psych_safety
+  category: A
+  query: "psychological safety"
+  expectations:
+    top_k: 3
+    must_include_slug: psychological-safety
+    fallback_to_chunks: false
+
+- id: q_a_team_learning
+  category: A
+  query: "teams that learn from mistakes"
+  expectations:
+    top_k: 3
+    must_include_slug: sample-markdown-source
+    fallback_to_chunks: false
+
+- id: q_c_unrelated
+  category: C
+  query: "quantum chromodynamics lattice gauge theory"
+  expectations:
+    fallback_to_chunks: true
+    gaps_min: 1
+
+- id: q_d_expansion
+  category: D
+  query: "psychological safety"
+  # The runner seeds a RELATED_TO edge psychological-safety -> sample-markdown-source
+  # before this query; expansion should surface the linked page.
+  expectations:
+    expansion_slug_present: true
