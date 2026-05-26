@@ -29,3 +29,7 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "golden: golden-dataset quality tests (slower; nightly CI tier)",
+    "integration: tests requiring live backing stores (skip when unreachable)",
+]
