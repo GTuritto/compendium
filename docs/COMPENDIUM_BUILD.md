@@ -128,7 +128,7 @@ Status as of 2026-05-25.
 | 7 | Query traces & revision tracking | `phase-7-traces` | I | ✅ merged (PR #13) |
 | 8 | TUI ops console | `phase-8-tui` | H | ✅ merged (PR #14) |
 | 9 | Knowledge graph curation loop | `phase-9-curation-loop` | G2 | ✅ merged (PR #16) |
-| 10 | Golden dataset & testing | `phase-10-testing` | J | 🔧 in progress (PR #18) |
+| 10 | Golden dataset & testing | `phase-10-testing` | J | ✅ merged (PR #18) |
 
 ## Phased Build Plan
 
