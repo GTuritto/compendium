@@ -846,6 +846,127 @@ def list_open_curation_signals(
     ).fetchall()
 
 
+# --- curation loop (Phase 9) -----------------------------------------------
+
+
+def open_analysis_run(conn: psycopg.Connection) -> UUID:
+    """Open a ``graph_analysis_runs`` row and return its id."""
+    row = conn.execute(
+        "INSERT INTO graph_analysis_runs DEFAULT VALUES RETURNING id"
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
+def complete_analysis_run(
+    conn: psycopg.Connection, run_id: str | UUID, *, signal_count: int, summary: dict[str, Any]
+) -> None:
+    """Mark an analysis run complete with its signal count and summary."""
+    conn.execute(
+        "UPDATE graph_analysis_runs SET completed_at = now(), "
+        "signal_count = %s, summary = %s WHERE id = %s",
+        (signal_count, Json(summary), str(run_id)),
+    )
+
+
+def open_signal_keys(conn: psycopg.Connection) -> set[tuple[str, str]]:
+    """(kind, dedup_key) for every currently-open signal, for dedup.
+
+    The dedup key is a stable identifier inside the payload (``page_id`` for the
+    page-keyed kinds, else the sorted query text / concept list).
+    """
+    keys: set[tuple[str, str]] = set()
+    for row in conn.execute(
+        "SELECT kind, payload FROM graph_curation_signals WHERE status = 'open'"
+    ):
+        keys.add((row["kind"], _signal_dedup_key(row["payload"])))
+    return keys
+
+
+def _signal_dedup_key(payload: dict[str, Any]) -> str:
+    if payload.get("page_id"):
+        return str(payload["page_id"])
+    if payload.get("query_text"):
+        return str(payload["query_text"])
+    if payload.get("edge_id"):
+        return str(payload["edge_id"])
+    return str(sorted(payload.get("missing_concepts", [])))
+
+
+def insert_curation_signal(
+    conn: psycopg.Connection,
+    *,
+    kind: str,
+    priority: int,
+    payload: dict[str, Any],
+    run_id: str | UUID | None = None,
+) -> UUID:
+    """Insert a ``graph_curation_signals`` row and return its id."""
+    row = conn.execute(
+        """
+        INSERT INTO graph_curation_signals (kind, priority, payload, run_id)
+        VALUES (%s::curation_signal_kind, %s, %s, %s)
+        RETURNING id
+        """,
+        (kind, priority, Json(payload), str(run_id) if run_id else None),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
+def get_curation_signal(
+    conn: psycopg.Connection, signal_id: str | UUID
+) -> dict[str, Any] | None:
+    """A single ``graph_curation_signals`` row by id, or None."""
+    return conn.execute(
+        "SELECT * FROM graph_curation_signals WHERE id = %s", (str(signal_id),)
+    ).fetchone()
+
+
+def set_signal_status(
+    conn: psycopg.Connection,
+    signal_id: str | UUID,
+    status: str,
+    *,
+    addressed_revision_id: str | UUID | None = None,
+) -> None:
+    """Move a signal to a new status; set the addressed revision when addressing."""
+    conn.execute(
+        """
+        UPDATE graph_curation_signals
+        SET status = %s::curation_signal_status,
+            addressed_revision_id = COALESCE(%s, addressed_revision_id),
+            addressed_at = CASE WHEN %s = 'addressed' THEN now() ELSE addressed_at END
+        WHERE id = %s
+        """,
+        (status, str(addressed_revision_id) if addressed_revision_id else None,
+         status, str(signal_id)),
+    )
+
+
+def signal_for_revision(
+    conn: psycopg.Connection, revision_id: str | UUID
+) -> dict[str, Any] | None:
+    """The signal addressed by a given revision, if any (for the promote hook)."""
+    return conn.execute(
+        "SELECT * FROM graph_curation_signals WHERE addressed_revision_id = %s",
+        (str(revision_id),),
+    ).fetchone()
+
+
+def low_coverage_traces(
+    conn: psycopg.Connection, threshold: float, limit: int = 500
+) -> list[dict[str, Any]]:
+    """Recent traces at/below the coverage threshold or that fell back to chunks."""
+    return conn.execute(
+        "SELECT id, query_text, coverage_score, fallback_to_chunks "
+        "FROM query_traces "
+        "WHERE coverage_score <= %s OR fallback_to_chunks "
+        "ORDER BY created_at DESC LIMIT %s",
+        (threshold, limit),
+    ).fetchall()
+
+
 def ensure_corpus_revision(conn: psycopg.Connection) -> str:
     """Return the current corpus revision id, creating one if none exists."""
     row = conn.execute(

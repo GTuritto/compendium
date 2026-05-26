@@ -37,5 +37,20 @@ retrieval:
   page_coverage_threshold: 0.5
   top_k: 7
 
+# Fast-loop graph expansion (ADR-009, Phase 9). Walks semantic edges from the
+# top fused pages; a no-op when disabled, when no semantic edges exist, or when
+# Memgraph is unreachable.
+graph_expansion:
+  enabled: true
+  seed_k: 3          # how many top fused pages to seed the walk from
+  max_hops: 2
+  decay: 0.5         # score multiplier per hop
+  weight: 0.3        # expansion contribution relative to a direct hit
+
+# Slow-loop curation thresholds (ADR-009, Phase 9).
+curation:
+  thin_grounding_min: 2          # a concept with fewer GROUNDS edges is "thin"
+  low_coverage_threshold: 0.5    # queries at/below this coverage are weak
+
 loops:
   slow_loop_interval_seconds: 3600

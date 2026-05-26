@@ -94,7 +94,9 @@ def _build(resolved: dict[str, Any]) -> Config:
         embeddings_endpoint=embeddings["endpoint"],
         embeddings_model=embeddings["model"],
         settings={
-            k: resolved[k] for k in ("ingestion", "retrieval", "loops") if k in resolved
+            k: resolved[k]
+            for k in ("ingestion", "retrieval", "graph_expansion", "curation", "loops")
+            if k in resolved
         },
     )
 
