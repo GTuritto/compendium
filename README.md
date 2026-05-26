@@ -8,7 +8,7 @@ This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a
 
 ## Status
 
-In development. Phases 0–9 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), and the knowledge-graph curation loop (`compendium curate`). Phase 10 (golden dataset & testing) is the last remaining phase. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
+In development. Phases 0–9 are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), and the knowledge-graph curation loop (`compendium curate`). Phase 10 (golden dataset & testing — the final phase) is in progress. With it, all eleven phases are complete. See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
 
 ## Requirements
 
@@ -36,8 +36,12 @@ uv run python -m compendium   # validate config, print resolved storage URLs
 ## Testing
 
 ```sh
-uv run pytest
+uv run pytest                  # full suite (needs the backing stores up)
+uv run pytest -m "not golden"  # fast tier (what CI runs on push)
+uv run pytest -m golden        # the golden quality suite (nightly tier)
 ```
+
+Tests use the deterministic stub embedder/synth (`COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`) and skip integration tests when a store is unreachable. The golden dataset (`tests/golden/`) is the quality regression signal. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the fast tier on every push/PR and the full golden suite nightly, with all four stores as service containers.
 
 ## Configuration
 
