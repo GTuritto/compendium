@@ -117,7 +117,18 @@ python -m compendium synth concept "psychological safety"`).
 
 ## Phase 7 — Query traces and revision tracking
 
-_Smoke-test scenarios authored in `Plans/phase-7-traces.md` and appended here when Phase 7 is implemented._
+Prerequisites: the stack up, a migrated database, Phase 3's `sample.md` ingested
+with a synthesized `concept` page and the indexes populated (so a query can run),
+and at least one query made (`COMPENDIUM_EMBED_STUB=1 uv run python -m compendium
+query "psychological safety team learning"`).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| 7.1 | Trace list/show | `uv run python -m compendium trace list`, then `trace show <id>` | the query's trace is listed with coverage/fallback/gaps; `show` renders its pipeline, final ranking, latencies, coverage, and gaps. |
+| 7.2 | Replay (read-only) | `uv run python -m compendium trace replay <id>` | prints the original-vs-current ranking diff and the coverage delta; the `query_traces` row count is unchanged. |
+| 7.3 | Replay persists | `uv run python -m compendium trace replay <id> --persist` | a new `query_traces` row is written for the replay. |
+| 7.4 | Revision diff | `uv run python -m compendium page revisions psychological-safety`, then `page diff psychological-safety 1 2` | revisions listed with ordinal/id/generator; the diff shows the body delta and the frontmatter key-delta. |
+| 7.5 | Promote + list | `uv run python -m compendium page promote psychological-safety --to canonical`, then `promotions list` | the page's status becomes `canonical`; a `draft_to_canonical` event is listed with its timestamp. Re-promoting a canonical page is rejected. |
 
 ## Phase 8 — TUI ops console
 

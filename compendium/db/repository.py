@@ -672,6 +672,125 @@ def insert_query_trace(
     return row["id"]
 
 
+# --- telemetry reads (Phase 7) ---------------------------------------------
+
+
+def get_query_trace(conn: psycopg.Connection, trace_id: str | UUID) -> dict[str, Any] | None:
+    """A single ``query_traces`` row by id, or None."""
+    return conn.execute(
+        "SELECT * FROM query_traces WHERE id = %s", (str(trace_id),)
+    ).fetchone()
+
+
+def list_query_traces(conn: psycopg.Connection, limit: int = 20) -> list[dict[str, Any]]:
+    """Recent traces, newest first."""
+    return conn.execute(
+        "SELECT id, query_text, coverage_score, fallback_to_chunks, "
+        "jsonb_array_length(gaps) AS gap_count, created_at "
+        "FROM query_traces ORDER BY created_at DESC LIMIT %s",
+        (limit,),
+    ).fetchall()
+
+
+def resolve_page_by_slug(
+    conn: psycopg.Connection, slug: str
+) -> dict[str, Any] | None:
+    """A ``wiki_pages`` row by slug across kinds.
+
+    Slugs are unique per kind, so a slug may match more than one page. Raises
+    ValueError when the slug is ambiguous; returns None when nothing matches.
+    """
+    rows = conn.execute(
+        "SELECT * FROM wiki_pages WHERE slug = %s", (slug,)
+    ).fetchall()
+    if not rows:
+        return None
+    if len(rows) > 1:
+        kinds = ", ".join(sorted(r["kind"] for r in rows))
+        raise ValueError(f"slug '{slug}' is ambiguous across kinds: {kinds}")
+    return rows[0]
+
+
+def get_page_revisions(
+    conn: psycopg.Connection, page_id: str | UUID
+) -> list[dict[str, Any]]:
+    """A page's revisions, oldest first (ordinal 1 = oldest)."""
+    return conn.execute(
+        "SELECT id, page_id, content_hash, generator, notes, created_at "
+        "FROM wiki_page_revisions WHERE page_id = %s ORDER BY created_at, id",
+        (str(page_id),),
+    ).fetchall()
+
+
+def get_revision(conn: psycopg.Connection, revision_id: str | UUID) -> dict[str, Any] | None:
+    """A full ``wiki_page_revisions`` row (body + frontmatter) by id, or None."""
+    return conn.execute(
+        "SELECT * FROM wiki_page_revisions WHERE id = %s", (str(revision_id),)
+    ).fetchone()
+
+
+def update_page_status(
+    conn: psycopg.Connection, page_id: str | UUID, status: str
+) -> None:
+    """Set a page's lifecycle status."""
+    conn.execute(
+        "UPDATE wiki_pages SET status = %s::page_status, updated_at = now() "
+        "WHERE id = %s",
+        (status, str(page_id)),
+    )
+
+
+def record_promotion(
+    conn: psycopg.Connection,
+    *,
+    page_id: str | UUID,
+    kind: str,
+    from_revision_id: str | UUID | None,
+    to_revision_id: str | UUID | None,
+    related_page_ids: list[str] | None = None,
+    notes: str | None = None,
+) -> UUID:
+    """Insert a ``promotion_events`` row and return its id."""
+    row = conn.execute(
+        """
+        INSERT INTO promotion_events (
+            page_id, kind, from_revision_id, to_revision_id,
+            related_page_ids, notes
+        )
+        VALUES (%s, %s::promotion_kind, %s, %s, %s::uuid[], %s)
+        RETURNING id
+        """,
+        (
+            str(page_id),
+            kind,
+            str(from_revision_id) if from_revision_id else None,
+            str(to_revision_id) if to_revision_id else None,
+            [str(p) for p in (related_page_ids or [])],
+            notes,
+        ),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
+def list_promotion_events(
+    conn: psycopg.Connection, slug: str | None = None, limit: int = 20
+) -> list[dict[str, Any]]:
+    """Promotion events newest first, optionally filtered to one page's slug."""
+    sql = (
+        "SELECT pe.id, w.slug, w.kind AS page_kind, pe.kind, pe.notes, "
+        "pe.created_at FROM promotion_events pe "
+        "JOIN wiki_pages w ON w.id = pe.page_id"
+    )
+    params: list[Any] = []
+    if slug is not None:
+        sql += " WHERE w.slug = %s"
+        params.append(slug)
+    sql += " ORDER BY pe.created_at DESC LIMIT %s"
+    params.append(limit)
+    return conn.execute(sql, params).fetchall()
+
+
 def ensure_corpus_revision(conn: psycopg.Connection) -> str:
     """Return the current corpus revision id, creating one if none exists."""
     row = conn.execute(
