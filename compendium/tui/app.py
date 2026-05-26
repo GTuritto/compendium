@@ -13,6 +13,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Footer, Static
 
 from compendium.tui.screens.dashboard import DashboardScreen
+from compendium.tui.screens.pages import PagesScreen
 from compendium.tui.screens.placeholder import PlaceholderScreen
 from compendium.tui.screens.sources import SourcesScreen
 
@@ -44,6 +45,7 @@ def _screen_for(name: str):
     builders = {
         "dashboard": DashboardScreen,
         "sources": SourcesScreen,
+        "pages": PagesScreen,
     }
     if name in builders:
         return builders[name]()
