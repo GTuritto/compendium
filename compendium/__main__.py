@@ -486,6 +486,17 @@ def _promotions(slug: str | None) -> int:
     return 0
 
 
+def _tui() -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+    from compendium.tui.app import run
+
+    return run()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     subparsers = parser.add_subparsers(dest="command")
@@ -576,6 +587,8 @@ def main(argv: list[str] | None = None) -> int:
     promotions_list = promotions_sub.add_parser("list", help="list promotion events")
     promotions_list.add_argument("--slug", default=None, help="filter to one page")
 
+    subparsers.add_parser("tui", help="launch the keyboard-driven ops console")
+
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
@@ -601,6 +614,8 @@ def main(argv: list[str] | None = None) -> int:
         return _page(args.page_action, args.slug, args)
     if args.command == "promotions":
         return _promotions(args.slug)
+    if args.command == "tui":
+        return _tui()
     return _startup()
 
 

@@ -791,6 +791,61 @@ def list_promotion_events(
     return conn.execute(sql, params).fetchall()
 
 
+# --- ops-console reads (Phase 8) -------------------------------------------
+
+
+def table_counts(conn: psycopg.Connection) -> dict[str, int]:
+    """Row counts for the entities the dashboard summarizes."""
+    counts: dict[str, int] = {}
+    for table in ("sources", "chunks", "wiki_pages", "query_traces", "promotion_events"):
+        counts[table] = conn.execute(f"SELECT count(*) AS n FROM {table}").fetchone()["n"]
+    return counts
+
+
+def list_sources(conn: psycopg.Connection, limit: int = 200) -> list[dict[str, Any]]:
+    """Sources newest first, with inspection status."""
+    return conn.execute(
+        "SELECT id, kind, title, inspection_status, ingested_at "
+        "FROM sources ORDER BY ingested_at DESC LIMIT %s",
+        (limit,),
+    ).fetchall()
+
+
+def list_pages(
+    conn: psycopg.Connection,
+    *,
+    kind: str | None = None,
+    status: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Wiki pages, optionally filtered by kind and/or status, newest first."""
+    sql = "SELECT id, kind, slug, title, status, updated_at FROM wiki_pages"
+    clauses: list[str] = []
+    params: list[Any] = []
+    if kind:
+        clauses.append("kind = %s::page_kind")
+        params.append(kind)
+    if status:
+        clauses.append("status = %s::page_status")
+        params.append(status)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY updated_at DESC LIMIT %s"
+    params.append(limit)
+    return conn.execute(sql, params).fetchall()
+
+
+def list_open_curation_signals(
+    conn: psycopg.Connection, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Open curation signals by priority (from ``v_open_curation_signals``)."""
+    return conn.execute(
+        "SELECT kind, priority, payload, created_at "
+        "FROM v_open_curation_signals ORDER BY priority DESC, created_at DESC LIMIT %s",
+        (limit,),
+    ).fetchall()
+
+
 def ensure_corpus_revision(conn: psycopg.Connection) -> str:
     """Return the current corpus revision id, creating one if none exists."""
     row = conn.execute(
