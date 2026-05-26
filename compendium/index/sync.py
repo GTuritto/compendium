@@ -13,7 +13,6 @@ entity has since been deleted (a stale chunk after re-ingest) is dropped.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -21,9 +20,8 @@ import psycopg
 from compendium.config import load_config
 from compendium.db import repository
 from compendium.db.connection import connection
-from compendium.graph import projection
 from compendium.graph.client import graph_driver
-from compendium.index import documents, opensearch, qdrant
+from compendium.index import opensearch, projectors, qdrant
 from compendium.index.clients import (
     opensearch_client,
     opensearch_reachable,
@@ -31,7 +29,6 @@ from compendium.index.clients import (
     qdrant_reachable,
 )
 from compendium.index.embedder import Embedder, get_embedder
-from compendium.wiki.page import parse_markdown
 
 # The index kinds that belong to each reindex target.
 _PAGE_KINDS = ("opensearch_pages", "qdrant_pages")
@@ -86,67 +83,9 @@ class _Stores:
         self.graph = graph  # Bolt driver, lazily connected; used by the memgraph kind
 
 
-def _load_page(conn: psycopg.Connection, page_id: str, vault_path: str):
-    """A page's ``wiki_pages`` row, its topic ids, and its vault body.
-
-    Returns ``None`` when the page row or its vault file is gone.
-    """
-    page = repository.get_wiki_page(conn, page_id)  # type: ignore[arg-type]
-    if page is None:
-        return None
-    path = Path(vault_path) / page["file_path"]
-    if not path.is_file():
-        return None
-    body = parse_markdown(path.read_text(encoding="utf-8")).body
-    topic_ids = repository.get_page_topic_ids(conn, page_id)
-    return page, topic_ids, body
-
-
 def _write_one(conn: psycopg.Connection, stores: _Stores, row: dict[str, Any]) -> str:
-    """Project and write one entity to its index. Returns ``indexed``/``skipped``."""
-    index_kind = row["index_kind"]
-    entity_id = str(row["entity_id"])
-
-    if index_kind == "memgraph":
-        if row["entity_kind"] == "page":
-            ok = projection.project_page(
-                stores.graph, conn, entity_id, stores.vault_path
-            )
-        else:
-            ok = projection.project_chunk(stores.graph, conn, entity_id)
-        return "indexed" if ok else "skipped"
-
-    if index_kind in _PAGE_KINDS:
-        loaded = _load_page(conn, entity_id, stores.vault_path)
-        if loaded is None:
-            return "skipped"
-        page, topic_ids, body = loaded
-        if index_kind == "opensearch_pages":
-            doc = documents.page_document(page, body=body, topic_ids=topic_ids)
-            opensearch.index_document(stores.os, opensearch.PAGES_INDEX, entity_id, doc)
-        else:
-            payload = documents.page_payload(page, topic_ids=topic_ids)
-            vector = stores.embedder.embed(
-                [documents.page_embed_text(page["title"], body)]
-            )[0]
-            qdrant.upsert_point(
-                stores.q, qdrant.PAGES_COLLECTION, entity_id, vector, payload
-            )
-        return "indexed"
-
-    chunk = repository.get_chunk_for_index(conn, entity_id)
-    if chunk is None:
-        return "skipped"
-    if index_kind == "opensearch_chunks":
-        doc = documents.chunk_document(chunk)
-        opensearch.index_document(stores.os, opensearch.CHUNKS_INDEX, entity_id, doc)
-    else:
-        payload = documents.chunk_payload(chunk)
-        vector = stores.embedder.embed([documents.chunk_embed_text(chunk["body"])])[0]
-        qdrant.upsert_point(
-            stores.q, qdrant.CHUNKS_COLLECTION, entity_id, vector, payload
-        )
-    return "indexed"
+    """Dispatch one pending row to its store's projector. ``indexed``/``skipped``."""
+    return projectors.PROJECTORS[row["index_kind"]](conn, stores, row)
 
 
 def _drain(
