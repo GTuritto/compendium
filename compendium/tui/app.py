@@ -12,9 +12,10 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Static
 
+from compendium.tui.screens.curation import CurationScreen
 from compendium.tui.screens.dashboard import DashboardScreen
+from compendium.tui.screens.graph import GraphScreen
 from compendium.tui.screens.pages import PagesScreen
-from compendium.tui.screens.placeholder import PlaceholderScreen
 from compendium.tui.screens.sources import SourcesScreen
 from compendium.tui.screens.workbench import WorkbenchScreen
 
@@ -48,11 +49,10 @@ def _screen_for(name: str):
         "sources": SourcesScreen,
         "pages": PagesScreen,
         "workbench": WorkbenchScreen,
+        "curation": CurationScreen,
+        "graph": GraphScreen,
     }
-    if name in builders:
-        return builders[name]()
-    label = next(label for _, n, label in _NAV if n == name)
-    return PlaceholderScreen(label)
+    return builders[name]()
 
 
 class CompendiumTUI(App):
