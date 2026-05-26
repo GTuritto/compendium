@@ -20,10 +20,11 @@ C4Component
     Component(config, "Configuration", "pyyaml, dotenv", "Loads and validates settings and secrets")
     Component(ingest, "Ingestion", "pymupdf, ebooklib, trafilatura", "Adapters, inspection, chunking, pipeline")
     Component(wiki, "Wiki generation", "openai SDK", "Source pages, concept/topic synthesis, lint, vault writer")
-    Component(index, "Index sync", "—", "Builds and refreshes OpenSearch and Qdrant")
-    Component(retrieve, "Retrieval", "—", "Page-first hybrid query pipeline with chunk fallback")
-    Component(graph, "Graph", "mgclient", "Structural index and the curation loop")
-    Component(trace, "Telemetry", "—", "Query traces, revision diffs, replay")
+    Component(index, "Index sync", "opensearch-py, qdrant-client", "Builds and refreshes OpenSearch and Qdrant")
+    Component(retrieve, "Retrieval", "httpx, asyncio", "Page-first hybrid query pipeline with chunk fallback")
+    Component(graph, "Graph", "neo4j Bolt driver", "Structural index: typed nodes and edges")
+    Component(curate, "Curation", "—", "Slow-loop signals, synth-from-signal, curator edges")
+    Component(trace, "Telemetry", "difflib", "Query traces, revision diffs, replay, promotions")
     Component(db, "Database access", "psycopg 3", "Raw-SQL repository over PostgreSQL")
   }
 
@@ -32,8 +33,9 @@ C4Component
   Rel(cli, wiki, "Generate pages, lint, synth")
   Rel(cli, index, "Reindex")
   Rel(cli, retrieve, "Query")
-  Rel(cli, graph, "Rebuild, curate")
-  Rel(cli, trace, "Inspect, replay")
+  Rel(cli, graph, "Rebuild, status, link")
+  Rel(cli, curate, "Run, list, synth")
+  Rel(cli, trace, "Inspect, replay, promote")
 
   Rel(cli, config, "Loads at startup")
   Rel(ingest, db, "Stores sources and chunks")
@@ -49,8 +51,11 @@ C4Component
   Rel(retrieve, qdrant, "Vector search")
   Rel(retrieve, graph, "Graph expansion")
   Rel(retrieve, db, "Writes query traces")
-  Rel(graph, memgraph, "Reads and writes")
+  Rel(graph, memgraph, "Reads and writes", "Bolt")
   Rel(graph, db, "Reads pages and chunks")
+  Rel(curate, graph, "Reads expansion signals")
+  Rel(curate, wiki, "Synthesizes from a signal")
+  Rel(curate, db, "Reads/writes curation signals")
   Rel(trace, db, "Reads traces and revisions")
 
   UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
@@ -64,10 +69,11 @@ C4Component
 - **`wiki`** owns the canonical artifact: it generates deterministic `source`
   pages, synthesizes `concept`/`topic` pages via the LLM, lints frontmatter,
   and writes pages into the vault with a revision per write.
-- **Build status:** `config`, `cli`, `ingest`, `wiki`, and `db` are built
-  (Phases 0–3). `index` (Phase 4), `retrieve` (Phase 5), `graph` (Phases 6
-  and 9), `trace` (Phase 7), and the Textual TUI (Phase 8) are designed but
-  not yet implemented; their package directories exist as placeholders.
-- The two loops that make the system compound — the fast per-query graph
-  walk and the slow curation loop — live in `graph` and `retrieve`; see
+- **Every component is implemented** and maps to a sub-package under
+  `compendium/`: `config`, `ingest`, `wiki`, `index`, `retrieve`, `graph`,
+  `curate`, `trace`, `db`, and the Textual `tui`. `graph` speaks Bolt to
+  Memgraph via the official `neo4j` driver with raw Cypher (no OGM).
+- The two loops that make the system compound — the fast per-query graph walk
+  (in `retrieve`, calling `graph`) and the slow curation loop (in `curate`) —
+  are detailed in [c4-components-retrieval.md](c4-components-retrieval.md) and
   [c4-dynamic-query.md](c4-dynamic-query.md).

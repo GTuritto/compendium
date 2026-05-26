@@ -46,7 +46,7 @@ C4Container
   the vault (ADR-005).
 - **PostgreSQL is the system of record** (ADR-004). The application writes
   there first; the derived indexes follow via tracked sync state.
-- **Build status:** the application, the vault, and PostgreSQL are built
-  (Phases 0–3). OpenSearch and Qdrant arrive in Phase 4, Memgraph in Phase 6.
-- The four data stores run as local Docker containers; see
+- **All four stores are in use.** PostgreSQL and the vault are the durable
+  pair; OpenSearch (BM25), Qdrant (dense vectors), and Memgraph (typed graph)
+  are derived and rebuildable. They run as local Docker containers; see
   [c4-deployment.md](c4-deployment.md).

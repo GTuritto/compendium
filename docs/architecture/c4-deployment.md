@@ -33,9 +33,9 @@ C4Deployment
   Rel(app, vault, "Reads/writes", "filesystem")
   Rel(app, pg, "psycopg 3", "localhost:5432")
   Rel(app, os, "HTTP", "localhost:9200")
-  Rel(app, qd, "HTTP", "localhost:6333")
-  Rel(app, mg, "Bolt", "localhost:7687")
-  Rel(app, models, "OpenAI-compatible API", "localhost")
+  Rel(app, qd, "HTTP", "localhost:6533")
+  Rel(app, mg, "Bolt (neo4j driver)", "localhost:7688")
+  Rel(app, models, "OpenAI-compatible API", "localhost:12434")
   Rel(app, router, "OpenAI-compatible API", "HTTPS")
 
   UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
@@ -49,9 +49,11 @@ C4Deployment
   vault is a directory on the local filesystem.
 - **The application is not containerized.** Only the backing stores are.
   `docker compose up -d` starts them; the app runs outside Docker.
-- **OpenRouter is optional.** Synthesis is config-selectable between the
-  cloud gateway (for page quality) and Docker Model Runner (to keep ingested
-  notes on-device). Embeddings always run locally on Docker Model Runner.
-- **Build status:** the `postgres` service is in the compose file today
-  (Phase 0); `opensearch`, `qdrant`, and `memgraph` services are appended in
-  Phases 4 and 6.
+- **OpenRouter is the synthesis default** (`anthropic/claude-sonnet-4.5`),
+  config-selectable against a local Docker Model Runner to keep ingested notes
+  on-device. Embeddings always run locally on Docker Model Runner
+  (`BAAI/bge-m3`, `localhost:12434`).
+- **Host ports are remapped** so Compendium coexists with other local stacks:
+  Qdrant is published on `6533` (container `6333`) and Memgraph on `7688`
+  (container `7687`). PostgreSQL `5432` and OpenSearch `9200` keep their
+  defaults. All four services live in one dev `docker-compose.yml`.
