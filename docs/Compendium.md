@@ -497,6 +497,170 @@ The graph is genuinely load-bearing: Compendium's compounding behavior depends o
 
 A single loop (query-time only) was rejected: the wiki never improves systematically, and gaps stay gaps. A single loop (corpus-only, batch) was rejected: retrieval misses easy wins from graph expansion. Untyped edges were rejected: the curation loop needs to distinguish "this page is missing supporting evidence" from "this page conflicts with another," and typed edges make those queries cheap. A full reasoning engine (OWL, SHACL, rules over the graph) is out of scope for v0.1 and likely forever; the typed-edge plus walks approach gets the value without committing to a semantic-web stack.
 
+### ADR-010: Autonomous LLM extraction of selected semantic edges (v0.2)
+
+**Status:** Accepted (v0.2). Reverses, selectively, the v0.1 exclusion-list rule *"Not automated semantic-edge extraction."*
+
+#### Context
+
+ADR-009 declared semantic edges curator-driven in v0.1: the curator approves every `RELATED_TO`, `PREREQUISITE_FOR`, `SYNTHESIZES`, and `CONTRADICTS` edge through `compendium graph link` or, in the case of `SYNTHESIZES`, through the promote hook in `curate/lifecycle`. That preserves trust ("every meaningful change was approved by a human"), but it leaves the graph thin: most pairs of pages that are *in fact* related never get an edge, because the curator never has time. A thin graph means the fast-loop expansion (ADR-009) under-fires.
+
+v0.2's thesis includes "an LLM-densified graph." For it to fit Compendium's trust model, the autonomy has to be selective per edge type and the data shape has to be reversible.
+
+#### Decision
+
+The slow curation loop autonomously writes two edge types into Memgraph and leaves the other two as-is:
+
+| Edge type | v0.2 source |
+| --- | --- |
+| `RELATED_TO` | **LLM extractor + curator** |
+| `PREREQUISITE_FOR` | **LLM extractor + curator** |
+| `SYNTHESIZES` | curator-driven via `curate/lifecycle.address_on_promote` (unchanged) |
+| `CONTRADICTS` | curator-only via `compendium graph link` (unchanged); deferred for v0.3+ as a curator-approved-suggestion shape if warranted |
+
+Every extracted edge carries provenance properties on the relationship itself:
+
+```cypher
+(:Page)-[:RELATED_TO {
+  extracted_by: "curator" | "llm",
+  model: <llm identifier>,         // when extracted_by="llm"
+  confidence: 0.0..1.0,            // when extracted_by="llm"
+  extracted_at: <iso8601>,
+  source_revision_id: <uuid>,      // the page revision that triggered the extraction
+  weight: 1.0                      // existing
+}]->(:Page)
+```
+
+The extractor runs as a generator inside `compendium/curate/` and is invoked by `compendium curate run` (and therefore by the scheduled daemon, ADR-012). Per run, for each page changed since the last extraction (with a periodic full sweep), it pulls the top **K=10 nearest neighbours from Qdrant** and asks the LLM, in **one prompt per source page**, to label each pair as `RELATED_TO`, `PREREQUISITE_FOR`, or `NONE` with a confidence. Proposals below a configurable threshold (default `curation.extract.min_confidence = 0.7`) are dropped. Pairs already linked by structural edges (`PART_OF` / `EVIDENCES` / `GROUNDS`) are pre-filtered. Curator-added edges are never overwritten. LLM-added edges have their provenance refreshed on re-extraction. Every proposal (accepted, dropped-by-confidence, dropped-by-collision, written) is logged via structlog.
+
+#### Consequences
+
+- The graph densifies fast on the two edge types where the LLM is reasonably trustworthy; the fast-loop expansion gains material without ongoing curator effort.
+- Provenance makes the decision reversible by Cypher predicate: `MATCH ()-[r {extracted_by:"llm"}]-() WHERE r.confidence < 0.85 DELETE r` raises the bar; `WHERE r.model = "<old model>"` wipes a generation; `MATCH ()-[r {extracted_by:"curator"}]-() ...` queries only the trusted subset. The curator can audit any time (e.g., "show me everything the LLM added this week").
+- The trust model shifts but is preserved per-type: `SYNTHESIZES` is still curator-via-promotion (the strongest claim about provenance), `CONTRADICTS` is still curator-only (the strongest assertion about content), and `RELATED_TO` / `PREREQUISITE_FOR` carry an honest `extracted_by` tag that retrieval can weight or filter.
+- Cost is bounded — one LLM call per changed page per run, no per-pair calls — so cost scales with corpus turnover, not corpus size.
+- The CLAUDE.md exclusion-list line "Not automated semantic-edge extraction" is updated in the v0.2 phase that ships this ADR to point here, with a per-type qualifier.
+
+#### Alternatives considered
+
+**Shape B — LLM-suggested edges into the curation queue for human approval** was the most natural-looking refinement (preserves ADR-009 wholesale), and was rejected because it keeps the curator as the bottleneck — defeating the whole "densify without manual effort" reason for doing it.
+
+**Including `SYNTHESIZES` in autonomous extraction** was rejected because the lifecycle module already owns it: the promote hook writes `SYNTHESIZES` when a synth-from-signal page is promoted, and autonomous extraction would race the lifecycle and double-write.
+
+**Including `CONTRADICTS` autonomously** was rejected because it makes the strongest claim (two of your sources disagree), is the most consequential if wrong, and feeds the `unresolved_contradiction` curation generator — a feedback loop the curator should stay in front of. A Shape-B-style "LLM suggests a contradiction, curator approves" is the right path for this edge type, deferred to v0.3+.
+
+**No provenance** was rejected because it would make the decision truly hard to reverse: the only safe undo would be `graph rebuild`, which drops *all* semantic edges including curator-added ones. Provenance turns "hard to reverse" into "reversible by predicate query."
+
+### ADR-011: Callable access surface — MCP + HTTP (v0.2)
+
+**Status:** Accepted (v0.2). Reverses, narrowly, the v0.1 exclusion-list lines *"CLI + TUI only"*, *"No web UI in v0.1"*, *"Not a chat UI"*.
+
+#### Context
+
+v0.1 was deliberately CLI + TUI only: external systems and agents could only reach Compendium by shelling out (the render seam's `--format json` made this workable). v0.2's thesis explicitly admits "callable by colocated systems" so the curator's coding agents (initially AgentTrader and Ubongo, both colocated with Compendium on the same personal host) can use Compendium as long-term memory without per-call CLI process spawn.
+
+The constraint that keeps the scope honest: the callers are colocated on the same host. The decision space is therefore "what's the right surface for in-host agent calls?", not "how do we build a network service?"
+
+#### Decision
+
+Compendium exposes a callable access surface over two transports — **MCP (stdio)** and **HTTP (REST/JSON, bound to `127.0.0.1`)** — both adapters over **one shared internal facade** that wraps the existing `pipeline.query`, `ingest`, and `ask` (and the repository readers). The JSON shape the render seam already exposes via `--format json` is the shared response contract.
+
+The surface exposes **six verbs**, deliberately narrower than the CLI:
+
+| Verb | Returns | Notes |
+| --- | --- | --- |
+| `query` | ranked pages + citations + coverage + trace_id (`RetrievalResult` shape) | the read primitive |
+| `ask` | composed answer + structured citations (`[1] [2]` markers + `citations[]`) + `query_trace_id` + `ask_trace_id`; refusal mode on low coverage | the answer primitive |
+| `ingest` | `IngestResult` (status + source_id + chunk_count); auto-runs `index sync` per call | the write primitive; accepts file paths and raw bytes (`filename` hint) |
+| `page_get` | frontmatter + body Markdown for one slug | reads a specific page |
+| `page_list` | filtered page list | discovery |
+| `index_status` | counts + sync-lag rows | health |
+
+Curator/operations commands — `curate`, `trace`, `page promote`, `reindex`, `graph link`, `graph rebuild`, `synth` — **stay CLI-only**. Agents read memory and write documents; everything else is operations.
+
+**Transport posture:**
+- MCP stdio only in v0.2 (assumes colocation; subprocess per agent session).
+- HTTP binds `127.0.0.1` only, no auth (colocated callers only).
+- gRPC explicitly considered and **deferred**: no cross-machine / typed-polyglot earning case for single-personal-host use.
+- Network-exposed transports (MCP-SSE, HTTP over LAN, Tailscale-fronted) deferred to v0.3+; auth and TLS land then.
+
+#### Consequences
+
+- Compendium becomes usable as long-term memory by colocated agents without per-call CLI spawn or vault file parsing — the unlock the v0.2 thesis names.
+- The access surface contract is hard to reverse once agents depend on it. This is mitigated by the small Tier-1 + Tier-2 cut (six verbs) and by reusing the render seam's existing JSON shape (so the contract was already proven informally via `--format json`).
+- The `ingest` verb auto-runs `index sync` per call — a deliberate departure from the CLI's two-step (`ingest` then `index sync`). Agent callers expect "I added it; query finds it"; the CLI keeps the two-step for operational visibility.
+- The `ask` verb writes an `ask_traces` companion row alongside `query_traces` (joined by `query_trace_id`); every composed answer is replayable and auditable, same discipline as v0.1 retrieval.
+- The CLAUDE.md exclusion lines "CLI + TUI only", "No web UI in v0.1", "Not a chat UI" are updated in the v0.2 phase that ships this ADR to point here, with the per-transport qualifier.
+
+#### Alternatives considered
+
+**MCP only** was rejected as the v0.2 cut because non-agent callers (shell scripts, debugging by hand with `curl`, future small dashboards) wouldn't be served. HTTP is ~100 lines of FastAPI over the same facade — the marginal cost is small for the breadth.
+
+**HTTP only** was rejected because MCP is genuinely the natural fit for agent tool semantics; non-MCP agents would still want it later, and building HTTP first followed by MCP later is two transports built sequentially vs one wrong-fit transport.
+
+**Including gRPC** was rejected on cost-vs-benefit: gRPC's strengths (cross-service performance at scale, streaming, strongly-typed polyglot contracts) don't apply to a single-personal-host tool. A `.proto` contract maintained in lockstep with the Python facade, plus per-language stub generation, is real ops weight for no payoff over HTTP/JSON. Easy to add later if a real case emerges.
+
+**HTTP with token auth from day one** was rejected: the auth surface earns its place when the *network exposure* earns its place. Localhost-bound, colocated-callers-only means there is no exposure to authenticate against. v0.3+ network exposure (Tailscale identity, token, TLS) lands when callers move off the host.
+
+**Exposing the curator verbs (`curate`, `trace`, `page promote`, `graph link`)** over the access surface was rejected because they have a different actor (curator, not agent) and a different mental model (operations, not memory access). The CLI is the right home; collapsing the actor distinction risks letting agents make changes the curator should be in front of.
+
+### ADR-012: Always-on personal service (v0.2 deployment posture)
+
+**Status:** Accepted (v0.2). Reverses the v0.1 stack-discipline rule *"no daemon, no production-like Docker orchestration"* in a single specific direction: a personal-host service. Does **not** reverse *"local-first; no SaaS observability; no cloud deployment"*.
+
+#### Context
+
+v0.1 ran as a short-lived CLI process invoked per command, against always-on backing stores (Postgres, OpenSearch, Qdrant, Memgraph) under a dev-only `docker-compose.yml` on the curator's laptop. The stack-discipline rule "no daemon" applied to Compendium itself: it was a tool you invoked, not a process that stayed up.
+
+v0.2 requires Compendium to stay up. Four phases need it:
+- The scheduled curation loop (Phase 3) — a daemon-managed cadence.
+- The autonomous extractor (Phase 8) — runs inside the slow loop.
+- The inbox watcher (Phase 4) — a path-unit triggers ingestion.
+- The access surface (Phase 7) — agents call a running process, not a re-spawned one.
+
+The choice is therefore not *whether* Compendium becomes always-on, but *what shape* always-on takes for a single-user personal tool.
+
+#### Decision
+
+Compendium runs as **one or more always-on services on the curator's chosen personal host**, under OS-native service management (launchd on macOS, systemd on Linux). The supported hosts for v0.2 are:
+
+- **Mac mini (Apple Silicon)** — recommended primary; Metal-accelerated DMR for BGE-M3 + local synth (gemma4 or similar). Cost model: free for embeddings + synth.
+- **Mac mini (Intel)** — supported; CPU-only inference for local models is slow, so the practical synth model is OpenRouter Claude. Cost shifts from $0 to per-call.
+- **MacBook Pro Intel 16GB** — supported but the weakest fit (laptop form factor for headless 24/7).
+- **Raspberry Pi 5 16GB** — supported; no DMR (Metal is Mac-only), so embeddings need a remote endpoint or CPU `llama.cpp`, and synth is OpenRouter Claude.
+
+The deployment is **personal-LAN, single-user, no public exposure, no cloud**. The store containers (Postgres, OpenSearch, Qdrant, Memgraph) keep their Docker-network-only posture; only the access surface binds (and only on `127.0.0.1` of the host — colocated callers, ADR-011). The curator reaches the host via SSH for TUI and operations.
+
+The service set is:
+
+| Unit | Cadence | Owns |
+| --- | --- | --- |
+| `compendium serve` (launchd/systemd service) | always-on | The access surface (MCP stdio + HTTP `127.0.0.1`) |
+| `compendium curate run` (launchd/systemd timer) | every 1h by default | The slow loop, including autonomous extraction (Phase 8) |
+| Inbox watcher (launchd `WatchPaths` / systemd path-unit) | event-driven, debounced | Auto-ingest of files dropped into `~/Compendium/inbox/` |
+| `compendium backup` (launchd/systemd timer) | daily by default | Off-host backup (pg_dump + vault tar, rsync to a configurable destination) |
+
+Per-host model strategy is configuration (`SYNTHESIS_*`, `EMBEDDINGS_*`), not code. Switching hosts is a deployment-time decision; the build is the same.
+
+#### Consequences
+
+- Compendium gains operational weight: lifecycle units, structured logs, restart policies, off-host backup. The units are small, OS-native, and ship with `compendium <verb> install/uninstall` wrappers (per ADR-011-adjacent Phase-3/Phase-4/Phase-2 work), so the operator never hand-writes a plist.
+- The "no daemon" stack-discipline rule is updated to read "no daemon in v0.1; v0.2 runs as a personal-host service per ADR-012." The "no cloud, no SaaS, no multi-user, no production-like orchestration" lines remain intact.
+- The backup story becomes a real requirement (off-host destination), not a nice-to-have, because the host itself can fail. Phase 2 ships this.
+- Compendium remains single-user and single-host. Multi-tenancy, multi-host, and cloud hosting are explicitly out of v0.2 scope; their absence is the design discipline that keeps the always-on service from sprawling into something more.
+
+#### Alternatives considered
+
+**User-owned scheduler invoking the CLI** (Option B from grilling — launchd/systemd timer firing `compendium curate run` directly, no daemon at all) was the smallest possible reversal of "no daemon" and was rejected once the access surface (Phase 7) entered scope: the access surface itself needs an always-on process, so a daemon already had to exist. Piggybacking the slow loop on the same daemon is cleaner than running two completely different scheduling models.
+
+**Cloud hosting (Digital Ocean droplet)** was the user's first phrasing and was retracted in favour of personal hardware. Cloud hosting would have cascaded into auth (TLS, token), off-host backup to object storage, per-store auth enabled, exposure model decisions, and a meaningfully larger ops surface — none of which is in v0.2's scope.
+
+**A unified single daemon that owns all background work** (slow loop, inbox watcher, access surface, backup) was considered and rejected: failure isolation is better with one unit per concern (a crashing access server should not stop scheduled backups), and OS-native units give us restart policies and logging for free.
+
+**An in-process Python file watcher** (`watchdog` library) for the inbox was rejected in favour of OS-native path-units: the OS keeps watching even when Compendium is restarting, and the watcher's failure model is independent of the access-surface daemon's.
+
+**Multi-host orchestration** (Docker Swarm, K3s, Nomad) was rejected: single-user, single-host scope. The day Compendium becomes multi-host, this ADR gets superseded.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
