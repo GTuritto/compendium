@@ -23,24 +23,21 @@ Build history is in [../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md).
   modules, seams, locality), four candidates. Visual:
   [architecture-review-2026-05-26.html](architecture-review-2026-05-26.html).
 - [review-2026-05-26-2.md](review-2026-05-26-2.md) — second pass, five candidates, all
-  implemented as the in-flight PR chain below. Visual:
+  implemented and merged (PRs #22–#26). Visual:
   [architecture-review-2026-05-26-2.html](architecture-review-2026-05-26-2.html).
 
-## In-flight architecture refactors (PRs #22–#26)
+## Architecture seams (from the review-#2 refactors)
 
-These diagrams describe `main`. A post-v0.1 refactor pass from review #2 is **in review, not yet
-merged**; once the chain lands, the Level-3 component views will be refreshed to show these seams.
-Each is one new or consolidated **seam**:
+The review-#2 pass is merged to `main` and folded into the Level-3 component view above. Each
+landed change is one new or consolidated **seam**:
 
-| Seam | What it owns | Module | PR |
-| --- | --- | --- | --- |
-| Presentation | result objects → text/json, shared scalar formatters (CLI + TUI) | `compendium/cli/render.py` | #22 |
-| TUI load cycle | thread a data call, marshal result/error to the UI | `tui/screens/base.py` (`DataScreen`) | #23 |
-| Curation lifecycle | the `open → in_progress → addressed` signal state machine | `curate/lifecycle.py` | #24 |
-| Store projection | one `StoreProjector` per derived store, dispatched by `index_kind` | `index/projectors.py` | #25 |
-| Graph lifecycle | a `graph_connection()` context manager for the Bolt driver | `graph/client.py` | #26 |
-
-Merge order is `main → #20 → #22 → #23 → #24 → #25 → #26` (PR #21 — these docs — is independent).
+| Seam | What it owns | Module |
+| --- | --- | --- |
+| Presentation | result objects → text/json, shared scalar formatters (CLI + TUI) | `compendium/cli/render.py` |
+| TUI load cycle | thread a data call, marshal result/error to the UI | `tui/screens/base.py` (`DataScreen`) |
+| Curation lifecycle | the `open → in_progress → addressed` signal state machine | `curate/lifecycle.py` |
+| Store projection | one `StoreProjector` per derived store, dispatched by `index_kind` | `index/projectors.py` |
+| Graph lifecycle | a `graph_connection()` context manager for the Bolt driver | `graph/client.py` |
 
 ## The shape of the system, in one paragraph
 
