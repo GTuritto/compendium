@@ -606,7 +606,7 @@ Curator/operations commands — `curate`, `trace`, `page promote`, `reindex`, `g
 
 ### ADR-012: Always-on personal service (v0.2 deployment posture)
 
-**Status:** Accepted (v0.2). Reverses the v0.1 stack-discipline rule *"no daemon, no production-like Docker orchestration"* in a single specific direction: a personal-host service. Does **not** reverse *"local-first; no SaaS observability; no cloud deployment"*.
+**Status:** Accepted (v0.2 Phase 3, shipped 2026-05-30 via PR #33). Reverses the v0.1 stack-discipline rule *"no daemon, no production-like Docker orchestration"* in a single specific direction: a personal-host service. Does **not** reverse *"local-first; no SaaS observability; no cloud deployment"*. Phase 3 ships the launchd/systemd timer-fires-CLI as the **v0.2 interim** for scheduled curation; Phase 7's access-surface daemon is the long-term home for in-process scheduling.
 
 #### Context
 
@@ -652,6 +652,8 @@ Per-host model strategy is configuration (`SYNTHESIS_*`, `EMBEDDINGS_*`), not co
 #### Alternatives considered
 
 **User-owned scheduler invoking the CLI** (Option B from grilling — launchd/systemd timer firing `compendium curate run` directly, no daemon at all) was the smallest possible reversal of "no daemon" and was rejected once the access surface (Phase 7) entered scope: the access surface itself needs an always-on process, so a daemon already had to exist. Piggybacking the slow loop on the same daemon is cleaner than running two completely different scheduling models.
+
+*Clarification (Phase 3 ship, 2026-05-30):* this same approach — `compendium schedule install [--every 1h]` writing a LaunchAgent / systemd user timer that fires `compendium curate run` — is what v0.2 Phase 3 actually ships, **as the interim**. The rejection above is conditioned on Phase 7's access-surface daemon already existing; Phase 7 ships after Phase 3 in the v0.2 build order, so until that daemon arrives there is nothing to piggyback the schedule on. A later refactor (during or after Phase 7) will absorb the schedule into the daemon and the timer-fires-CLI mechanism will be removed.
 
 **Cloud hosting (Digital Ocean droplet)** was the user's first phrasing and was retracted in favour of personal hardware. Cloud hosting would have cascaded into auth (TLS, token), off-host backup to object storage, per-store auth enabled, exposure model decisions, and a meaningfully larger ops surface — none of which is in v0.2's scope.
 

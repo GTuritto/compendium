@@ -12,13 +12,15 @@ from __future__ import annotations
 import argparse
 import sys
 
-from compendium.backup import (
-    BackupError,
-    RestoreError,
+from compendium.backup import BackupError, RestoreError, run_backup, run_restore
+from compendium.backup import ScheduleError as BackupScheduleError
+from compendium.backup import install_schedule as install_backup_schedule
+from compendium.backup import uninstall_schedule as uninstall_backup_schedule
+from compendium.schedule import (
     ScheduleError,
     install_schedule,
-    run_backup,
-    run_restore,
+    parse_interval,
+    read_status,
     uninstall_schedule,
 )
 from compendium.cli import render
@@ -404,21 +406,60 @@ def _backup(action: str | None, at: str) -> int:
         return 0
     if action == "install":
         try:
-            result = install_schedule(at)
-        except ScheduleError as exc:
+            result = install_backup_schedule(at)
+        except BackupScheduleError as exc:
             print(f"backup install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
             return 1
         print(f"backup install: {result.path} ({result.detail})")
         return 0
     if action == "uninstall":
         try:
-            result = uninstall_schedule()
-        except ScheduleError as exc:
+            result = uninstall_backup_schedule()
+        except BackupScheduleError as exc:
             print(f"backup uninstall failed at step {exc.step}: {exc.detail}", file=sys.stderr)
             return 1
         print(f"backup uninstall: {result.path} ({result.detail})")
         return 0
     print(f"unknown backup action: {action}", file=sys.stderr)
+    return 1
+
+
+def _schedule(action: str | None, every: str, fmt: str = "text") -> int:
+    if action == "install":
+        try:
+            interval = parse_interval(every)
+        except ScheduleError as exc:
+            print(f"schedule install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        try:
+            result = install_schedule(interval)
+        except ScheduleError as exc:
+            print(f"schedule install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"schedule install: {result.path} ({result.detail})")
+        return 0
+    if action == "uninstall":
+        try:
+            result = uninstall_schedule()
+        except ScheduleError as exc:
+            print(f"schedule uninstall failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"schedule uninstall: {result.path} ({result.detail})")
+        return 0
+    if action == "status":
+        status = read_status()
+        if fmt == "json":
+            import json
+            print(json.dumps(status.to_dict(), indent=2))
+        else:
+            print(f"schedule: loaded={status.loaded} state={status.state}")
+            print(f"  unit_path: {status.unit_path}")
+            if status.interval_seconds is not None:
+                print(f"  interval:  {status.interval_seconds}s")
+            print(f"  last_fired: {status.last_fired or '(unknown)'}")
+            print(f"  next_fire:  {status.next_fire or '(unknown)'}")
+        return 0 if status.loaded else 1
+    print(f"unknown schedule action: {action}", file=sys.stderr)
     return 1
 
 
@@ -587,6 +628,29 @@ def main(argv: list[str] | None = None) -> int:
         help="overwrite an existing non-empty vault",
     )
 
+    schedule_parser = subparsers.add_parser(
+        "schedule",
+        help="manage the scheduled curation slow loop (launchd on macOS, systemd user timer on Linux)",
+    )
+    schedule_sub = schedule_parser.add_subparsers(dest="schedule_action", required=True)
+    schedule_install = schedule_sub.add_parser(
+        "install",
+        help="install a scheduled unit that fires `compendium curate run` every <interval>",
+    )
+    schedule_install.add_argument(
+        "--every", default="1h",
+        help="firing interval; accepts Nh, Nm, NhMm (default 1h, min 1m, max 7d)",
+    )
+    schedule_sub.add_parser(
+        "uninstall",
+        help="remove the scheduled curate unit (idempotent)",
+    )
+    schedule_sub.add_parser(
+        "status",
+        help="report loaded state, last/next firing, and interval",
+        parents=[fmt],
+    )
+
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
     curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
@@ -635,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "restore":
         return _restore(args.timestamp, args.force)
+    if args.command == "schedule":
+        return _schedule(
+            getattr(args, "schedule_action", None),
+            getattr(args, "every", "1h"),
+            fmt_arg,
+        )
     return _startup()
 
 
