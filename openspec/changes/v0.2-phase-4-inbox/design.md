@@ -89,10 +89,11 @@ Status counts (waiting, processed today/yesterday, failed today/yesterday) come 
 
 No schema migration, no data change. Add the new `compendium/inbox/` module, the four new CLI verbs (`inbox install`, `uninstall`, `process`, `status`), the one new config field, the operational doc, the integration test, and the CLAUDE.md / build-plan status updates. Rollback is removing those additions and running `compendium inbox uninstall` if the operator had it installed. The inbox directory itself stays on disk after uninstall (deliberate — the operator's drops are their data).
 
-## Open Questions
+## Open Questions — resolved at the review gate (2026-05-30)
 
-- **Default inbox path.** `~/Compendium/inbox` (per build plan; outside the repo, in the operator's home) vs `./inbox/` (in-repo, gitignored, discoverable). Recommendation: `~/Compendium/inbox` per the build plan; the inbox is operator data, not repo state.
-- **`compendium inbox status` includes the unit's loaded state?** Recommendation: yes; mirrors `schedule status`. Exits 0 when loaded, 1 when not.
-- **systemd path-unit per-kind or one with many `PathChanged=`?** Recommendation: one unit with five `PathChanged=` entries (systemd 245+); document the older-systemd fallback.
-- **What happens if `compendium ingest` returns `unchanged` (idempotent re-ingest)?** Recommendation: treat as success; move to `processed/<date>/`. The corpus is correct either way; cluttering the inbox with files we already ingested is not useful.
-- **A separate `compendium/inbox/install.py` vs reusing `compendium/schedule/install.py` helpers?** Recommendation: separate module; some duplication is acceptable. A v0.3 refactor can factor the common LaunchAgent / systemd helpers into `compendium/_oslaunch/` once three callers exist.
+- **Default inbox path.** RESOLVED: `~/Compendium/inbox` per the build plan; the inbox is operator data, not repo state.
+- **`compendium inbox status` exit code.** RESOLVED: always 0 — the inbox is usable even when the watcher is uninstalled; status is informational, not loaded-gated. (Differs from `schedule status` which is loaded-gated.)
+- **systemd path-unit shape.** RESOLVED: one `.path` unit with five `PathChanged=` entries (systemd 245+). The operational doc names the older-systemd fallback (one path-unit per kind) as a manual workaround.
+- **Handling `status="unchanged"` from ingest.** RESOLVED: treat as success; move the file to `processed/<date>/`. The corpus is correct either way; cluttering the inbox with already-ingested files is not useful.
+- **Separate `compendium/inbox/install.py` vs reusing schedule helpers?** RESOLVED: separate module; some duplication is acceptable. A v0.3 refactor can factor the common LaunchAgent / systemd helpers into `compendium/_oslaunch/` once three callers exist.
+- **Pre-create dated `processed/<today>/` and `failed/<today>/` on install?** RESOLVED: no — the process verb creates them on first need; avoids cluttering the layout with empty dated dirs.
