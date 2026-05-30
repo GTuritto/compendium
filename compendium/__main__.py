@@ -21,6 +21,7 @@ from compendium.inbox import (
     create_layout as inbox_create_layout,
     install_watcher as install_inbox_watcher,
     process_inbox,
+    read_status as read_inbox_status,
     uninstall_watcher as uninstall_inbox_watcher,
 )
 from compendium.schedule import (
@@ -431,7 +432,7 @@ def _backup(action: str | None, at: str) -> int:
     return 1
 
 
-def _inbox(action: str | None, path_arg: str | None) -> int:
+def _inbox(action: str | None, path_arg: str | None, fmt: str = "text") -> int:
     from pathlib import Path
 
     try:
@@ -466,6 +467,30 @@ def _inbox(action: str | None, path_arg: str | None) -> int:
             return 1
         print(f"inbox process: {report}")
         return 0 if not report.errored else 1
+    if action == "status":
+        status = read_inbox_status(resolved_path)
+        if fmt == "json":
+            import json
+            print(json.dumps(status.to_dict(), indent=2))
+        else:
+            waiting_total = sum(status.waiting.values())
+            print(f"inbox status: {resolved_path}")
+            print(f"  watcher_loaded: {status.watcher_loaded}")
+            print(f"  waiting:        {waiting_total} total")
+            for kind, n in status.waiting.items():
+                if n:
+                    print(f"    {kind}: {n}")
+            print(f"  processed:      today={status.processed_today} yesterday={status.processed_yesterday}")
+            print(f"  failed:         today={status.failed_today} yesterday={status.failed_yesterday}")
+            print(
+                f"  most_recent_processed: "
+                f"{status.most_recent_processed.isoformat() if status.most_recent_processed else '(none)'}"
+            )
+            print(
+                f"  most_recent_failed:    "
+                f"{status.most_recent_failed.isoformat() if status.most_recent_failed else '(none)'}"
+            )
+        return 0
     print(f"unknown inbox action: {action}", file=sys.stderr)
     return 1
 
@@ -726,6 +751,15 @@ def main(argv: list[str] | None = None) -> int:
         "--path", default=None,
         help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
     )
+    inbox_status = inbox_sub.add_parser(
+        "status",
+        help="report waiting / processed / failed counts and recent file timestamps",
+        parents=[fmt],
+    )
+    inbox_status.add_argument(
+        "--path", default=None,
+        help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
+    )
 
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
@@ -785,6 +819,7 @@ def main(argv: list[str] | None = None) -> int:
         return _inbox(
             getattr(args, "inbox_action", None),
             getattr(args, "path", None),
+            fmt_arg,
         )
     return _startup()
 

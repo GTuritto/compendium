@@ -275,3 +275,94 @@ def test_process_index_sync_not_called_when_nothing_routed(tmp_path, monkeypatch
     assert report.processed == []
     assert report.failed == []
     assert sync_called == [], "sync_pending must not be called when nothing was routed"
+
+
+# --- status --------------------------------------------------------------
+
+
+def test_status_empty_inbox(tmp_path, monkeypatch) -> None:
+    """A fresh empty inbox returns all zeros and watcher_loaded=False."""
+    from compendium.inbox import install as install_module
+    from compendium.inbox.status import read_status
+
+    create_layout(tmp_path)
+    monkeypatch.setattr(install_module, "watcher_loaded", lambda: False)
+    s = read_status(tmp_path)
+    assert s.watcher_loaded is False
+    assert sum(s.waiting.values()) == 0
+    assert s.processed_today == 0
+    assert s.processed_yesterday == 0
+    assert s.failed_today == 0
+    assert s.failed_yesterday == 0
+    assert s.most_recent_processed is None
+    assert s.most_recent_failed is None
+
+
+def test_status_counts_waiting_per_kind(tmp_path, monkeypatch) -> None:
+    """Files in <kind>/ count toward `waiting[kind]`."""
+    from compendium.inbox import install as install_module
+    from compendium.inbox.status import read_status
+
+    create_layout(tmp_path)
+    (tmp_path / "paper" / "a.pdf").write_bytes(b"x")
+    (tmp_path / "paper" / "b.pdf").write_bytes(b"y")
+    (tmp_path / "note" / "n.md").write_bytes(b"z")
+    monkeypatch.setattr(install_module, "watcher_loaded", lambda: False)
+
+    s = read_status(tmp_path)
+    assert s.waiting["paper"] == 2
+    assert s.waiting["note"] == 1
+    assert s.waiting["article"] == 0
+
+
+def test_status_counts_processed_today(tmp_path, monkeypatch) -> None:
+    """A file in `processed/<today>/` counts toward `processed_today`."""
+    from compendium.inbox import install as install_module
+    from compendium.inbox.status import _today_str, read_status
+
+    create_layout(tmp_path)
+    today_dir = tmp_path / "processed" / _today_str()
+    today_dir.mkdir(parents=True)
+    (today_dir / "x.pdf").write_bytes(b"x")
+    (today_dir / "y.pdf").write_bytes(b"y")
+    monkeypatch.setattr(install_module, "watcher_loaded", lambda: False)
+
+    s = read_status(tmp_path)
+    assert s.processed_today == 2
+    assert s.processed_yesterday == 0
+
+
+def test_status_failed_count_excludes_error_sidecars(tmp_path, monkeypatch) -> None:
+    """`<file>.error` sidecars are not counted as failed files."""
+    from compendium.inbox import install as install_module
+    from compendium.inbox.status import _today_str, read_status
+
+    create_layout(tmp_path)
+    today_dir = tmp_path / "failed" / _today_str()
+    today_dir.mkdir(parents=True)
+    (today_dir / "broken.pdf").write_bytes(b"x")
+    (today_dir / "broken.pdf.error").write_text("could not open PDF")
+    monkeypatch.setattr(install_module, "watcher_loaded", lambda: False)
+
+    s = read_status(tmp_path)
+    assert s.failed_today == 1  # not 2
+
+
+def test_status_to_dict_serializes_path_and_datetimes(tmp_path, monkeypatch) -> None:
+    """The dataclass JSON serialization stringifies Path and datetime fields."""
+    import json
+
+    from compendium.inbox import install as install_module
+    from compendium.inbox.status import _today_str, read_status
+
+    create_layout(tmp_path)
+    today_dir = tmp_path / "processed" / _today_str()
+    today_dir.mkdir(parents=True)
+    (today_dir / "x.pdf").write_bytes(b"x")
+    monkeypatch.setattr(install_module, "watcher_loaded", lambda: False)
+
+    s = read_status(tmp_path)
+    d = s.to_dict()
+    assert isinstance(d["path"], str)
+    assert isinstance(d["most_recent_processed"], str)
+    json.dumps(d)  # must be JSON-clean
