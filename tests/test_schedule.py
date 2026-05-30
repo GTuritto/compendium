@@ -125,3 +125,89 @@ def test_platform_detect_refuses_unsupported(monkeypatch) -> None:
         install_module._platform()
     assert excinfo.value.step == "platform"
     assert "freebsd14" in excinfo.value.detail
+
+
+# --- status ---------------------------------------------------------------
+
+
+def test_status_when_unit_absent(monkeypatch, tmp_path) -> None:
+    from compendium.schedule import status as status_module
+
+    # Force the macOS plist path to a tmp location that does not exist.
+    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: tmp_path / "absent.plist")
+    monkeypatch.setattr(status_module.sys, "platform", "darwin")
+    s = status_module.read_status()
+    assert s.loaded is False
+    assert s.state == "absent"
+    assert s.last_fired is None
+    assert s.next_fire is None
+
+
+def test_status_parses_macos_launchctl_output(monkeypatch, tmp_path) -> None:
+    from compendium.schedule import status as status_module
+
+    plist = tmp_path / "exists.plist"
+    plist.write_text("<plist/>")
+    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: plist)
+    monkeypatch.setattr(status_module.sys, "platform", "darwin")
+
+    fake_stdout = """gui/501/com.compendium.curate = {
+\tactive count = 0
+\tpath = /tmp/exists.plist
+\ttype = LaunchAgent
+\tstate = not running
+
+\tlast exit code = (never exited)
+\trun interval = 1800 seconds
+"""
+
+    class _Result:
+        returncode = 0
+        stdout = fake_stdout
+        stderr = ""
+
+    monkeypatch.setattr(status_module.subprocess, "run", lambda *a, **k: _Result())
+
+    s = status_module.read_status()
+    assert s.loaded is True
+    assert s.state == "not running"
+    assert s.last_fired == "(never exited)"
+    assert s.next_fire is None  # macOS does not surface next-fire
+    assert s.interval_seconds == 1800
+
+
+def test_status_when_launchctl_returns_nonzero(monkeypatch, tmp_path) -> None:
+    """Plist exists on disk but the unit is not loaded into launchd."""
+    from compendium.schedule import status as status_module
+
+    plist = tmp_path / "exists.plist"
+    plist.write_text("<plist/>")
+    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: plist)
+    monkeypatch.setattr(status_module.sys, "platform", "darwin")
+
+    class _Result:
+        returncode = 1
+        stdout = ""
+        stderr = "service not found"
+
+    monkeypatch.setattr(status_module.subprocess, "run", lambda *a, **k: _Result())
+
+    s = status_module.read_status()
+    assert s.loaded is False
+    assert s.state == "not loaded"
+
+
+def test_status_dataclass_to_dict_stringifies_path(tmp_path) -> None:
+    from compendium.schedule.status import ScheduleStatus
+
+    s = ScheduleStatus(
+        loaded=True,
+        unit_path=tmp_path / "x.plist",
+        state="not running",
+        last_fired="(never exited)",
+        next_fire=None,
+        interval_seconds=3600,
+    )
+    d = s.to_dict()
+    assert isinstance(d["unit_path"], str)
+    assert d["interval_seconds"] == 3600

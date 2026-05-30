@@ -17,11 +17,14 @@ from compendium.schedule.install import (
     install_schedule,
     uninstall_schedule,
 )
+from compendium.schedule.status import ScheduleStatus, read_status
 
 __all__ = [
     "ScheduleError",
     "ScheduleResult",
+    "ScheduleStatus",
     "install_schedule",
     "parse_interval",
+    "read_status",
     "uninstall_schedule",
 ]
