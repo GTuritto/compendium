@@ -35,6 +35,7 @@ def _config(tmp_path: Path, *, rsync_dest: str = "") -> Config:
         embeddings_api_key="",
         backup_local_dir=str(tmp_path / "backups"),
         backup_rsync_dest=rsync_dest,
+        inbox_path=str(tmp_path / "inbox"),
     )
 
 
