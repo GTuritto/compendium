@@ -179,3 +179,23 @@ Prerequisites: the full stack up. The golden suite is hermetic (stub embedder) �
 | 10.3 | Fast tier | `COMPENDIUM_EMBED_STUB=1 uv run pytest -m "not golden"` | the fast tier passes, including the golden smoke; the golden full/regression tests are deselected |
 | 10.4 | Regression trips | `COMPENDIUM_EMBED_STUB=1 uv run pytest tests/test_golden.py::test_regression_detector` | passes — i.e. with the ranker (RRF) deliberately disabled, a golden assertion fails and the detector catches it |
 | 10.5 | CI workflow | inspect `.github/workflows/ci.yml` (or `act -n`) | a `test` job (push/PR) and a `nightly` job (schedule), each declaring Postgres/OpenSearch/Qdrant/Memgraph service containers with the stub embedder |
+
+## Phase 1 (v0.2) — Real-model validation
+
+Opt-in walk that exercises the real model seams (`OpenAIEmbedder` →
+`https://openrouter.ai/api/v1`, `LLMSynthesizer` → same endpoint) on the
+primary host. Default `.env` and stub flags unset; see
+[../docs/operations/real-models.md](../docs/operations/real-models.md) for
+the per-host strategy and cost note. Captured runs land under
+[test-runs/](test-runs/) (`v0.2-phase-1-real-models.md`).
+
+Prerequisite: `unset COMPENDIUM_EMBED_STUB COMPENDIUM_SYNTH_STUB`; `.env`
+populated per `docs/operations/real-models.md`; `docker compose up -d`.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-1.1 | Live tests pass | `uv run pytest -m live` | both `test_real_embedder_roundtrip` and `test_real_synthesizer_writes_prose` PASS in under 15 s |
+| v0.2-1.2 | Qdrant point is real | after `uv run python -m compendium reindex all`, pull one point from the `chunks` Qdrant collection with vectors enabled | vector length 1024; L2 norm within 1e-3 of 1.0; the vector does not equal `StubEmbedder()._vector(body)` for the same chunk body |
+| v0.2-1.3 | Real synth output | `uv run python -m compendium synth concept "<name appearing in the corpus>"` | a vault page is written whose body starts with `# `, is at least 200 chars, and does not contain `stub synthesizer` |
+| v0.2-1.4 | Focused real-model walk | reindex (Phase 4) → query (Phase 5) → synth (Phase 3) → graph rebuild (Phase 6) → curate run (Phase 9) → trace inspection (Phase 7), all with stubs unset | every step exits 0; query coverage > 0.5 with no fallback for a corpus-covered query; synth wall-clock per concept < 30 s; capture into `test-runs/v0.2-phase-1-real-models.md` |
+| v0.2-1.5 | Hermetic suite still green | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest` | 86 passed, 2 deselected (the two live tests, correctly) |

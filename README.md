@@ -39,9 +39,10 @@ uv run python -m compendium   # validate config, print resolved storage URLs
 uv run pytest                  # full suite (needs the backing stores up)
 uv run pytest -m "not golden"  # fast tier (what CI runs on push)
 uv run pytest -m golden        # the golden quality suite (nightly tier)
+uv run pytest -m live          # opt-in real-model tests (v0.2 Phase 1)
 ```
 
-Tests use the deterministic stub embedder/synth (`COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`) and skip integration tests when a store is unreachable. The golden dataset (`tests/golden/`) is the quality regression signal. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the fast tier on every push/PR and the full golden suite nightly, with all four stores as service containers.
+Tests use the deterministic stub embedder/synth (`COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`) and skip integration tests when a store is unreachable. The golden dataset (`tests/golden/`) is the quality regression signal. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the fast tier on every push/PR and the full golden suite nightly, with all four stores as service containers. The `live` tier exercises the real BGE-M3 and OpenRouter Claude seams against a live endpoint — opt-in only, never in CI; see [docs/operations/real-models.md](docs/operations/real-models.md) for the per-host model strategy and cost note.
 
 ## Configuration
 
