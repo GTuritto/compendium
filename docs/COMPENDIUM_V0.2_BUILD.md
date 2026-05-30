@@ -8,8 +8,21 @@ ADR-012; the glossary lives in [../CONTEXT.md](../CONTEXT.md).
 
 ## Status
 
-v0.1 is feature-complete (phases 0–10 merged to `main`). v0.2 design is grilled; this document
-is the execution plan. No phase implementation has started.
+v0.1 is feature-complete (phases 0–10 merged to `main`).
+
+- **Phase 1 — Real-model validation** (merged 2026-05-30, PR #30): the `live`
+  pytest tier (`tests/test_live_models.py`), the OpenRouter pivot for embeddings
+  after the Phase 1 finding that `BAAI/bge-m3` is not in the Docker Model Runner
+  catalogue (config gained `EMBEDDINGS_API_KEY`; both seams now share an
+  OpenRouter key on every supported host), the operational
+  [`docs/operations/real-models.md`](operations/real-models.md), and the captured
+  primary-host walk evidence at
+  [`../tests/manual/test-runs/v0.2-phase-1-real-models.md`](../tests/manual/test-runs/v0.2-phase-1-real-models.md).
+  Apple Silicon row is `validated 2026-05-30`. A full cumulative smoke walk
+  (Phases 0–10 + v0.2-1) on the merged stack is captured at
+  [`../tests/manual/test-runs/smoke-walk-2026-05-30.md`](../tests/manual/test-runs/smoke-walk-2026-05-30.md).
+- **Phase 2 — Backup / restore (off-host)** — next; not started.
+- Phases 3 → 8 — not started.
 
 ## v0.2 thesis
 
