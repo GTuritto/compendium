@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from compendium.backup import BackupError, run_backup
+from compendium.backup import BackupError, RestoreError, run_backup, run_restore
 from compendium.cli import render
 from compendium.config import ConfigError, load_config
 from compendium.db import repository
@@ -395,6 +395,24 @@ def _backup() -> int:
     return 0
 
 
+def _restore(timestamp: str, force: bool) -> int:
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    try:
+        run_restore(config, timestamp, force=force)
+    except RestoreError as exc:
+        print(f"restore failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+        return 1
+    print(
+        "restore: complete. "
+        "Run 'compendium reindex all' and 'compendium graph rebuild' "
+        "to repopulate the derived stores."
+    )
+    return 0
+
+
 def _tui() -> int:
     try:
         load_config()
@@ -515,6 +533,16 @@ def main(argv: list[str] | None = None) -> int:
         help="back up PostgreSQL + the vault to BACKUP_LOCAL_DIR (and rsync to BACKUP_RSYNC_DEST if set)",
     )
 
+    restore_parser = subparsers.add_parser(
+        "restore",
+        help="restore PostgreSQL + the vault from a timestamped backup directory",
+    )
+    restore_parser.add_argument("timestamp", help="backup timestamp (YYYYMMDDTHHMMSSZ)")
+    restore_parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite an existing non-empty vault",
+    )
+
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
     curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
@@ -558,6 +586,8 @@ def main(argv: list[str] | None = None) -> int:
         return _curate(args.curate_action, getattr(args, "signal_id", None), fmt_arg)
     if args.command == "backup":
         return _backup()
+    if args.command == "restore":
+        return _restore(args.timestamp, args.force)
     return _startup()
 
 

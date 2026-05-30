@@ -11,5 +11,6 @@ Public surface: :func:`run_backup` (this module) and :func:`run_restore`
 """
 
 from compendium.backup.backup import BackupError, run_backup
+from compendium.backup.restore import RestoreError, run_restore
 
-__all__ = ["BackupError", "run_backup"]
+__all__ = ["BackupError", "RestoreError", "run_backup", "run_restore"]
