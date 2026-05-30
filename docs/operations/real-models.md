@@ -29,7 +29,7 @@ and removes the DMR dependency entirely from v0.2 Phase 1.
 
 | Host | Synthesis endpoint | Synthesis model | Embeddings endpoint | Embeddings model | Cost | Throughput | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Mac mini Apple Silicon (primary) | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` | `https://openrouter.ai/api/v1` | `BAAI/bge-m3` | Both seams paid (OpenRouter). | Fast | _pending v0.2 phase 1 walk_ |
+| Mac mini Apple Silicon (primary) | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` | `https://openrouter.ai/api/v1` | `BAAI/bge-m3` | Both seams paid (OpenRouter). | Fast | **validated 2026-05-30** ([evidence](../../tests/manual/test-runs/v0.2-phase-1-real-models.md)) |
 | Mac mini Intel | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` | `https://openrouter.ai/api/v1` | `BAAI/bge-m3` | Both seams paid (OpenRouter). | Fast | documented |
 | MacBook Pro Intel | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` | `https://openrouter.ai/api/v1` | `BAAI/bge-m3` | Both seams paid (OpenRouter). | Fast | documented |
 | Raspberry Pi 5 16GB | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` | `https://openrouter.ai/api/v1` | `BAAI/bge-m3` | Both seams paid (OpenRouter). | Fast | documented |
@@ -122,9 +122,8 @@ routine.
 
 ## Status
 
-- **Mac mini Apple Silicon** — pending the v0.2 Phase 1 walk; will be
-  updated to `validated YYYY-MM-DD` with a link to the evidence file when
-  sub-phase 1b closes.
+- **Mac mini Apple Silicon** — **validated 2026-05-30**. Evidence:
+  [`../../tests/manual/test-runs/v0.2-phase-1-real-models.md`](../../tests/manual/test-runs/v0.2-phase-1-real-models.md).
 - **Mac mini Intel / MacBook Pro Intel / Raspberry Pi 5 16GB** — `documented`;
   same env recipe as the primary host. Validation on these hosts is out of
   scope for v0.2 Phase 1 and will land independently when the curator stands
