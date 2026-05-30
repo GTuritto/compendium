@@ -165,3 +165,44 @@ def test_restore_missing_pg_restore_binary_raises(tmp_path, monkeypatch) -> None
         run_restore(config, ts, force=False)
     assert excinfo.value.step == "prereq"
     assert "pg_restore" in excinfo.value.detail
+
+
+# --- schedule -------------------------------------------------------------
+
+
+def test_parse_time_accepts_valid_24h() -> None:
+    from compendium.backup.schedule import parse_time
+
+    assert parse_time("02:00") == (2, 0)
+    assert parse_time("23:59") == (23, 59)
+    assert parse_time("0:00") == (0, 0)
+
+
+def test_parse_time_rejects_invalid() -> None:
+    from compendium.backup.schedule import ScheduleError, parse_time
+
+    for bad in ("24:00", "12:60", "abc", "12", "12:5", "-1:00"):
+        with pytest.raises(ScheduleError):
+            parse_time(bad)
+
+
+def test_macos_plist_xml_contains_calendar_interval() -> None:
+    from compendium.backup.schedule import _macos_plist_xml, _LABEL
+
+    xml = _macos_plist_xml(3, 15)
+    assert _LABEL in xml
+    assert "<integer>3</integer>" in xml
+    assert "<integer>15</integer>" in xml
+    assert "StartCalendarInterval" in xml
+    assert "ProgramArguments" in xml
+
+
+def test_linux_timer_unit_has_oncalendar() -> None:
+    from compendium.backup.schedule import _linux_service_unit, _linux_timer_unit
+
+    timer = _linux_timer_unit(3, 15)
+    assert "OnCalendar=*-*-* 03:15:00" in timer
+    assert "Persistent=true" in timer
+    service = _linux_service_unit()
+    assert "ExecStart=" in service
+    assert "compendium" in service
