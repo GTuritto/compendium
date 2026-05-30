@@ -42,6 +42,7 @@ class Config:
     synthesis_api_key: str
     embeddings_endpoint: str
     embeddings_model: str
+    embeddings_api_key: str
     settings: dict[str, Any] = field(default_factory=dict)
 
     def storage_urls(self) -> dict[str, str]:
@@ -93,6 +94,7 @@ def _build(resolved: dict[str, Any]) -> Config:
         synthesis_api_key=synthesis.get("api_key", ""),
         embeddings_endpoint=embeddings["endpoint"],
         embeddings_model=embeddings["model"],
+        embeddings_api_key=embeddings.get("api_key", ""),
         settings={
             k: resolved[k]
             for k in ("ingestion", "retrieval", "graph_expansion", "curation", "loops")

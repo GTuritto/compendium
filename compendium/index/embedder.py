@@ -66,4 +66,8 @@ def get_embedder() -> Embedder:
     if os.environ.get("COMPENDIUM_EMBED_STUB"):
         return StubEmbedder()
     config = load_config()
-    return OpenAIEmbedder(config.embeddings_endpoint, config.embeddings_model)
+    return OpenAIEmbedder(
+        config.embeddings_endpoint,
+        config.embeddings_model,
+        config.embeddings_api_key,
+    )
