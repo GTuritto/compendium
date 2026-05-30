@@ -21,8 +21,8 @@ Scenarios are numbered `N.M` — phase `N`, scenario `M`.
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
 | 0.1 | Cold start | `cp .env.example .env` and fill values; `uv run python -m compendium` | Prints `Compendium starting` and the resolved storage URLs (`POSTGRES_URL`, `OPENSEARCH_URL`, `QDRANT_URL`, `MEMGRAPH_URL`). Exit code 0. |
-| 0.2 | Missing required variable | Unset a required var (e.g. `POSTGRES_URL`); `uv run python -m compendium` | Non-zero exit code; error message names the missing variable; no Python traceback. |
-| 0.3 | Validation does no I/O | With all storage backends stopped (`docker compose down`), `uv run python -m compendium` | Still exits 0 — config validation only resolves and parses values, it never connects. |
+| 0.2 | Missing required variable | Temporarily move `.env` aside (`mv .env .env.tmp`) so dotenv stops loading it; then `env -u POSTGRES_URL uv run python -m compendium`; restore with `mv .env.tmp .env`. | Non-zero exit code; error message names the missing variable; no Python traceback. |
+| 0.3 | Validation does no I/O | Move `.env` aside and run with a minimal env that points every storage URL at a closed port (e.g. `POSTGRES_URL=postgresql://x:x@127.0.0.1:1/x ...`); restore `.env` afterwards. | Still exits 0 — config validation only resolves and parses values, it never connects. |
 | 0.4 | Log structure | `uv run python -m compendium 2>&1 1>/dev/null \| jq .` | Each line is valid JSON with `event`, `level`, and an ISO-8601 `ts`. No secret values (API keys) appear in the output. |
 
 ## Phase 1 — PostgreSQL operational backbone
@@ -73,8 +73,8 @@ Prerequisites: Phase 3's ingest fixtures available; the stub embedder is fine
 | 4.1 | Stores up | `docker compose up -d opensearch qdrant` | Both reachable: `curl :9200` and `curl :6533/collections` respond (Qdrant's host port is remapped to 6533 in `docker-compose.yml`). |
 | 4.2 | Schemas created | `uv run python -m compendium reindex all` (empty corpus is fine) | The `pages`/`chunks` indexes and collections exist; command exits 0. |
 | 4.3 | Populate | Ingest `sample.md` and `sample.pdf`, then `uv run python -m compendium index sync` | `index status` shows pending 0 and indexed counts equal to the page and chunk totals. |
-| 4.4 | OpenSearch query | `curl ':9200/pages/_search?q=body:psychological'` | A relevant page appears in the hits. |
-| 4.5 | Qdrant query | `POST :6533/collections/pages/points/search` with an embedded query vector | A relevant page point is returned. |
+| 4.4 | OpenSearch query | `curl 'http://localhost:9200/pages/_search?q=body:psychological'` | A relevant page appears in the hits. |
+| 4.5 | Qdrant query | `qdrant-client.query_points(collection_name='pages', query=embed('psychological safety'), limit=3)` (the `search` method is deprecated in qdrant-client ≥ 1.10) | A relevant page point is returned. |
 | 4.6 | Deterministic rebuild | Drop the indexes, `uv run python -m compendium reindex all` | Counts are restored; the 4.4 query returns the same top page (Qdrant top-K within a small Jaccard distance). |
 
 ## Phase 5 — Page-first retrieval
@@ -96,7 +96,7 @@ corpus.
 | --- | --- | --- | --- |
 | 5.1 | Covered query returns pages | `uv run python -m compendium query "psychological safety team learning"` | Exit 0; on stdout, a `query:` summary line reporting a high coverage and no fallback (`coverage 1.000` on the single-source corpus; lower but still no-fallback on a larger one), then the `Sample Markdown Source` page listed with a score. |
 | 5.2 | JSON output | `uv run python -m compendium query "psychological safety" --format json` | Exit 0; a JSON object with `query`, `coverage_score`, `fallback_to_chunks`, a non-empty `pages` array, `citations`, and `gaps`. (`--format json` replaces the former `--json`; available on every read command.) |
-| 5.3 | Gap → chunk fallback | Empty the pages indexes (`curl -X DELETE :9200/pages`; recreate the empty `pages` Qdrant collection), then `uv run python -m compendium query "psychological safety team learning"` | Exit 0; no pages, chunk citations from `Sample Markdown Source` are shown under "citations (chunk fallback)". |
+| 5.3 | Gap → chunk fallback | Drop both `pages` indexes and recreate them empty: `curl -X DELETE 'http://localhost:9200/pages'`, then call `compendium.index.opensearch.ensure_indexes(opensearch_client())` (or `compendium reindex all` on an empty corpus) to recreate the OpenSearch `pages` index empty, then `qdrant_client.delete_collection('pages')` + `create_collection('pages', vectors_config=VectorParams(size=1024, distance=Distance.COSINE))`. Then `uv run python -m compendium query "psychological safety team learning"`. | Exit 0; no pages, chunk citations from `Sample Markdown Source` are shown under "citations (chunk fallback)". |
 | 5.4 | Traces persisted | `PSQL "SELECT query_text, round(coverage_score::numeric,3), fallback_to_chunks, jsonb_array_length(gaps), array_length(query_embedding,1), graph_expansion FROM query_traces ORDER BY created_at"` | One row per query above: the covered queries show a high coverage (`1.000` on the single-source corpus), fallback `f`, 0 gaps; the 5.3 query shows coverage `0.000`, fallback `t`, 1 gap; every row has `query_embedding` length 1024 and `graph_expansion` NULL. |
 
 ## Phase 6 — Memgraph structural index
@@ -163,7 +163,7 @@ acceptance: a gap → a signal → a synth'd draft → promotion → an improved
 | 9.4 | Synth from signal | `uv run python -m compendium curate synth <signal-id>` | a draft concept page that lint-passes and cites chunks; the signal moves to `in_progress` |
 | 9.5 | Promote closes the loop | `uv run python -m compendium page promote <slug> --to canonical`, then `reindex all` | the signal becomes `addressed` with `addressed_revision_id`; a `SYNTHESIZES` edge is added (`graph status` shows it) |
 | 9.6 | Replay improved | `uv run python -m compendium trace replay <gap-trace-id>` | the replay shows the new page added and a positive coverage delta vs the original gap |
-| 9.7 | Fast-loop expansion | `uv run python -m compendium graph link <a-slug> <b-slug> --type RELATED_TO`, then `query` a term hitting page a | the trace's `graph_expansion` is populated; page b is merged into the ranking |
+| 9.7 | Fast-loop expansion | `uv run python -m compendium graph link <a-slug> <b-slug> --type RELATED_TO`, then `query` a term hitting page a, then `compendium trace show <trace-id>` (or inspect `query_traces.graph_expansion` directly) | the trace's `graph_expansion` is populated (`reached` lists page b with a `hop`/`score`); page b is merged into the final ranking. Note: `query --format json` does not currently include `graph_expansion` in its output; use `trace show` or the DB column for verification. |
 | 9.8 | Curator in the TUI | `compendium tui` → `c` → select a signal → `y` | the synth runs; the signal leaves the open queue (moves to `in_progress`) |
 
 ## Phase 10 — Golden dataset and testing

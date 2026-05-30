@@ -8,7 +8,9 @@ This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a
 
 ## Status
 
-v0.1 is feature-complete. All eleven phases (0–10) are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), the knowledge-graph curation loop (`compendium curate`), and the golden dataset & testing tier with CI (Phase 10). See `docs/COMPENDIUM_BUILD.md` for the phase plan and `openspec/changes/` for change history.
+v0.1 is feature-complete. All eleven phases (0–10) are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), the knowledge-graph curation loop (`compendium curate`), and the golden dataset & testing tier with CI (Phase 10). See `docs/COMPENDIUM_BUILD.md` for the v0.1 phase plan and `openspec/changes/` for change history.
+
+v0.2 is in flight. **Phase 1 — Real-model validation** is merged (PR #30, 2026-05-30): the `live` pytest tier exercises real OpenRouter / BGE-M3 calls on demand, a per-host model strategy lives at [`docs/operations/real-models.md`](docs/operations/real-models.md), and the embedder seam now accepts an `EMBEDDINGS_API_KEY`. See [`docs/COMPENDIUM_V0.2_BUILD.md`](docs/COMPENDIUM_V0.2_BUILD.md) for the v0.2 plan.
 
 ## Requirements
 

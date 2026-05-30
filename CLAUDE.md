@@ -4,9 +4,9 @@ Compendium is a personal knowledge synthesis system for one user (Giuseppe Turit
 
 ## Status
 
-The build is complete. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 9 ADRs, data contracts, the build plan. The build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and resolved decisions.
+The v0.1 build is complete and v0.2 is in flight. The design source of truth is [Compendium.md](docs/Compendium.md) — vision, 12 ADRs (ADR-010/011/012 added for v0.2), data contracts, the v0.1 build plan. The v0.1 build process source of truth is [COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md) — the 11 phases, the per-phase workflow, branch names, and resolved decisions. The v0.2 source of truth is [COMPENDIUM_V0.2_BUILD.md](docs/COMPENDIUM_V0.2_BUILD.md) — the eight v0.2 phases, the same per-phase workflow, and the resolved decisions carried from the grilling round.
 
-As of 2026-05-26: all eleven phases (0 through 10) are implemented and merged to `main`. Compendium v0.1 is feature-complete; Phase 10 (golden dataset & testing) merged via PR #18.
+As of 2026-05-30: all eleven v0.1 phases (0 through 10) are merged to `main`; v0.2 Phase 1 (real-model validation) is merged via PR #30. Compendium v0.1 is feature-complete; v0.2 build is underway.
 
 - **Phase 0 — Project skeleton** (merged): `uv` project, package layout, config loader, `structlog`, dev `docker-compose.yml`.
 - **Phase 1 — PostgreSQL backbone** (merged): all 11 ordered Alembic migrations (`0001_enums` → `0011_operational_views`).
@@ -19,9 +19,14 @@ As of 2026-05-26: all eleven phases (0 through 10) are implemented and merged to
 - **Phase 8 — TUI ops console** (merged, PR #14): a keyboard-driven Textual console (`compendium tui`) with six screens — dashboard, sources (+ ingest), pages (+ synth), query workbench, curation queue, graph browser — over a thin `compendium/tui/data.py` provider layer, blocking work in `@work(thread=True)`. New dependency: `textual`.
 - **Phase 9 — Knowledge graph curation loop** (merged, PR #16): the fast loop (query-time graph expansion logged in `query_traces.graph_expansion`), the on-demand slow loop (`compendium curate run` → `graph_curation_signals` + `graph_analysis_runs`), synth-from-signal with auto-`SYNTHESIZES` on promotion, curator-explicit semantic edges (`compendium graph link`), and the TUI curation actions. No migration; no daemon.
 
-- **Phase 10 — Golden dataset & testing** (merged, PR #18): a hermetic golden dataset (`tests/golden/`, categories A/C/D over the existing fixtures), a golden runner + a ranker-break regression detector, pytest markers, and GitHub Actions CI (`.github/workflows/ci.yml`) with the four stores as service containers. The final phase; all eleven phases (0–10) are now complete.
+- **Phase 10 — Golden dataset & testing** (merged, PR #18): a hermetic golden dataset (`tests/golden/`, categories A/C/D over the existing fixtures), a golden runner + a ranker-break regression detector, pytest markers, and GitHub Actions CI (`.github/workflows/ci.yml`) with the four stores as service containers. Final v0.1 phase.
 
-Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. Dev backing-store host ports are remapped to avoid collisions with a local bibliomind stack: Qdrant on **6533/6534** and Memgraph on **7688/7445** (containers still listen on the defaults internally). The graph layer uses the `neo4j` Bolt driver with raw Cypher (no OGM), the analog of `compendium/db/` over `psycopg`.
+### v0.2 phases
+
+- **v0.2 Phase 1 — Real-model validation** (merged 2026-05-30, PR #30): the `live` pytest tier (`tests/test_live_models.py`); skip-not-fail semantics for live tests; the captured primary-host walk evidence (`tests/manual/test-runs/v0.2-phase-1-real-models.md`); the operational `docs/operations/real-models.md` with a per-host model strategy table. Phase 1 finding: `BAAI/bge-m3` is not in the Docker Model Runner catalogue, so all supported hosts pivot to OpenRouter for embeddings. The embedder seam now accepts an `EMBEDDINGS_API_KEY` (`Config.embeddings_api_key` threaded through `get_embedder()`); empty key preserves the prior local-endpoint behaviour.
+- **v0.2 Phases 2–8** — not started; see [docs/COMPENDIUM_V0.2_BUILD.md](docs/COMPENDIUM_V0.2_BUILD.md).
+
+Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layout is the structured `vault/{concepts,topics,sources}/`; synthesis defaults to OpenRouter with Claude Sonnet 4.5; Compendium runs on the laptop. As of v0.2 Phase 1, embeddings also default to OpenRouter (the `BAAI/bge-m3` model is served via OpenRouter's OpenAI-compatible `/embeddings` endpoint because it is not in the DMR catalogue) and the embedder seam reads `EMBEDDINGS_API_KEY` from `.env`. Dev backing-store host ports are remapped to avoid collisions with a local bibliomind stack: Qdrant on **6533/6534** and Memgraph on **7688/7445** (containers still listen on the defaults internally). The graph layer uses the `neo4j` Bolt driver with raw Cypher (no OGM), the analog of `compendium/db/` over `psycopg`.
 
 ## What Compendium Is
 
