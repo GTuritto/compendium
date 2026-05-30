@@ -254,7 +254,8 @@ def test_backup_restore_round_trip(tmp_path) -> None:
 
     alembic_cfg = AlembicConfig(str(repo_root / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(repo_root / "migrations"))
-    alembic_cfg.set_main_option("sqlalchemy.url", src_url)
+    # env.py reads -x db_url before falling back to POSTGRES_URL.
+    alembic_cfg.cmd_opts = type("ns", (), {"x": [f"db_url={src_url}"]})()
     command.upgrade(alembic_cfg, "head")
 
     # Seed one source row + one wiki_page row + one vault file.

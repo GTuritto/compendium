@@ -12,6 +12,7 @@ reminder; this module emits the structlog event and returns normally.
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
 from compendium.backup.backup import (
@@ -25,6 +26,11 @@ from compendium.config import Config
 from compendium.logging import get_logger
 
 _REQUIRED_BINS = ("pg_restore", "tar")
+# pg_restore --clean --if-exists exits 1 when DROP IF EXISTS commands target
+# objects that do not yet exist (a fresh database). The actual restore
+# succeeds; pg_restore reports a final "warning: errors ignored on restore"
+# line. Treat that specific shape as success.
+_IGNORED_WARNING_TOKEN = "errors ignored on restore"
 
 
 class RestoreError(Exception):
@@ -80,8 +86,11 @@ def run_restore(config: Config, timestamp: str, *, force: bool) -> None:
 
     # Database first: pg_restore --clean --if-exists drops existing objects
     # before restoring, so it works against a populated or an empty DB.
+    # Against a fresh DB the IF-EXISTS DROPs all match zero rows and
+    # pg_restore exits 1 with "warning: errors ignored on restore: N"
+    # despite the actual restore succeeding. Tolerate that exact shape.
     try:
-        _run(
+        result = subprocess.run(
             [
                 "pg_restore",
                 "--clean", "--if-exists",
@@ -89,10 +98,17 @@ def run_restore(config: Config, timestamp: str, *, force: bool) -> None:
                 "--dbname=" + config.postgres_url,
                 str(dump_path),
             ],
-            step="pg_restore",
+            capture_output=True, text=True, check=False,
         )
-    except BackupError as exc:
-        raise RestoreError(step=exc.step, detail=exc.detail) from exc
+    except OSError as exc:
+        raise RestoreError(step="pg_restore", detail=str(exc)) from exc
+    if result.returncode != 0:
+        stderr = result.stderr or ""
+        if _IGNORED_WARNING_TOKEN not in stderr:
+            tail_lines = stderr.strip().splitlines()
+            tail = tail_lines[-1] if tail_lines else f"exit {result.returncode}"
+            raise RestoreError(step="pg_restore", detail=tail)
+        log.info("restore pg_restore ignored-warnings", count=stderr.count("warning"))
     log.info("restore pg_restore", dump=str(dump_path))
 
     # Vault next: wipe the existing markdown tree and extract the tarball.
