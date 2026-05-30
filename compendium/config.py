@@ -43,6 +43,8 @@ class Config:
     embeddings_endpoint: str
     embeddings_model: str
     embeddings_api_key: str
+    backup_local_dir: str
+    backup_rsync_dest: str
     settings: dict[str, Any] = field(default_factory=dict)
 
     def storage_urls(self) -> dict[str, str]:
@@ -83,6 +85,7 @@ def _build(resolved: dict[str, Any]) -> Config:
     storage = resolved["storage"]
     synthesis = resolved["synthesis"]
     embeddings = resolved["embeddings"]
+    backup = resolved.get("backup", {}) or {}
     return Config(
         postgres_url=storage["postgres_url"],
         opensearch_url=storage["opensearch_url"],
@@ -95,6 +98,8 @@ def _build(resolved: dict[str, Any]) -> Config:
         embeddings_endpoint=embeddings["endpoint"],
         embeddings_model=embeddings["model"],
         embeddings_api_key=embeddings.get("api_key", ""),
+        backup_local_dir=backup.get("local_dir", "./backups"),
+        backup_rsync_dest=backup.get("rsync_dest", ""),
         settings={
             k: resolved[k]
             for k in ("ingestion", "retrieval", "graph_expansion", "curation", "loops")

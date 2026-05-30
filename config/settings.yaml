@@ -24,6 +24,10 @@ embeddings:
   model: ${EMBED_MODEL}
   api_key: ${EMBEDDINGS_API_KEY:-}
 
+backup:
+  local_dir: ${BACKUP_LOCAL_DIR:-./backups}
+  rsync_dest: ${BACKUP_RSYNC_DEST:-}
+
 # --- Non-secret behavior config ---
 
 ingestion:

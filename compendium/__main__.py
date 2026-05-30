@@ -12,6 +12,15 @@ from __future__ import annotations
 import argparse
 import sys
 
+from compendium.backup import (
+    BackupError,
+    RestoreError,
+    ScheduleError,
+    install_schedule,
+    run_backup,
+    run_restore,
+    uninstall_schedule,
+)
 from compendium.cli import render
 from compendium.config import ConfigError, load_config
 from compendium.db import repository
@@ -378,6 +387,59 @@ def _curate(action: str, signal_id: str | None, fmt: str) -> int:
     return 0
 
 
+def _backup(action: str | None, at: str) -> int:
+    if action in (None, "run"):
+        try:
+            config = load_config()
+        except ConfigError as exc:
+            return _config_error(exc)
+        try:
+            local_dir = run_backup(config)
+        except BackupError as exc:
+            print(f"backup failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            if exc.local_dir is not None:
+                print(f"local backup retained at {exc.local_dir}", file=sys.stderr)
+            return 1
+        print(f"backup: wrote {local_dir}")
+        return 0
+    if action == "install":
+        try:
+            result = install_schedule(at)
+        except ScheduleError as exc:
+            print(f"backup install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"backup install: {result.path} ({result.detail})")
+        return 0
+    if action == "uninstall":
+        try:
+            result = uninstall_schedule()
+        except ScheduleError as exc:
+            print(f"backup uninstall failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"backup uninstall: {result.path} ({result.detail})")
+        return 0
+    print(f"unknown backup action: {action}", file=sys.stderr)
+    return 1
+
+
+def _restore(timestamp: str, force: bool) -> int:
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    try:
+        run_restore(config, timestamp, force=force)
+    except RestoreError as exc:
+        print(f"restore failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+        return 1
+    print(
+        "restore: complete. "
+        "Run 'compendium reindex all' and 'compendium graph rebuild' "
+        "to repopulate the derived stores."
+    )
+    return 0
+
+
 def _tui() -> int:
     try:
         load_config()
@@ -493,6 +555,38 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("tui", help="launch the keyboard-driven ops console")
 
+    backup_parser = subparsers.add_parser(
+        "backup",
+        help="back up PostgreSQL + the vault (and manage the scheduled unit)",
+    )
+    backup_sub = backup_parser.add_subparsers(dest="backup_action")
+    backup_sub.add_parser(
+        "run",
+        help="run one backup now (default action when no sub-command is given)",
+    )
+    backup_install = backup_sub.add_parser(
+        "install",
+        help="install a daily scheduled backup (launchd on macOS, systemd user timer on Linux)",
+    )
+    backup_install.add_argument(
+        "--at", default="02:00",
+        help="firing time HH:MM (24-hour, default 02:00)",
+    )
+    backup_sub.add_parser(
+        "uninstall",
+        help="remove the scheduled backup unit (idempotent)",
+    )
+
+    restore_parser = subparsers.add_parser(
+        "restore",
+        help="restore PostgreSQL + the vault from a timestamped backup directory",
+    )
+    restore_parser.add_argument("timestamp", help="backup timestamp (YYYYMMDDTHHMMSSZ)")
+    restore_parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite an existing non-empty vault",
+    )
+
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
     curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
@@ -534,6 +628,13 @@ def main(argv: list[str] | None = None) -> int:
         return _tui()
     if args.command == "curate":
         return _curate(args.curate_action, getattr(args, "signal_id", None), fmt_arg)
+    if args.command == "backup":
+        return _backup(
+            getattr(args, "backup_action", None),
+            getattr(args, "at", "02:00"),
+        )
+    if args.command == "restore":
+        return _restore(args.timestamp, args.force)
     return _startup()
 
 
