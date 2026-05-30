@@ -22,6 +22,7 @@ synthesis:
 embeddings:
   endpoint: ${EMBEDDINGS_ENDPOINT}
   model: ${EMBED_MODEL}
+  api_key: ${EMBEDDINGS_API_KEY:-}
 
 # --- Non-secret behavior config ---
 

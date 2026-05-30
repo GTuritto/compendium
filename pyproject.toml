@@ -29,7 +29,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-m 'not live'"
 markers = [
     "golden: golden-dataset quality tests (slower; nightly CI tier)",
     "integration: tests requiring live backing stores (skip when unreachable)",
+    "live: tests that hit real model endpoints; opt-in, never in CI's default tier",
 ]
