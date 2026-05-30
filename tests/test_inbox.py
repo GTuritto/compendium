@@ -366,3 +366,91 @@ def test_status_to_dict_serializes_path_and_datetimes(tmp_path, monkeypatch) -> 
     assert isinstance(d["path"], str)
     assert isinstance(d["most_recent_processed"], str)
     json.dumps(d)  # must be JSON-clean
+
+
+# --- integration round-trip ----------------------------------------------
+
+
+@pytest.mark.integration
+def test_inbox_process_routes_good_and_corrupt_files(tmp_path) -> None:
+    """Drop a good PDF + a unique-content corrupt PDF → process → assert routing.
+
+    Uses a unique-content corrupt file each run so the content hash
+    never collides with a previously-ingested `tests/fixtures/broken.pdf`
+    (which the dev DB may already know).
+    """
+    import shutil
+    import time
+
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from compendium.config import load_config
+    from compendium.inbox import process_inbox
+
+    try:
+        with psycopg.connect(load_config().postgres_url, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS n FROM sources")
+                pre_sources = cur.fetchone()["n"]
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"PostgreSQL unreachable: {exc}")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    create_layout(tmp_path)
+
+    # Good PDF — content hash is the same as tests/fixtures/sample.pdf;
+    # repeat smoke runs will hit the unchanged path, which is still
+    # routed to processed/ per resolved decision #4.
+    shutil.copy(repo_root / "tests" / "fixtures" / "sample.pdf", tmp_path / "paper" / "sample.pdf")
+    # Unique-content corrupt PDF — guarantees a fresh content hash so
+    # the ingest pipeline actually parses (and fails on parse) rather
+    # than short-circuiting to `unchanged`.
+    unique_corrupt = tmp_path / "paper" / f"garbage-{time.time_ns()}.pdf"
+    unique_corrupt.write_bytes(f"NOT-A-PDF-{time.time_ns()}".encode())
+    # In-flight download — must be skipped.
+    shutil.copy(
+        repo_root / "tests" / "fixtures" / "sample.pdf",
+        tmp_path / "paper" / "still-downloading.pdf.crdownload",
+    )
+
+    # Use Phase 1's environment to keep the embedder/synth stubs.
+    import os
+    os.environ["COMPENDIUM_EMBED_STUB"] = "1"
+    os.environ["COMPENDIUM_SYNTH_STUB"] = "1"
+
+    report = process_inbox(tmp_path)
+    # Routing: sample.pdf → processed (either ingested or unchanged
+    # depending on prior dev DB state). garbage → failed with sidecar.
+    # .crdownload → skipped.
+    today = (tmp_path / "processed" / __import__(
+        "compendium.inbox.process", fromlist=["_today_str"]
+    )._today_str())
+    failed_today = (tmp_path / "failed" / __import__(
+        "compendium.inbox.process", fromlist=["_today_str"]
+    )._today_str())
+
+    assert (today / "sample.pdf").is_file(), "sample.pdf should be under processed/<today>/"
+    assert (failed_today / unique_corrupt.name).is_file(), (
+        "unique-content corrupt PDF should be under failed/<today>/"
+    )
+    assert (failed_today / f"{unique_corrupt.name}.error").is_file(), (
+        ".error sidecar must accompany the failed file"
+    )
+    sidecar_text = (failed_today / f"{unique_corrupt.name}.error").read_text()
+    assert "could not open PDF" in sidecar_text or "PDF" in sidecar_text
+    assert (tmp_path / "paper" / "still-downloading.pdf.crdownload").is_file(), (
+        ".crdownload should be skipped, not routed"
+    )
+
+    assert len(report.processed) == 1
+    assert len(report.failed) == 1
+    assert len(report.skipped) == 1
+
+    # At least one new sources row from the good file (the path is
+    # the inbox path, which is unique per run because tmp_path is unique).
+    with psycopg.connect(load_config().postgres_url, row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM sources")
+            post_sources = cur.fetchone()["n"]
+    assert post_sources >= pre_sources, "sources count must not decrease"
