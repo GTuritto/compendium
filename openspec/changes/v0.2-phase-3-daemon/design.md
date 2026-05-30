@@ -12,7 +12,7 @@ There is a real tension to call out up front. ADR-012's "alternatives considered
 - A symmetric uninstall that is idempotent.
 - A status command the curator can run to confirm the unit is loaded, see when it last fired, and see when it next fires.
 - An operational document the curator follows to set up scheduled curation on a new host.
-- ADR-012 status updated from "Accepted (v0.2)" to "Accepted (v0.2 Phase 3, shipped <date>)" with the timer-interim caveat documented.
+- ADR-012 status updated from "Accepted (v0.2)" to `Accepted (v0.2 Phase 3, shipped <date>)` with the timer-interim caveat documented.
 
 **Non-Goals:**
 
@@ -76,7 +76,7 @@ Each kick should produce one new `graph_analysis_runs` row. The test asserts the
 
 `docs/Compendium.md` ADR-012 currently reads `**Status:** Accepted (v0.2).` 3c updates it to `**Status:** Accepted (v0.2 Phase 3, shipped 2026-MM-DD via PR #<n>). Interim mechanism is the launchd/systemd timer-fires-CLI; a later refactor will absorb the schedule into Phase 7's access-surface daemon.` The "alternatives considered" section keeps the rejection rationale but gains a paragraph explaining the two-step rollout.
 
-CLAUDE.md gets a corresponding line in the v0.2 section: "v0.2 Phase 3 — Scheduled curation daemon (merged YYYY-MM-DD, PR #<n>)" with the resolved decision noting the interim approach.
+CLAUDE.md gets a corresponding line in the v0.2 section: `v0.2 Phase 3 — Scheduled curation daemon (merged YYYY-MM-DD, PR #<n>)` with the resolved decision noting the interim approach.
 
 ## Risks / Trade-offs
 
@@ -93,10 +93,11 @@ No schema migration, no data change. Add the new `compendium/schedule/` module, 
 
 Operators who already installed scheduled units from prior experiments (none ship with v0.1 or v0.2 Phase 1/2 except the backup one) can run `compendium schedule uninstall` to clean up.
 
-## Open Questions
+## Open Questions — resolved at the review gate (2026-05-30)
 
-- **Default cadence.** Build plan says `--every 1h`. Recommendation: keep `1h` as the default; cheap and matches the existing `loops.slow_loop_interval_seconds: 3600` in `config/settings.yaml`.
-- **CLI verb naming.** `compendium schedule install` (per build plan, this proposal) vs `compendium curate install` (parallel to Phase 2 backup). Recommendation: `compendium schedule install` per the build plan.
-- **Cadence configuration.** Set at install time via `--every` only. Recommendation: confirmed; no `settings.yaml` cadence override in v0.2 Phase 3.
-- **Integration test cadence.** The CI-friendly path is manual-kick (no waiting). Recommendation: confirmed; the natural-fire path is exercised by the operator's smoke walk, not by CI.
-- **Refactor `compendium backup install` to use the new scheduler?** Recommendation: no, defer to v0.3. Phase 3 stays scoped to curate.
+- **Default cadence.** RESOLVED: `--every 1h` (matches the existing `loops.slow_loop_interval_seconds: 3600` in `config/settings.yaml`).
+- **CLI verb naming.** RESOLVED: `compendium schedule install` per the build plan — a single dispatcher for future scheduled targets.
+- **Cadence configuration.** RESOLVED: install-time `--every` only; no `settings.yaml` cadence override in v0.2 Phase 3.
+- **Integration test cadence.** RESOLVED: manual kick via the OS scheduler (`launchctl kickstart` / `systemctl --user start`); the natural-fire path is exercised by the operator's smoke walk, not by CI.
+- **Refactor `compendium backup install` to use the new scheduler?** RESOLVED: no, defer to v0.3. Phase 3 stays scoped to curate.
+- **Stack discipline / Airflow.** RESOLVED at the review gate: stays out of scope per CLAUDE.md and ADR-012. Phase 3 ships the launchd/systemd timer-fires-CLI as the v0.2 interim; Phase 7's access-surface daemon is the long-term home for in-process scheduling.
