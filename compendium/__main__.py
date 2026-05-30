@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from compendium.backup import BackupError, run_backup
 from compendium.cli import render
 from compendium.config import ConfigError, load_config
 from compendium.db import repository
@@ -378,6 +379,22 @@ def _curate(action: str, signal_id: str | None, fmt: str) -> int:
     return 0
 
 
+def _backup() -> int:
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    try:
+        local_dir = run_backup(config)
+    except BackupError as exc:
+        print(f"backup failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+        if exc.local_dir is not None:
+            print(f"local backup retained at {exc.local_dir}", file=sys.stderr)
+        return 1
+    print(f"backup: wrote {local_dir}")
+    return 0
+
+
 def _tui() -> int:
     try:
         load_config()
@@ -493,6 +510,11 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("tui", help="launch the keyboard-driven ops console")
 
+    subparsers.add_parser(
+        "backup",
+        help="back up PostgreSQL + the vault to BACKUP_LOCAL_DIR (and rsync to BACKUP_RSYNC_DEST if set)",
+    )
+
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
     curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
@@ -534,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
         return _tui()
     if args.command == "curate":
         return _curate(args.curate_action, getattr(args, "signal_id", None), fmt_arg)
+    if args.command == "backup":
+        return _backup()
     return _startup()
 
 
