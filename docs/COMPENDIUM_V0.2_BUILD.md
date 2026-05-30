@@ -239,24 +239,27 @@ edge counts; run a query and observe the fast-loop expansion finding the new edg
 Identical to v0.1's:
 
 1. **Branch** — `git checkout -b v0.2-phase-N-<name>` off the latest `main`.
-2. **Phase Plan** — author `Plans/v0.2-phase-N-<name>.md` from
+2. **OpenSpec change** — create `openspec/changes/v0.2-phase-N-<name>/` with proposal,
+   design, specs, tasks (`/opsx:propose`).
+3. **Phase Plan** — author `Plans/v0.2-phase-N-<name>.md` from
    [Plans/_TEMPLATE-phase-plan.md](../Plans/_TEMPLATE-phase-plan.md): sub-phases, tasks, the
    per-phase smoke test, open questions.
-3. **Review gate** — the curator revises and approves the Phase Plan. No implementation code
+4. **Review gate** — the curator revises and approves the Phase Plan. No implementation code
    is written until it is approved.
-4. **Draft PR** — after the first commit, open a draft PR against `main`, titled
+5. **Draft PR** — after the first commit, open a draft PR against `main`, titled
    `v0.2 phase N — <Title>`, body linking the Phase Plan.
-5. **Implement** — one commit per sub-phase (`v0.2 phase Na — <sub-phase>`), green at HEAD;
+6. **Implement** — one commit per sub-phase (`v0.2 phase Na — <sub-phase>`), green at HEAD;
    final commit `v0.2 phase N complete — <short title>`. Append the phase's smoke test to
    [tests/manual/smoke_test.md](../tests/manual/smoke_test.md).
-6. **Verify** — run the phase's testing plan and smoke test; mark the PR ready for review.
-7. **Merge** — the curator reviews and merges.
+7. **Verify** — run the phase's testing plan and smoke test; mark the PR ready for review.
+8. **Merge** — the curator reviews and merges.
 
 Every commit ends with the trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`.
 
-OpenSpec changes are not introduced for v0.2 — the ADRs (010–012) + this build plan replace
-the per-phase OpenSpec proposal that v0.1 used, because v0.2 is a single coherent direction
-under one thesis rather than a phase-by-phase greenfield build.
+OpenSpec changes are used per phase, mirroring v0.1: the ADRs (010–012) lock the
+architectural direction, but each phase still carries an `openspec/changes/v0.2-phase-N-<name>/`
+contract (proposal, design, spec deltas, tasks) so acceptance is auditable against a written
+requirement and `openspec validate` gates the change before merge.
 
 ## Documentation
 
