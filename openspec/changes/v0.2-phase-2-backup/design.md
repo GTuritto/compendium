@@ -51,7 +51,7 @@ A single env var holds the rsync destination string (anything `rsync` accepts: `
 
 ### Decision: `compendium restore` requires `--force` for non-empty vaults
 
-Restore is destructive: it overwrites the live vault and drops/recreates the database schema. The CLI requires `--force` when the target vault contains any `.md` files; without it, exit 1 with a guard message ("vault is not empty; pass --force to overwrite"). For the database, `pg_restore --clean --if-exists` is the safe operation, but the operator still gets a one-line warning before the call: "About to clean and restore database from <path>. Proceeding...".
+Restore is destructive: it overwrites the live vault and drops/recreates the database schema. The CLI requires `--force` when the target vault contains any `.md` files; without it, exit 1 with a guard message ("vault is not empty; pass --force to overwrite"). For the database, `pg_restore --clean --if-exists` is the safe operation, but the operator still gets a one-line warning before the call: "About to clean and restore database from `<path>`. Proceeding...".
 
 **Alternative considered:** restoring into a parallel database (`compendium_restored`) and prompting the operator to switch `POSTGRES_URL`. Rejected — adds a config edit step the operator may forget; the explicit `--force` is the right level of guard for a single-user system.
 
@@ -80,9 +80,11 @@ The test exercises real `pg_dump` / `pg_restore` against the dev PostgreSQL cont
 
 No schema migration, no in-place data change, no removal of any v0.1 surface. Add the new `compendium/backup/` module, the four new CLI verbs (`backup`, `restore`, `backup install`, `backup uninstall`), the two new config fields, the operational doc, and the integration test. Rollback is removing those additions; nothing in v0.1 or v0.2 Phase 1 depends on them. The `.gitignore` gains a `backups/` entry — if a previous backup directory was already committed by accident, it stays as-is (operator action).
 
-## Open Questions
+## Open Questions — resolved at the review gate (2026-05-30)
 
-- **Backup directory default.** Two candidates for `BACKUP_LOCAL_DIR` default: (a) `./backups/` (in-repo, gitignored — discoverable and matches v0.1 dev convention); (b) `~/Library/Application Support/Compendium/backups/` on macOS, `~/.local/share/compendium/backups/` on Linux (XDG-style; survives `git clean`). Recommendation: (a) — simpler, the operator sees it in the repo, and the per-host operational doc names the override.
-- **Vault tarball compression level.** `tar -czf` uses gzip default (level 6). Recommendation: keep default; the vault is small and compression time is negligible.
-- **Restore-into-running-dev?** If the dev DB has v0.2 Phase 1's smoke artifacts (the `interpersonal-risk-taking` page, real-model vectors), `restore` overwrites them. Recommendation: that is the correct behaviour — restore is destructive; the test artifacts are not authoritative state. The operational doc names a "back up before you restore" preamble.
-- **Daily-at-02:00 default.** Hard-coded vs configurable at install time. Recommendation: install defaults to `02:00`, overridable via `compendium backup install --at HH:MM`. Configurable cadence (`--every 12h`) is deferred until someone asks.
+- **Backup directory default.** RESOLVED: `./backups/` (in-repo, gitignored). Override path documented per-host in `docs/operations/backup-restore.md`.
+- **Schedule installer scope.** RESOLVED: ship `compendium backup install` / `uninstall` as Phase-2-specific; Phase 3's generic scheduler can absorb later.
+- **Vault tarball compression.** RESOLVED: `tar -czf` (gzip default).
+- **`--force` on restore.** RESOLVED: required when the vault is non-empty; `pg_restore --clean --if-exists` always.
+- **Daily cadence.** RESOLVED: 02:00 local time daily, overridable via `--at HH:MM` at install time; configurable cadence deferred.
+- **Restore-into-running-dev.** Acknowledged as correct behaviour — restore is destructive by design; the operational doc names a "back up before you restore" preamble.
