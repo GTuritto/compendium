@@ -45,6 +45,14 @@ path (`user@host:/srv/backups/compendium`), a NAS mount
 (`/mnt/nas/backups/compendium`), or an rsync module
 (`rsync://host/module/path`). Leave empty to keep backups local only.
 
+For **local destinations** (no `host:` prefix, no `rsync://`,
+`ssh://` scheme) the backup command creates the destination
+directory before invoking rsync — handy on a fresh mount where the
+target subdirectory may not exist yet. For **remote destinations**
+the path on the destination host must already exist; the macOS
+default `openrsync` does not support `--mkpath`, and rsync over SSH
+generally cannot create arbitrary remote directories without it.
+
 `config/settings.yaml` exposes the same values under a `backup:`
 section, defaulting to the values above.
 
@@ -63,7 +71,7 @@ Linux host.
 `compendium backup` fails fast with a clean remediation message when
 any required binary is missing:
 
-```
+```text
 backup failed at step prereq: required binaries not on PATH: pg_dump
 ```
 

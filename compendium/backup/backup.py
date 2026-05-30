@@ -122,11 +122,26 @@ def run_backup(config: Config, *, timestamp: str | None = None) -> Path:
 
     if config.backup_rsync_dest:
         dest = config.backup_rsync_dest.rstrip("/")
+        # For local destinations (no `host:` prefix), ensure the parent
+        # directory exists so rsync does not error on a missing root.
+        # Remote destinations are the operator's responsibility — the
+        # operational doc names that contract.
+        if ":" not in dest and not dest.startswith(("rsync://", "ssh://")):
+            try:
+                Path(dest).expanduser().mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                local_err = BackupError(
+                    step="rsync_mkdir",
+                    detail=str(exc),
+                    local_dir=local_dir,
+                )
+                log.error("backup rsync_mkdir failed", detail=str(exc))
+                raise local_err from exc
         try:
             _run(
                 [
                     "rsync",
-                    "-a", "--info=stats2",
+                    "-a",
                     f"{local_dir}/",
                     f"{dest}/{ts}/",
                 ],
