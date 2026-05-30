@@ -220,3 +220,22 @@ populated.
 | v0.2-2.4 | Restore returns the system | drop the live database (`docker compose exec postgres dropdb -U compendium compendium && createdb -U compendium compendium`) and wipe the vault (`find vault -name '*.md' -delete`); then `uv run python -m compendium restore <timestamp> --force` | `pg_restore` runs clean; the vault is repopulated; stdout includes `Run 'compendium reindex all' and 'compendium graph rebuild' to repopulate the derived stores.`; exit 0 |
 | v0.2-2.5 | Same answers after rebuild | `uv run python -m compendium reindex all && uv run python -m compendium graph rebuild`, then `uv run python -m compendium query "psychological safety team learning"` | coverage and top-page identical (within RRF-tie tolerance) to the same query run before the backup |
 | v0.2-2.6 | Schedule install + uninstall | `uv run python -m compendium backup install --at 03:15` | on macOS: `~/Library/LaunchAgents/com.compendium.backup.plist` exists with `Hour=3, Minute=15`; `launchctl print gui/<uid>/com.compendium.backup` succeeds. `uv run python -m compendium backup uninstall` removes the plist; re-running uninstall exits 0 with "not installed". |
+
+## Phase 3 (v0.2) — Scheduled curation daemon
+
+Opt-in walk that exercises the new `compendium schedule
+install/uninstall/status` verbs and confirms a kicked fire produces
+a `graph_analysis_runs` row. The operational reference is
+[../docs/operations/schedule.md](../docs/operations/schedule.md).
+
+Prerequisites: the v0.1 Phase 2 + Phase 4 corpus seeded (so curate
+has something to look at); `.env` populated; stores up.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-3.1 | Install at default cadence | `uv run python -m compendium schedule install` | macOS: `~/Library/LaunchAgents/com.compendium.curate.plist` exists with `StartInterval=3600`; `launchctl print gui/<uid>/com.compendium.curate` succeeds. Linux: `~/.config/systemd/user/compendium-curate.timer` carries `OnUnitActiveSec=3600`; `systemctl --user is-enabled compendium-curate.timer` reports `enabled`. Exit 0. |
+| v0.2-3.2 | Install at a custom cadence | `uv run python -m compendium schedule uninstall && uv run python -m compendium schedule install --every 30m` | unit's interval is 1800 seconds (macOS `StartInterval=1800`; Linux `OnUnitActiveSec=1800`). Exit 0. |
+| v0.2-3.3 | Status of a loaded unit | `uv run python -m compendium schedule status` | text block: `loaded=True`, `state="not running"` (or `active` on Linux), `interval` matches the install, `last_fired="(never exited)"` (or `(unknown)`) before any fire, `next_fire="(unknown)"` on macOS / populated wall-clock on Linux. Exit 0. |
+| v0.2-3.4 | Manual kick produces a `graph_analysis_runs` row | `psql -c "SELECT count(*) FROM graph_analysis_runs"` (record pre); `launchctl kickstart -k gui/$(id -u)/com.compendium.curate` (macOS) or `systemctl --user start compendium-curate.service` (Linux); wait up to 30 s; re-check the count | post-count = pre-count + 1; the new row has a populated `inserted` / `by_kind` summary. |
+| v0.2-3.5 | Status after a fire shows `last_fired` | re-run `compendium schedule status` after v0.2-3.4 | macOS: `last_fired` becomes a populated exit-code field (typically `0`); Linux: `last_fired` becomes a wall-clock timestamp inside the last minute. Exit 0. |
+| v0.2-3.6 | Uninstall + idempotent uninstall | `uv run python -m compendium schedule uninstall` then again | first call removes the unit and exits 0; second call exits 0 with "not installed"; `compendium schedule status` after uninstall exits 1 with `state="absent"`. |

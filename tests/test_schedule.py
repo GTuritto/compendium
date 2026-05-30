@@ -211,3 +211,89 @@ def test_status_dataclass_to_dict_stringifies_path(tmp_path) -> None:
     d = s.to_dict()
     assert isinstance(d["unit_path"], str)
     assert d["interval_seconds"] == 3600
+
+
+# --- integration round-trip ----------------------------------------------
+
+
+@pytest.mark.integration
+def test_schedule_install_kick_uninstall(tmp_path) -> None:
+    """Install → manually kick the unit → observe one new
+    `graph_analysis_runs` row → uninstall (idempotent).
+
+    Skips when the OS scheduler is not the curator's user session
+    (no DISPLAY / no `gui/<uid>/` domain), when PostgreSQL is
+    unreachable, or when running in CI without a writable
+    `~/Library/LaunchAgents` or `~/.config/systemd/user/`.
+    """
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import time
+
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from compendium.config import load_config
+    from compendium.schedule import (
+        install_schedule,
+        read_status,
+        uninstall_schedule,
+    )
+
+    if sys.platform == "darwin":
+        if shutil.which("launchctl") is None:
+            pytest.skip("launchctl not on PATH")
+    elif sys.platform.startswith("linux"):
+        if shutil.which("systemctl") is None:
+            pytest.skip("systemctl not on PATH")
+    else:
+        pytest.skip(f"unsupported platform for integration test: {sys.platform}")
+
+    try:
+        with psycopg.connect(load_config().postgres_url, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS n FROM graph_analysis_runs")
+                pre_count = cur.fetchone()["n"]
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"PostgreSQL unreachable: {exc}")
+
+    # Always uninstall on test exit, even when the assertions fail.
+    install_schedule(3600)
+    try:
+        status = read_status()
+        assert status.loaded is True
+        assert status.unit_path.exists()
+
+        # Kick the unit and wait for the curate run to land a row.
+        if sys.platform == "darwin":
+            uid = os.getuid()
+            subprocess.run(
+                ["launchctl", "kickstart", "-k", f"gui/{uid}/com.compendium.curate"],
+                capture_output=True, text=True, check=False,
+            )
+        else:
+            subprocess.run(
+                ["systemctl", "--user", "start", "compendium-curate.service"],
+                capture_output=True, text=True, check=False,
+            )
+
+        deadline = time.time() + 60.0
+        post_count = pre_count
+        while time.time() < deadline:
+            with psycopg.connect(load_config().postgres_url, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT count(*) AS n FROM graph_analysis_runs")
+                    post_count = cur.fetchone()["n"]
+            if post_count > pre_count:
+                break
+            time.sleep(2.0)
+        assert post_count == pre_count + 1, (
+            f"expected one new graph_analysis_runs row, got pre={pre_count} post={post_count}"
+        )
+    finally:
+        uninstall_schedule()
+        # Idempotent uninstall must not raise.
+        result = uninstall_schedule()
+        assert result.detail == "not installed"
