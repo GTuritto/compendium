@@ -199,3 +199,24 @@ populated per `docs/operations/real-models.md`; `docker compose up -d`.
 | v0.2-1.3 | Real synth output | `uv run python -m compendium synth concept "<name appearing in the corpus>"` | a vault page is written whose body starts with `# `, is at least 200 chars, and does not contain `stub synthesizer` |
 | v0.2-1.4 | Focused real-model walk | reindex (Phase 4) → query (Phase 5) → synth (Phase 3) → graph rebuild (Phase 6) → curate run (Phase 9) → trace inspection (Phase 7), all with stubs unset | every step exits 0; query coverage > 0.5 with no fallback for a corpus-covered query; synth wall-clock per concept < 30 s; capture into `test-runs/v0.2-phase-1-real-models.md` |
 | v0.2-1.5 | Hermetic suite still green | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest` | 86 passed, 2 deselected (the two live tests, correctly) |
+
+## Phase 2 (v0.2) — Backup / restore
+
+Opt-in walk that exercises the new `compendium backup` and
+`compendium restore` CLI verbs and the per-OS scheduled unit. The
+operational reference is
+[../docs/operations/backup-restore.md](../docs/operations/backup-restore.md).
+
+Prerequisites: `pg_dump` / `pg_restore` / `tar` on PATH (macOS:
+`brew install libpq && brew link --force libpq`); a populated
+PostgreSQL + vault (run the v0.1 Phase 2 / 3 smoke first); `.env`
+populated.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-2.1 | Local backup writes the pair | `BACKUP_LOCAL_DIR=./backups BACKUP_RSYNC_DEST= uv run python -m compendium backup` | a new directory `backups/<UTC-timestamp>/` contains `compendium.dump` (non-empty) and `vault.tar.gz` (non-empty); exit 0 |
+| v0.2-2.2 | rsync mirror to off-host | re-run with `BACKUP_RSYNC_DEST=/tmp/cdb-test/` exported | after success, `/tmp/cdb-test/<same-timestamp>/` contains the same two files; exit 0 |
+| v0.2-2.3 | rsync failure isolation | re-run with `BACKUP_RSYNC_DEST=user@no.such.host:/x` | the local backup pair is written; the command exits non-zero with `backup rsync failed`; the local backup is retained and valid |
+| v0.2-2.4 | Restore returns the system | drop the live database (`docker compose exec postgres dropdb -U compendium compendium && createdb -U compendium compendium`) and wipe the vault (`find vault -name '*.md' -delete`); then `uv run python -m compendium restore <timestamp> --force` | `pg_restore` runs clean; the vault is repopulated; stdout includes `Run 'compendium reindex all' and 'compendium graph rebuild' to repopulate the derived stores.`; exit 0 |
+| v0.2-2.5 | Same answers after rebuild | `uv run python -m compendium reindex all && uv run python -m compendium graph rebuild`, then `uv run python -m compendium query "psychological safety team learning"` | coverage and top-page identical (within RRF-tie tolerance) to the same query run before the backup |
+| v0.2-2.6 | Schedule install + uninstall | `uv run python -m compendium backup install --at 03:15` | on macOS: `~/Library/LaunchAgents/com.compendium.backup.plist` exists with `Hour=3, Minute=15`; `launchctl print gui/<uid>/com.compendium.backup` succeeds. `uv run python -m compendium backup uninstall` removes the plist; re-running uninstall exits 0 with "not installed". |

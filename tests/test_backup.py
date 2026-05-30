@@ -206,3 +206,124 @@ def test_linux_timer_unit_has_oncalendar() -> None:
     service = _linux_service_unit()
     assert "ExecStart=" in service
     assert "compendium" in service
+
+
+# --- integration round-trip ----------------------------------------------
+
+
+@pytest.mark.integration
+def test_backup_restore_round_trip(tmp_path) -> None:
+    """Back up a real test DB + vault, restore into a fresh DB, check rows + SHA-256s."""
+    import hashlib
+    import shutil as _shutil
+
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from compendium.backup import run_backup, run_restore
+    from compendium.config import load_config
+
+    if _shutil.which("pg_dump") is None or _shutil.which("pg_restore") is None:
+        pytest.skip("pg_dump/pg_restore not on PATH; install libpq client tools")
+    if _shutil.which("tar") is None:
+        pytest.skip("tar not on PATH")
+
+    base = load_config()
+    admin_url = base.postgres_url.rsplit("/", 1)[0] + "/postgres"
+    try:
+        admin = psycopg.connect(admin_url, autocommit=True, row_factory=dict_row)
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"PostgreSQL unreachable: {exc}")
+
+    src_name = "compendium_backup_src"
+    dst_name = "compendium_backup_dst"
+    try:
+        with admin.cursor() as cur:
+            cur.execute(f"DROP DATABASE IF EXISTS {src_name} WITH (FORCE)")
+            cur.execute(f"DROP DATABASE IF EXISTS {dst_name} WITH (FORCE)")
+            cur.execute(f"CREATE DATABASE {src_name}")
+            cur.execute(f"CREATE DATABASE {dst_name}")
+    finally:
+        admin.close()
+
+    # Run migrations against the source DB.
+    repo_root = Path(__file__).resolve().parents[1]
+    src_url = base.postgres_url.rsplit("/", 1)[0] + f"/{src_name}"
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    alembic_cfg = AlembicConfig(str(repo_root / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(repo_root / "migrations"))
+    alembic_cfg.set_main_option("sqlalchemy.url", src_url)
+    command.upgrade(alembic_cfg, "head")
+
+    # Seed one source row + one wiki_page row + one vault file.
+    vault = tmp_path / "vault"
+    for sub in ("concepts", "topics", "sources"):
+        (vault / sub).mkdir(parents=True)
+    page_path = vault / "concepts" / "test-page.md"
+    page_path.write_text("# Test Page\n\nbackup round-trip fixture.\n")
+    page_sha_before = hashlib.sha256(page_path.read_bytes()).hexdigest()
+
+    with psycopg.connect(src_url, autocommit=True, row_factory=dict_row) as conn:
+        from compendium.db import repository
+
+        repository.insert_source(
+            conn, kind="note", title="Round-trip",
+            content_hash="r" * 32 + "x" * 32, metadata={"k": "v"},
+        )
+
+    # Backup config pointing at the seeded DB and vault.
+    src_config = type(base)(
+        **{**base.__dict__,
+           "postgres_url": src_url,
+           "vault_path": str(vault),
+           "backup_local_dir": str(tmp_path / "backups"),
+           "backup_rsync_dest": ""}
+    )
+    backup_dir = run_backup(src_config)
+    assert backup_dir.is_dir()
+    assert (backup_dir / "compendium.dump").stat().st_size > 0
+    assert (backup_dir / "vault.tar.gz").stat().st_size > 0
+
+    # Source row count before destruction.
+    with psycopg.connect(src_url, autocommit=True, row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM sources")
+            src_count = cur.fetchone()["n"]
+    assert src_count == 1
+
+    # Wipe the vault and prepare the restore target.
+    for md in vault.rglob("*.md"):
+        md.unlink()
+    dst_url = base.postgres_url.rsplit("/", 1)[0] + f"/{dst_name}"
+    dst_config = type(base)(
+        **{**base.__dict__,
+           "postgres_url": dst_url,
+           "vault_path": str(vault),
+           "backup_local_dir": str(tmp_path / "backups"),
+           "backup_rsync_dest": ""}
+    )
+    timestamp = backup_dir.name
+    run_restore(dst_config, timestamp, force=False)
+
+    # Row count on the destination matches the source.
+    with psycopg.connect(dst_url, autocommit=True, row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM sources")
+            dst_count = cur.fetchone()["n"]
+    assert dst_count == src_count, f"dst rows {dst_count} != src rows {src_count}"
+
+    # Vault file restored bit-identical.
+    assert page_path.is_file(), "vault page missing after restore"
+    page_sha_after = hashlib.sha256(page_path.read_bytes()).hexdigest()
+    assert page_sha_after == page_sha_before, "vault file SHA-256 changed after restore"
+
+    # Teardown.
+    admin = psycopg.connect(admin_url, autocommit=True, row_factory=dict_row)
+    try:
+        with admin.cursor() as cur:
+            cur.execute(f"DROP DATABASE IF EXISTS {src_name} WITH (FORCE)")
+            cur.execute(f"DROP DATABASE IF EXISTS {dst_name} WITH (FORCE)")
+    finally:
+        admin.close()
