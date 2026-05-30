@@ -20,6 +20,7 @@ from compendium.inbox import (
     InboxError,
     create_layout as inbox_create_layout,
     install_watcher as install_inbox_watcher,
+    process_inbox,
     uninstall_watcher as uninstall_inbox_watcher,
 )
 from compendium.schedule import (
@@ -457,6 +458,14 @@ def _inbox(action: str | None, path_arg: str | None) -> int:
             return 1
         print(f"inbox uninstall: {result.path} ({result.detail})")
         return 0
+    if action == "process":
+        try:
+            report = process_inbox(resolved_path)
+        except Exception as exc:
+            print(f"inbox process: systemic failure: {exc}", file=sys.stderr)
+            return 1
+        print(f"inbox process: {report}")
+        return 0 if not report.errored else 1
     print(f"unknown inbox action: {action}", file=sys.stderr)
     return 1
 
@@ -708,6 +717,14 @@ def main(argv: list[str] | None = None) -> int:
     inbox_uninstall.add_argument(
         "--path", default=None,
         help="inbox path (unused for uninstall; accepted for symmetry)",
+    )
+    inbox_process = inbox_sub.add_parser(
+        "process",
+        help="scan the inbox, ingest eligible files, route to processed/<date>/ or failed/<date>/",
+    )
+    inbox_process.add_argument(
+        "--path", default=None,
+        help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
     )
 
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")

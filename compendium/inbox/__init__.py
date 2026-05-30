@@ -21,13 +21,18 @@ from compendium.inbox.install import (
     create_layout,
     install_watcher,
     uninstall_watcher,
+    watcher_loaded,
 )
+from compendium.inbox.process import ProcessReport, process_inbox
 
 __all__ = [
     "INBOX_KINDS",
     "InboxError",
     "InboxResult",
+    "ProcessReport",
     "create_layout",
     "install_watcher",
+    "process_inbox",
     "uninstall_watcher",
+    "watcher_loaded",
 ]
