@@ -33,6 +33,7 @@ _TABLES = {
     "index_sync_state",
     "promotion_events",
     "query_traces",
+    "ask_traces",
     "graph_curation_signals",
     "graph_analysis_runs",
 }

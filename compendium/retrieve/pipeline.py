@@ -288,6 +288,30 @@ async def run(
     )
 
 
+def persist_query_trace(conn: Any, trace: dict[str, Any]) -> Any:
+    """Write one ``query_traces`` row from a result's trace payload; return its id.
+
+    Shared by ``query()`` and the v0.2 Phase 6 ``ask`` composer so both persist
+    the retrieval trace identically and the ask trace can reference its id.
+    """
+    from compendium.db import repository
+
+    return repository.insert_query_trace(
+        conn,
+        query_text=trace["query_text"],
+        embedding_model=trace["embedding_model"],
+        query_embedding=trace["query_embedding"],
+        pipeline=trace["pipeline"],
+        final_ranking=trace["final_ranking"],
+        latencies_ms=trace["latencies_ms"],
+        coverage_score=trace["coverage_score"],
+        fallback_to_chunks=trace["fallback_to_chunks"],
+        gaps=trace["gaps"],
+        corpus_revision=trace["corpus_revision"],
+        graph_expansion=trace["graph_expansion"],
+    )
+
+
 def query(
     query_text: str, *, persist: bool = True, **kwargs: Any
 ) -> RetrievalResult:
@@ -306,19 +330,5 @@ def query(
     with connection() as conn:
         corpus_revision = repository.ensure_corpus_revision(conn)
         result = asyncio.run(run(query_text, corpus_revision=corpus_revision, **kwargs))
-        t = result.trace
-        repository.insert_query_trace(
-            conn,
-            query_text=t["query_text"],
-            embedding_model=t["embedding_model"],
-            query_embedding=t["query_embedding"],
-            pipeline=t["pipeline"],
-            final_ranking=t["final_ranking"],
-            latencies_ms=t["latencies_ms"],
-            coverage_score=t["coverage_score"],
-            fallback_to_chunks=t["fallback_to_chunks"],
-            gaps=t["gaps"],
-            corpus_revision=t["corpus_revision"],
-            graph_expansion=t["graph_expansion"],
-        )
+        persist_query_trace(conn, result.trace)
     return result
