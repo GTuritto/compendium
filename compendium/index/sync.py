@@ -184,11 +184,19 @@ def status() -> IndexStatusReport:
 
 
 def _reindex(target: str, stores: _Stores) -> SyncReport:
+    # v0.2 Phase 5: regenerate the OpenSearch synonym list from the current
+    # page aliases. The lines feed the analyzer's inline `synonym` filter
+    # so a re-dropped vault picks up new aliases on reindex.
+    from compendium.index.synonyms import generate_synonyms
+
+    with connection() as conn:
+        synonyms = generate_synonyms(conn)
+
     if target in ("pages", "all"):
-        opensearch.recreate_index(stores.os, opensearch.PAGES_INDEX)
+        opensearch.recreate_index(stores.os, opensearch.PAGES_INDEX, synonyms=synonyms)
         qdrant.recreate_collection(stores.q, qdrant.PAGES_COLLECTION)
     if target in ("chunks", "all"):
-        opensearch.recreate_index(stores.os, opensearch.CHUNKS_INDEX)
+        opensearch.recreate_index(stores.os, opensearch.CHUNKS_INDEX, synonyms=synonyms)
         qdrant.recreate_collection(stores.q, qdrant.CHUNKS_COLLECTION)
 
     with connection() as conn:

@@ -2,7 +2,7 @@
   "by_category": {
     "A": {
       "coverage_score": 1.0,
-      "mrr": 0.75,
+      "mrr": 0.6666666666666666,
       "recall_at_k": 1.0
     },
     "C": {
@@ -17,11 +17,16 @@
     }
   },
   "overall": {
-    "coverage_score": 0.75,
-    "mrr": 0.75,
+    "coverage_score": 0.8,
+    "mrr": 0.6666666666666666,
     "recall_at_k": 1.0
   },
   "per_query": {
+    "q_a_alias_match": {
+      "coverage_score": 1.0,
+      "mrr": 0.5,
+      "recall_at_k": 1.0
+    },
     "q_a_psych_safety": {
       "coverage_score": 1.0,
       "mrr": 0.5,

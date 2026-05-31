@@ -97,7 +97,10 @@ class _FakeQdrant:
     def __init__(self, pages, chunks):
         self._pages, self._chunks = pages, chunks
 
-    async def query_points(self, collection_name, query, limit, with_payload, query_filter=None):
+    async def query_points(
+        self, collection_name, query, limit, with_payload,
+        query_filter=None, search_params=None,
+    ):
         pts = self._pages if collection_name == "pages" else self._chunks
         return SimpleNamespace(points=pts)
 
