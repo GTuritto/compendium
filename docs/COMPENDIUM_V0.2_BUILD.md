@@ -309,7 +309,7 @@ requirement and `openspec validate` gates the change before merge.
 
 - ADRs continue inline in [Compendium.md](Compendium.md) (ADR-010, ADR-011, ADR-012).
 - Operational docs land in `docs/operations/` (per phase: `real-models.md`,
-  `backup-restore.md`, `service-install.md`, `inbox.md`, `retrieval-tuning.md`).
+  `backup-restore.md`, `schedule.md`, `inbox.md`, `retrieval-tuning.md`, `ask.md`).
 - The C4 docs in [architecture/](architecture/) are refreshed at the end of v0.2 to fold in
   the access surface, the daemon posture, the LLM-extracted edges, and `ask` — same
   discipline as the post-review-#2 C4 refresh on `main` (PR #28).

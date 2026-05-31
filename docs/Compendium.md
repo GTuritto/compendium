@@ -109,7 +109,7 @@ The discipline that keeps the project from becoming a research platform is an ex
 
 - Not real-time or streaming ingestion. Batch only.
 - Not a chat UI. The TUI is for ops, Obsidian is for browsing, and that is the surface area.
-- Not LLM-composed answers. The v0.1 output is ranked pages with citations.
+- Not LLM-composed answers. The v0.1 output is ranked pages with citations. (v0.2 Phase 6 reverses this for the single `compendium ask` verb: `ask` composes an LLM answer over the top-K retrieved pages with page-anchored citations and refuses below a coverage threshold. The page-first `query` path stays composition-free. Still not a chat UI: single question, single answer, no session state.)
 - Not chunk-first RAG. Page-first; chunks are the fallback.
 - Not multi-user. No auth, no permissions.
 - Not a cloud deployment, not a SaaS, not a hosted service, not a product.
@@ -435,7 +435,7 @@ A TUI hits the seam: persistent, navigable, multi-pane, no server, no auth, no f
 
 The ops console is a TUI built on Textual (Python). Single binary launch via `compendium tui`. No mouse required. The screens are listed in Phase 8 of [Part IV](#phased-build-plan).
 
-A small CLI surface remains for scriptable operations: `compendium ingest`, `compendium reindex`, `compendium graph rebuild`, `compendium page diff`, `compendium trace show`, `compendium trace replay`, `compendium lint`. Everything the TUI does, the CLI can do, but only the TUI is interactive.
+A small CLI surface remains for scriptable operations: `compendium ingest`, `compendium query`, `compendium ask` (v0.2 Phase 6 — composed answers), `compendium reindex`, `compendium graph rebuild`, `compendium page diff`, `compendium trace show`, `compendium trace replay`, `compendium lint`. Everything the TUI does, the CLI can do, but only the TUI is interactive.
 
 Obsidian remains the read view for the wiki vault. The TUI does not duplicate Obsidian's job.
 
