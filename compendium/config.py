@@ -105,7 +105,9 @@ def _build(resolved: dict[str, Any]) -> Config:
         inbox_path=inbox.get("path", "~/Compendium/inbox"),
         settings={
             k: resolved[k]
-            for k in ("ingestion", "retrieval", "graph_expansion", "curation", "loops")
+            for k in (
+                "ingestion", "retrieval", "ask", "graph_expansion", "curation", "loops"
+            )
             if k in resolved
         },
     )

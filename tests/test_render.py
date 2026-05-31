@@ -20,10 +20,67 @@ from compendium.trace.revisions import FrontmatterDelta
 from compendium.trace.promote import PromotionResult
 from compendium.graph.rebuild import GraphReport
 from compendium.curate.run import CurateReport
+from compendium.answer.compose import AskResult, Citation
 from compendium.retrieve.pipeline import ChunkCitation, PageResult, RetrievalResult
 from compendium.wiki.lint import LintIssue
 
 _TS = datetime(2026, 5, 26, 9, 30)
+
+
+def _ask_result(**over):
+    base = dict(
+        answer="Psychological safety is a shared belief [1].",
+        refused=False,
+        citations=[Citation(ref="[1]", slug="psych-safety", title="Psychological Safety", trace_rank=1)],
+        coverage_score=0.82,
+        trace_id="qt-1",
+        ask_trace_id="at-1",
+        gap=None,
+        suggested_actions=[],
+    )
+    base.update(over)
+    return AskResult(**base)
+
+
+def test_ask_json_carries_the_full_structured_shape():
+    out = json.loads(render.ask(_ask_result(), "json"))
+    assert out == {
+        "answer": "Psychological safety is a shared belief [1].",
+        "refused": False,
+        "citations": [
+            {"ref": "[1]", "slug": "psych-safety", "title": "Psychological Safety", "trace_rank": 1}
+        ],
+        "coverage_score": 0.82,
+        "trace_id": "qt-1",
+        "ask_trace_id": "at-1",
+        "gap": None,
+        "suggested_actions": [],
+    }
+
+
+def test_ask_text_prints_answer_citations_and_footer():
+    text = render.ask(_ask_result(), "text")
+    assert "Psychological safety is a shared belief [1]." in text
+    assert "[1] Psychological Safety (psych-safety)  trace_rank=1" in text
+    assert "coverage 0.820" in text and "ask_trace at-1" in text
+
+
+def test_ask_text_skips_answer_when_already_streamed():
+    text = render.ask(_ask_result(), "text", answer_streamed=True)
+    assert "Psychological safety is a shared belief" not in text
+    assert "citations:" in text
+
+
+def test_ask_text_refusal_shows_gap_and_suggested_actions():
+    refusal = _ask_result(
+        answer=None, refused=True, citations=[],
+        gap={"kind": "low_coverage", "coverage_score": 0.1},
+        suggested_actions=["compendium ingest <source> --kind <book|article|paper|note|web>"],
+    )
+    text = render.ask(refusal, "text")
+    assert "refused" in text
+    assert "low_coverage" in text
+    assert "compendium ingest" in text
 
 
 def test_scalar_formatters_shared_with_tui():

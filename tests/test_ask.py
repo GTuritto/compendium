@@ -217,6 +217,99 @@ def test_ask_trace_round_trip_joins_query_trace(test_db_url: str) -> None:
         assert joined["query_coverage_score"] == pytest.approx(0.82)
 
 
+def _canned_result(coverage: float, pages, corpus_revision):
+    gaps = (
+        []
+        if coverage >= 0.5
+        else [{"kind": "low_coverage", "query": "q", "coverage_score": coverage, "threshold": 0.3}]
+    )
+    trace = {
+        "corpus_revision": corpus_revision,
+        "query_text": "what is psychological safety",
+        "embedding_model": "stub",
+        "query_embedding": [0.1, 0.2, 0.3],
+        "pipeline": {"normalized_query": "psychological safety"},
+        "final_ranking": [
+            {"entity_id": p.entity_id, "title": p.title, "slug": p.slug, "score": p.score, "ranks": {}}
+            for p in pages
+        ],
+        "latencies_ms": {"total": 1.0},
+        "coverage_score": coverage,
+        "fallback_to_chunks": coverage < 0.5,
+        "gaps": gaps,
+        "graph_expansion": None,
+    }
+    return RetrievalResult(
+        query_text="what is psychological safety", pages=pages, coverage_score=coverage,
+        fallback_to_chunks=coverage < 0.5, citations=[], gaps=gaps, trace=trace,
+    )
+
+
+@pytest.mark.integration
+def test_ask_end_to_end_covered_persists_joined_traces(
+    test_db_url: str, monkeypatch, tmp_path
+) -> None:
+    # Point ask()'s connection() and vault at the test DB / a temp vault, and
+    # stub retrieval so the test needs only PostgreSQL (no OpenSearch/Qdrant).
+    monkeypatch.setenv("POSTGRES_URL", test_db_url)
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path / "vault"))
+    (tmp_path / "vault").mkdir()
+
+    from compendium.answer.llm import StubAnswerer
+    from compendium.retrieve import pipeline
+
+    pages = [PageResult(entity_id="A", title="Psychological Safety", slug="psych-safety",
+                        kind="concept", status="canonical", score=1.0)]
+
+    async def fake_run(query_text, *, corpus_revision=None, **kw):
+        return _canned_result(0.8, pages, corpus_revision)
+
+    monkeypatch.setattr(pipeline, "run", fake_run)
+
+    result = ask("what is psych safety?", answerer=StubAnswerer())
+    assert result.refused is False
+    assert result.answer
+    assert result.trace_id and result.ask_trace_id
+    assert [c.trace_rank for c in result.citations] == [1]
+
+    with psycopg.connect(test_db_url, row_factory=dict_row) as conn:
+        joined = repository.get_ask_trace_with_query(conn, result.ask_trace_id)
+    assert joined is not None
+    assert joined["refused"] is False
+    assert joined["answer_text"]
+    assert joined["model"] == "stub"
+    assert joined["query_text"] == "what is psychological safety"
+    assert str(joined["query_trace_id"]) == result.trace_id
+
+
+@pytest.mark.integration
+def test_ask_end_to_end_uncovered_refuses_and_traces(
+    test_db_url: str, monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("POSTGRES_URL", test_db_url)
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path / "vault"))
+    (tmp_path / "vault").mkdir()
+
+    from compendium.answer.llm import StubAnswerer
+    from compendium.retrieve import pipeline
+
+    async def fake_run(query_text, *, corpus_revision=None, **kw):
+        return _canned_result(0.1, [], corpus_revision)
+
+    monkeypatch.setattr(pipeline, "run", fake_run)
+
+    result = ask("an obscure question", answerer=StubAnswerer())
+    assert result.refused is True
+    assert result.answer is None
+    assert result.suggested_actions
+
+    with psycopg.connect(test_db_url, row_factory=dict_row) as conn:
+        row = repository.get_ask_trace(conn, result.ask_trace_id)
+    assert row is not None
+    assert row["refused"] is True
+    assert row["answer_text"] is None
+
+
 @pytest.mark.integration
 def test_refusal_ask_trace_has_null_answer(test_db_url: str) -> None:
     with psycopg.connect(test_db_url, row_factory=dict_row) as conn:

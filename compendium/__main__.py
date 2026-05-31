@@ -212,6 +212,43 @@ def _query(query_text: str, top_k: int | None, fmt: str) -> int:
     return 0
 
 
+def _ask(question: str, fmt: str) -> int:
+    log = get_logger("compendium.ask")
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    from compendium.answer import ask as run_ask
+
+    if fmt == "json":
+        result = run_ask(question)
+        print(render.ask(result, "json"))
+    else:
+        # Text mode streams the composed answer to stdout as it arrives; the
+        # footer (citations + trace ids) prints after. A refusal streams
+        # nothing, so the renderer prints the full refusal block.
+        streamed: list[str] = []
+
+        def on_token(token: str) -> None:
+            sys.stdout.write(token)
+            sys.stdout.flush()
+            streamed.append(token)
+
+        result = run_ask(question, on_token=on_token)
+        if streamed:
+            sys.stdout.write("\n")
+        print(render.ask(result, "text", answer_streamed=bool(streamed)))
+    log.info(
+        "ask",
+        refused=result.refused,
+        coverage=result.coverage_score,
+        citations=len(result.citations),
+        ask_trace=result.ask_trace_id or None,
+    )
+    return 0
+
+
 def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
     log = get_logger("compendium.graph")
     try:
@@ -635,6 +672,13 @@ def main(argv: list[str] | None = None) -> int:
         "--top-k", type=int, default=None, help="number of pages to show"
     )
 
+    ask_parser = subparsers.add_parser(
+        "ask",
+        help="composed answer over the top pages, with citations (v0.2 Phase 6)",
+        parents=[fmt],
+    )
+    ask_parser.add_argument("question", help="the natural-language question")
+
     trace_parser = subparsers.add_parser("trace", help="query-trace inspection and replay")
     trace_sub = trace_parser.add_subparsers(dest="trace_action", required=True)
     trace_sub.add_parser("list", help="recent traces", parents=[fmt])
@@ -789,6 +833,8 @@ def main(argv: list[str] | None = None) -> int:
         return _graph(args.graph_action, fmt_arg)
     if args.command == "query":
         return _query(args.text, args.top_k, fmt_arg)
+    if args.command == "ask":
+        return _ask(args.question, fmt_arg)
     if args.command == "trace":
         return _trace(
             args.trace_action, getattr(args, "id", None),
