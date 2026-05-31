@@ -28,6 +28,9 @@ backup:
   local_dir: ${BACKUP_LOCAL_DIR:-./backups}
   rsync_dest: ${BACKUP_RSYNC_DEST:-}
 
+inbox:
+  path: ${INBOX_PATH:-~/Compendium/inbox}
+
 # --- Non-secret behavior config ---
 
 ingestion:

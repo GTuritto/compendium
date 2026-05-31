@@ -16,6 +16,14 @@ from compendium.backup import BackupError, RestoreError, run_backup, run_restore
 from compendium.backup import ScheduleError as BackupScheduleError
 from compendium.backup import install_schedule as install_backup_schedule
 from compendium.backup import uninstall_schedule as uninstall_backup_schedule
+from compendium.inbox import (
+    InboxError,
+    create_layout as inbox_create_layout,
+    install_watcher as install_inbox_watcher,
+    process_inbox,
+    read_status as read_inbox_status,
+    uninstall_watcher as uninstall_inbox_watcher,
+)
 from compendium.schedule import (
     ScheduleError,
     install_schedule,
@@ -424,6 +432,69 @@ def _backup(action: str | None, at: str) -> int:
     return 1
 
 
+def _inbox(action: str | None, path_arg: str | None, fmt: str = "text") -> int:
+    from pathlib import Path
+
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    resolved_path = Path(path_arg or config.inbox_path).expanduser().resolve()
+
+    if action == "install":
+        try:
+            inbox_create_layout(resolved_path)
+            result = install_inbox_watcher(resolved_path)
+        except InboxError as exc:
+            print(f"inbox install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"inbox install: {resolved_path}")
+        print(f"  watcher: {result.path} ({result.detail})")
+        return 0
+    if action == "uninstall":
+        try:
+            result = uninstall_inbox_watcher()
+        except InboxError as exc:
+            print(f"inbox uninstall failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"inbox uninstall: {result.path} ({result.detail})")
+        return 0
+    if action == "process":
+        try:
+            report = process_inbox(resolved_path)
+        except Exception as exc:
+            print(f"inbox process: systemic failure: {exc}", file=sys.stderr)
+            return 1
+        print(f"inbox process: {report}")
+        return 0 if not report.errored else 1
+    if action == "status":
+        status = read_inbox_status(resolved_path)
+        if fmt == "json":
+            import json
+            print(json.dumps(status.to_dict(), indent=2))
+        else:
+            waiting_total = sum(status.waiting.values())
+            print(f"inbox status: {resolved_path}")
+            print(f"  watcher_loaded: {status.watcher_loaded}")
+            print(f"  waiting:        {waiting_total} total")
+            for kind, n in status.waiting.items():
+                if n:
+                    print(f"    {kind}: {n}")
+            print(f"  processed:      today={status.processed_today} yesterday={status.processed_yesterday}")
+            print(f"  failed:         today={status.failed_today} yesterday={status.failed_yesterday}")
+            print(
+                f"  most_recent_processed: "
+                f"{status.most_recent_processed.isoformat() if status.most_recent_processed else '(none)'}"
+            )
+            print(
+                f"  most_recent_failed:    "
+                f"{status.most_recent_failed.isoformat() if status.most_recent_failed else '(none)'}"
+            )
+        return 0
+    print(f"unknown inbox action: {action}", file=sys.stderr)
+    return 1
+
+
 def _schedule(action: str | None, every: str, fmt: str = "text") -> int:
     if action == "install":
         try:
@@ -651,6 +722,45 @@ def main(argv: list[str] | None = None) -> int:
         parents=[fmt],
     )
 
+    inbox_parser = subparsers.add_parser(
+        "inbox",
+        help="manage the auto-ingestion inbox watcher (launchd on macOS, systemd user .path on Linux)",
+    )
+    inbox_sub = inbox_parser.add_subparsers(dest="inbox_action", required=True)
+    inbox_install = inbox_sub.add_parser(
+        "install",
+        help="create the inbox layout and install the OS-native watcher unit",
+    )
+    inbox_install.add_argument(
+        "--path", default=None,
+        help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
+    )
+    inbox_uninstall = inbox_sub.add_parser(
+        "uninstall",
+        help="remove the inbox watcher unit (idempotent); preserves the inbox directory",
+    )
+    inbox_uninstall.add_argument(
+        "--path", default=None,
+        help="inbox path (unused for uninstall; accepted for symmetry)",
+    )
+    inbox_process = inbox_sub.add_parser(
+        "process",
+        help="scan the inbox, ingest eligible files, route to processed/<date>/ or failed/<date>/",
+    )
+    inbox_process.add_argument(
+        "--path", default=None,
+        help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
+    )
+    inbox_status = inbox_sub.add_parser(
+        "status",
+        help="report waiting / processed / failed counts and recent file timestamps",
+        parents=[fmt],
+    )
+    inbox_status.add_argument(
+        "--path", default=None,
+        help="inbox path (default: INBOX_PATH from .env, or ~/Compendium/inbox)",
+    )
+
     curate_parser = subparsers.add_parser("curate", help="knowledge-graph curation loop")
     curate_sub = curate_parser.add_subparsers(dest="curate_action", required=True)
     curate_sub.add_parser("run", help="run one slow-loop pass (generate signals)", parents=[fmt])
@@ -703,6 +813,12 @@ def main(argv: list[str] | None = None) -> int:
         return _schedule(
             getattr(args, "schedule_action", None),
             getattr(args, "every", "1h"),
+            fmt_arg,
+        )
+    if args.command == "inbox":
+        return _inbox(
+            getattr(args, "inbox_action", None),
+            getattr(args, "path", None),
             fmt_arg,
         )
     return _startup()

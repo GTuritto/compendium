@@ -239,3 +239,24 @@ has something to look at); `.env` populated; stores up.
 | v0.2-3.4 | Manual kick produces a `graph_analysis_runs` row | `psql -c "SELECT count(*) FROM graph_analysis_runs"` (record pre); `launchctl kickstart -k gui/$(id -u)/com.compendium.curate` (macOS) or `systemctl --user start compendium-curate.service` (Linux); wait up to 30 s; re-check the count | post-count = pre-count + 1; the new row has a populated `inserted` / `by_kind` summary. |
 | v0.2-3.5 | Status after a fire shows `last_fired` | re-run `compendium schedule status` after v0.2-3.4 | macOS: `last_fired` becomes a populated exit-code field (typically `0`); Linux: `last_fired` becomes a wall-clock timestamp inside the last minute. Exit 0. |
 | v0.2-3.6 | Uninstall + idempotent uninstall | `uv run python -m compendium schedule uninstall` then again | first call removes the unit and exits 0; second call exits 0 with "not installed"; `compendium schedule status` after uninstall exits 1 with `state="absent"`. |
+
+## Phase 4 (v0.2) — Ingestion automation (inbox)
+
+Opt-in walk that exercises `compendium inbox install` / `process` /
+`status` / `uninstall`. The operational reference is
+[../docs/operations/inbox.md](../docs/operations/inbox.md).
+
+Prerequisites: stores up; `.env` populated. The walk uses a
+tmp inbox at `/tmp/cdb-inbox-smoke` so it does not collide with the
+operator's real `~/Compendium/inbox`. The corrupt-file scenario uses
+a unique-content fixture each run so the content hash never collides
+with a previously-failed `broken.pdf`.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-4.1 | Install creates the layout | `rm -rf /tmp/cdb-inbox-smoke && uv run python -m compendium inbox install --path /tmp/cdb-inbox-smoke` | `/tmp/cdb-inbox-smoke/{book,article,paper,note,web,processed,failed}/` exist; on macOS `~/Library/LaunchAgents/com.compendium.inbox.plist` exists; on Linux `~/.config/systemd/user/compendium-inbox.{path,service}` exist; exit 0 |
+| v0.2-4.2 | Drop a good PDF | `cp tests/fixtures/sample.pdf /tmp/cdb-inbox-smoke/paper/` then `uv run python -m compendium inbox process --path /tmp/cdb-inbox-smoke` | the file is now under `/tmp/cdb-inbox-smoke/processed/$(date -u +%Y-%m-%d)/sample.pdf`; one new row in `sources`; summary reports `processed=1 failed=0 skipped=0`; exit 0 |
+| v0.2-4.3 | Drop a unique corrupt PDF | `echo "NOT-A-PDF-$(date +%s%N)" > /tmp/cdb-inbox-smoke/paper/garbage-$(date +%s).pdf` then `uv run python -m compendium inbox process --path /tmp/cdb-inbox-smoke` | the file is now under `/tmp/cdb-inbox-smoke/failed/$(date -u +%Y-%m-%d)/garbage-*.pdf`; a sidecar `garbage-*.pdf.error` exists in the same directory containing the parser's reason ("could not open PDF: ..."); summary reports `processed=0 failed=1 skipped=0`; exit 0 |
+| v0.2-4.4 | Status reports the counts | `uv run python -m compendium inbox status --path /tmp/cdb-inbox-smoke` | text block shows `watcher_loaded=True, processed today=1, failed today=1`, `most_recent_processed` and `most_recent_failed` populated. `--format json` emits the same as a JSON object. Exit 0. |
+| v0.2-4.5 | Skip-filter ignores `.crdownload` | `cp tests/fixtures/sample.pdf /tmp/cdb-inbox-smoke/paper/x.pdf.crdownload` then `compendium inbox process --path /tmp/cdb-inbox-smoke` | the `.crdownload` file remains under `paper/`; no new `sources` row; the summary reports `skipped=1` |
+| v0.2-4.6 | Uninstall + idempotent uninstall | `uv run python -m compendium inbox uninstall` then again; then `uv run python -m compendium inbox status --path /tmp/cdb-inbox-smoke` | first uninstall removes the watcher unit and exits 0; second exits 0 with "not installed"; status reports `watcher_loaded=False` but still shows the file counts (the inbox directory and contents are preserved); exit 0 |

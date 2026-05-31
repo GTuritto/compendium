@@ -21,8 +21,16 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   Apple Silicon row is `validated 2026-05-30`. A full cumulative smoke walk
   (Phases 0–10 + v0.2-1) on the merged stack is captured at
   [`../tests/manual/test-runs/smoke-walk-2026-05-30.md`](../tests/manual/test-runs/smoke-walk-2026-05-30.md).
-- **Phase 2 — Backup / restore (off-host)** — next; not started.
-- Phases 3 → 8 — not started.
+- **Phase 2 — Backup / restore (off-host)** (merged 2026-05-30, PR #32).
+- **Phase 3 — Scheduled curation daemon** (merged 2026-05-30, PR #33;
+  ships ADR-012).
+- **Phase 4 — Ingestion automation (inbox)** (merged 2026-05-30,
+  PR #34): `compendium inbox install` writes a per-OS path-watcher
+  that auto-ingests files dropped under
+  [`~/Compendium/inbox/<kind>/`](operations/inbox.md), routes to
+  `processed/<YYYY-MM-DD>/` or `failed/<YYYY-MM-DD>/` with a `.error`
+  sidecar on parse failure, and runs `index sync` per fire.
+- Phases 5 → 8 — not started.
 
 ## v0.2 thesis
 
