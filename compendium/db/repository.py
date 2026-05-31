@@ -606,6 +606,35 @@ def all_wiki_page_ids(conn: psycopg.Connection) -> list[UUID]:
     return [row["id"] for row in conn.execute("SELECT id FROM wiki_pages ORDER BY id")]
 
 
+def list_wiki_pages(
+    conn: psycopg.Connection,
+    *,
+    kind: str | None = None,
+    status: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Filtered wiki-page list for the access surface (v0.2 Phase 7).
+
+    Newest first. ``kind`` and ``status`` are optional equality filters cast to
+    their enum types; ``limit`` bounds the result.
+    """
+    clauses: list[str] = []
+    params: list[Any] = []
+    if kind is not None:
+        clauses.append("kind = %s::page_kind")
+        params.append(kind)
+    if status is not None:
+        clauses.append("status = %s::page_status")
+        params.append(status)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit)
+    return conn.execute(
+        "SELECT id, kind, slug, title, status, file_path, created_at "
+        f"FROM wiki_pages{where} ORDER BY created_at DESC, slug ASC LIMIT %s",
+        params,
+    ).fetchall()
+
+
 def all_chunk_ids(conn: psycopg.Connection) -> list[UUID]:
     """Every chunk id, in insertion order."""
     return [row["id"] for row in conn.execute("SELECT id FROM chunks ORDER BY id")]
