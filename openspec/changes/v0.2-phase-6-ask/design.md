@@ -88,10 +88,18 @@ On refusal, `suggested_actions` is derived by a deterministic rule from the quer
 
 Rollback is `alembic downgrade -1` (drops `ask_traces`) plus removing the `compendium/answer/` package, the `ask` subparser/handler, the renderer, the repository methods, the `ask:` config block, and the operational doc. The page-first `query` path is untouched, so retrieval behaviour is identical before and after.
 
-## Open Questions — for the review gate
+## Open Questions — resolved at the review gate (2026-05-31)
 
-- **Composer package name.** Recommendation: `compendium/answer/` with `answer.ask()`. The curator may prefer `compendium/ask/` (function `run()` to avoid `ask.ask`).
-- **Rewrite default.** Recommendation: `ask.rewrite=true` by default. The curator may prefer it off by default for cost until the rewrite prompt is tuned.
-- **Refusal threshold.** Recommendation: `0.3` per the build plan. Confirm or adjust.
-- **Cost-estimate rate table.** Recommendation: a static per-model table in code with a `0.0` fallback. Confirm the maintenance burden is acceptable vs omitting cost.
-- **`suggested_actions` shape.** Recommendation: a list of copy-paste-ready CLI command strings. Confirm vs a structured `{verb, args}` shape that Phase 7's access surface might prefer.
+All resolved by accepting the recommendation.
+
+- **Composer package name.** RESOLVED: `compendium/answer/` with `answer.ask()`.
+- **Rewrite default.** RESOLVED: `ask.rewrite=true`.
+- **Refusal threshold.** RESOLVED: `0.3` (the build-plan default).
+- **Cost-estimate rate table.** RESOLVED: a static per-model table in code with a `0.0` fallback.
+- **`suggested_actions` shape.** RESOLVED: a list of copy-paste-ready CLI command strings.
+
+Streaming is delivered via an optional `on_token` callback on `ask()` rather than a `stream`
+boolean: when the caller passes `on_token`, composition streams deltas to it while still
+accumulating the full answer; when omitted, the answer is buffered. This keeps `ask()` a single
+return type (`AskResult`) for both `--format text` (callback supplied) and `--format json`
+(no callback).
