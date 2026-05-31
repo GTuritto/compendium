@@ -263,6 +263,20 @@ def _serve(host: str, port: int) -> int:
     return 0
 
 
+def _mcp() -> int:
+    log = get_logger("compendium.mcp")
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    from compendium.api.mcp import run as run_mcp
+
+    log.info("mcp stdio server starting")
+    run_mcp()
+    return 0
+
+
 def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
     log = get_logger("compendium.graph")
     try:
@@ -703,6 +717,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     serve_parser.add_argument("--port", type=int, default=8787, help="bind port (default 8787)")
 
+    subparsers.add_parser(
+        "mcp",
+        help="run the MCP stdio access surface (v0.2 Phase 7, ADR-011)",
+    )
+
     trace_parser = subparsers.add_parser("trace", help="query-trace inspection and replay")
     trace_sub = trace_parser.add_subparsers(dest="trace_action", required=True)
     trace_sub.add_parser("list", help="recent traces", parents=[fmt])
@@ -861,6 +880,8 @@ def main(argv: list[str] | None = None) -> int:
         return _ask(args.question, fmt_arg)
     if args.command == "serve":
         return _serve(args.host, args.port)
+    if args.command == "mcp":
+        return _mcp()
     if args.command == "trace":
         return _trace(
             args.trace_action, getattr(args, "id", None),
