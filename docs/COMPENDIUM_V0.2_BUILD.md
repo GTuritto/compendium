@@ -53,7 +53,17 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   text, joined to `query_traces` by `query_trace_id`. The composer
   (`compendium/answer/`) reuses `pipeline.query` and the `SYNTHESIS_*`
   config; it never re-retrieves. See [`operations/ask.md`](operations/ask.md).
-- Phases 7 → 8 — not started.
+- **Phase 7 — Access surface (MCP + HTTP)** (merged 2026-05-31, PR #38;
+  **ships ADR-011**): Compendium is callable by colocated agents over
+  `compendium serve` (FastAPI on `127.0.0.1`, no auth) and `compendium mcp`
+  (MCP stdio), both thin adapters over one shared facade
+  (`compendium/api/facade.py`) exposing six verbs — `query`, `ask`, `ingest`,
+  `page_get`, `page_list`, `index_status`. Curator/ops verbs stay CLI-only.
+  Access-surface `ingest` accepts a path or raw bytes and auto-runs `index
+  sync`; `ask` streams over chunked HTTP and MCP notifications; the surface JSON
+  reuses the render seam so it matches `--format json`. New deps: `fastapi`,
+  `uvicorn`, `mcp`. See [`operations/access-surface.md`](operations/access-surface.md).
+- Phase 8 — not started.
 
 ## v0.2 thesis
 
