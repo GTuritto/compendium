@@ -249,6 +249,20 @@ def _ask(question: str, fmt: str) -> int:
     return 0
 
 
+def _serve(host: str, port: int) -> int:
+    log = get_logger("compendium.serve")
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    from compendium.api.http import run as run_http
+
+    log.info("serve starting", host=host, port=port)
+    run_http(host=host, port=port)
+    return 0
+
+
 def _graph_link(from_slug: str, to_slug: str, edge_type: str) -> int:
     log = get_logger("compendium.graph")
     try:
@@ -679,6 +693,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     ask_parser.add_argument("question", help="the natural-language question")
 
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="run the HTTP access surface on 127.0.0.1 (v0.2 Phase 7, ADR-011)",
+    )
+    serve_parser.add_argument(
+        "--host", default="127.0.0.1",
+        help="bind host (default 127.0.0.1; non-loopback is a v0.3 concern, no auth)",
+    )
+    serve_parser.add_argument("--port", type=int, default=8787, help="bind port (default 8787)")
+
     trace_parser = subparsers.add_parser("trace", help="query-trace inspection and replay")
     trace_sub = trace_parser.add_subparsers(dest="trace_action", required=True)
     trace_sub.add_parser("list", help="recent traces", parents=[fmt])
@@ -835,6 +859,8 @@ def main(argv: list[str] | None = None) -> int:
         return _query(args.text, args.top_k, fmt_arg)
     if args.command == "ask":
         return _ask(args.question, fmt_arg)
+    if args.command == "serve":
+        return _serve(args.host, args.port)
     if args.command == "trace":
         return _trace(
             args.trace_action, getattr(args, "id", None),
