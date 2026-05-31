@@ -20,7 +20,10 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   [`../tests/manual/test-runs/v0.2-phase-1-real-models.md`](../tests/manual/test-runs/v0.2-phase-1-real-models.md).
   Apple Silicon row is `validated 2026-05-30`. A full cumulative smoke walk
   (Phases 0–10 + v0.2-1) on the merged stack is captured at
-  [`../tests/manual/test-runs/smoke-walk-2026-05-30.md`](../tests/manual/test-runs/smoke-walk-2026-05-30.md).
+  [`../tests/manual/test-runs/smoke-walk-2026-05-30.md`](../tests/manual/test-runs/smoke-walk-2026-05-30.md);
+  the post-Phase-7 cumulative walk (v0.1 Phases 0–10 + v0.2 Phases 1–7, with the
+  backup `pg_dump`/libpq fix and the TUI Pilot verification) is at
+  [`../tests/manual/test-runs/smoke-walk-2026-05-31.md`](../tests/manual/test-runs/smoke-walk-2026-05-31.md).
 - **Phase 2 — Backup / restore (off-host)** (merged 2026-05-30, PR #32).
 - **Phase 3 — Scheduled curation daemon** (merged 2026-05-30, PR #33;
   ships ADR-012).

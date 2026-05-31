@@ -138,6 +138,14 @@ is keyboard-only: `d` dashboard, `s` sources, `p` pages, `w` workbench,
 `c` curation, `g` graph, `?` help, `q` quit. On the workbench and graph screens,
 press `/` to focus the search box (so the nav letters are not typed into it).
 
+> Non-interactive equivalent: the TUI is a full-screen interactive Textual app,
+> so 8.1–8.7 cannot be driven from a non-TTY shell (CI or an agent). The headless
+> equivalent is the Textual **Pilot** suite — `COMPENDIUM_EMBED_STUB=1
+> COMPENDIUM_SYNTH_STUB=1 uv run pytest tests/test_tui.py` — which boots the app,
+> reaches all six screens + the help modal, and drives the keyboard ingest →
+> synth → workbench-query → graph-browse session. Run that to verify the TUI
+> without a terminal; the manual walk below is for a human at a real terminal.
+
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
 | 8.1 | Launch + navigate | `uv run python -m compendium tui`, press `d`/`s`/`p`/`w`/`c`/`g`, then `?` | each screen renders; the footer lists the bindings; `?` shows the help modal; no mouse used. |
@@ -198,7 +206,7 @@ populated per `docs/operations/real-models.md`; `docker compose up -d`.
 | v0.2-1.2 | Qdrant point is real | after `uv run python -m compendium reindex all`, pull one point from the `chunks` Qdrant collection with vectors enabled | vector length 1024; L2 norm within 1e-3 of 1.0; the vector does not equal `StubEmbedder()._vector(body)` for the same chunk body |
 | v0.2-1.3 | Real synth output | `uv run python -m compendium synth concept "<name appearing in the corpus>"` | a vault page is written whose body starts with `# `, is at least 200 chars, and does not contain `stub synthesizer` |
 | v0.2-1.4 | Focused real-model walk | reindex (Phase 4) → query (Phase 5) → synth (Phase 3) → graph rebuild (Phase 6) → curate run (Phase 9) → trace inspection (Phase 7), all with stubs unset | every step exits 0; query coverage > 0.5 with no fallback for a corpus-covered query; synth wall-clock per concept < 30 s; capture into `test-runs/v0.2-phase-1-real-models.md` |
-| v0.2-1.5 | Hermetic suite still green | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest` | 86 passed, 2 deselected (the two live tests, correctly) |
+| v0.2-1.5 | Hermetic suite still green | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest` | the full suite passes; only the two `live` tests are deselected, no failures (as of v0.2 Phase 7: 209 passed, 1 skipped, 2 deselected — the absolute count grows each phase) |
 
 ## Phase 2 (v0.2) — Backup / restore
 
