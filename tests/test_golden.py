@@ -17,7 +17,15 @@ from alembic import command
 from alembic.config import Config
 
 from compendium.config import load_config
-from tests.golden import GoldenQuery, load_dataset
+from tests.golden import (
+    BASELINE_PATH,
+    BASELINE_TOLERANCE,
+    GoldenQuery,
+    compare_to_baseline,
+    compute_metrics,
+    load_dataset,
+    summarize,
+)
 from tests.golden.seed import seed_corpus
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -162,3 +170,59 @@ def test_regression_detector(golden_corpus, monkeypatch):
     )
     failures = [f for q in load_dataset() for f in _evaluate(q)]
     assert failures, "broken ranker did not trip any golden assertion"
+
+
+# --- v0.2 Phase 5: per-query metrics + baseline.json gate ----------------
+
+
+def _measure_all(queries: list[GoldenQuery]) -> dict:
+    """Run every golden query, compute metrics, return a serialisable dict."""
+    per_query: dict[str, dict] = {}
+    for q in queries:
+        result = _result_for(q)
+        per_query[q.id] = compute_metrics(result, q)
+    return {"per_query": per_query, **summarize(per_query)}
+
+
+@pytest.mark.golden
+def test_golden_baseline(golden_corpus, request, capsys):
+    """Compare live metrics to ``baseline.json``; report deltas, do not gate.
+
+    With ``--golden-baseline`` the runner regenerates ``baseline.json`` from
+    the live numbers. Without the flag, the runner compares against the
+    committed baseline and prints any deltas exceeding ``BASELINE_TOLERANCE``
+    to stdout for visibility; the test passes regardless.
+
+    The reason this is informational (not a strict gate) in v0.2 Phase 5a:
+    the Qdrant collection uses library-default HNSW parameters, whose
+    insertion order is non-deterministic across reindex cycles. Two
+    consecutive runs of identical code can flip a close-scoring page
+    between top-1 and top-2, producing MRR drift of 0.5 and coverage drift
+    of 0.5 on individual queries. Phase 5c lands explicit HNSW parameters
+    (``m``, ``ef_construct``, ``hnsw_ef``) which should stabilize the
+    metrics; only then does this assertion become strict. The existing
+    ``test_golden_dataset`` (``must_include_slug`` in ``top_k``) remains
+    the per-query semantic gate in the meantime.
+    """
+    import json
+
+    queries = load_dataset()
+    live = _measure_all(queries)
+
+    if request.config.getoption("--golden-baseline"):
+        BASELINE_PATH.write_text(json.dumps(live, indent=2, sort_keys=True) + "\n")
+        return
+
+    if not BASELINE_PATH.exists():
+        pytest.skip(
+            f"{BASELINE_PATH} not found; run `pytest -m golden --golden-baseline` once to capture"
+        )
+    baseline = json.loads(BASELINE_PATH.read_text())
+    deltas = compare_to_baseline(live, baseline, tolerance=BASELINE_TOLERANCE)
+    if deltas:
+        # Print to stdout so pytest -v / -s shows the deltas; do not assert.
+        with capsys.disabled():
+            print("\n[golden] metric drift vs baseline (informational only in 5a):")
+            for line in deltas:
+                print(f"  {line}")
+            print("  See test docstring; strict gate lands in Phase 5c.")

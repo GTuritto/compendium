@@ -1,0 +1,46 @@
+{
+  "by_category": {
+    "A": {
+      "coverage_score": 1.0,
+      "mrr": 0.75,
+      "recall_at_k": 1.0
+    },
+    "C": {
+      "coverage_score": 0.0,
+      "mrr": null,
+      "recall_at_k": null
+    },
+    "D": {
+      "coverage_score": 1.0,
+      "mrr": null,
+      "recall_at_k": null
+    }
+  },
+  "overall": {
+    "coverage_score": 0.75,
+    "mrr": 0.75,
+    "recall_at_k": 1.0
+  },
+  "per_query": {
+    "q_a_psych_safety": {
+      "coverage_score": 1.0,
+      "mrr": 0.5,
+      "recall_at_k": 1.0
+    },
+    "q_a_team_learning": {
+      "coverage_score": 1.0,
+      "mrr": 1.0,
+      "recall_at_k": 1.0
+    },
+    "q_c_unrelated": {
+      "coverage_score": 0.0,
+      "mrr": null,
+      "recall_at_k": null
+    },
+    "q_d_expansion": {
+      "coverage_score": 1.0,
+      "mrr": null,
+      "recall_at_k": null
+    }
+  }
+}
