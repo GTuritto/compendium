@@ -1,8 +1,10 @@
 """v0.2 Phase 6 composed-answers tests.
 
-Sub-phase 6a (here): the ``ask_traces`` schema round-trip — needs a migrated
-``compendium_test`` database; skips when PostgreSQL is unreachable. The composer
-unit tests (6b) and the CLI integration test (6c) are appended in later commits.
+Unit tests for the composer (refusal, citations, rewrite, cost) run anywhere
+with the stub/fake answerer and an injected retrieval result — no database. The
+``ask_traces`` schema round-trip and the CLI end-to-end test are integration
+tests that need a migrated ``compendium_test`` database and skip when a store is
+unreachable.
 """
 
 from __future__ import annotations
@@ -16,11 +18,128 @@ from alembic import command
 from alembic.config import Config
 from psycopg.rows import dict_row
 
+from compendium.answer import ask
+from compendium.answer.cost import estimate_cost
+from compendium.answer.llm import Completion, StubAnswerer
+from compendium.answer.rewrite import rewrite_query
 from compendium.config import load_config
 from compendium.db import repository
+from compendium.retrieve.pipeline import PageResult, RetrievalResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _TEST_DB = "compendium_test"
+
+
+# --- unit: the composer (no database) --------------------------------------
+
+
+class _FakeAnswerer:
+    """Records its calls and applies a visible rewrite transform."""
+
+    model = "claude-sonnet-4-5"
+    endpoint = "https://test"
+
+    def __init__(self) -> None:
+        self.rewrote: str | None = None
+        self.composed: tuple[str, str] | None = None
+
+    def rewrite(self, question: str) -> Completion:
+        self.rewrote = question
+        return Completion(f"REWRITTEN:{question}", 5, 3)
+
+    def compose(self, question, context, *, on_token=None) -> Completion:
+        self.composed = (question, context)
+        text = "Psychological safety is a shared team belief [1]."
+        if on_token is not None:
+            on_token(text)
+        return Completion(text, 10, 4)
+
+
+def _page(slug: str, title: str) -> PageResult:
+    return PageResult(
+        entity_id=slug, title=title, slug=slug, kind="concept",
+        status="canonical", score=1.0,
+    )
+
+
+def _result(coverage: float, pages: list[PageResult], gaps=None) -> RetrievalResult:
+    return RetrievalResult(
+        query_text="q", pages=pages, coverage_score=coverage,
+        fallback_to_chunks=coverage < 0.5, citations=[], gaps=gaps or [], trace={},
+    )
+
+
+def test_covered_question_answers_with_citations_and_streams():
+    answerer = _FakeAnswerer()
+    seen_query: dict[str, str] = {}
+    streamed: list[str] = []
+
+    def retrieve(query_text: str) -> RetrievalResult:
+        seen_query["q"] = query_text
+        return _result(0.82, [_page("psych-safety", "Psychological Safety"), _page("trust", "Trust")])
+
+    result = ask(
+        "What is psych safety?", on_token=streamed.append,
+        answerer=answerer, _retrieve=retrieve,
+    )
+
+    assert result.refused is False
+    assert result.answer == "Psychological safety is a shared team belief [1]."
+    assert streamed == [result.answer]  # streamed via on_token
+    assert seen_query["q"] == "REWRITTEN:What is psych safety?"  # rewrite drove retrieval
+    assert [c.trace_rank for c in result.citations] == [1, 2]
+    assert result.citations[0].ref == "[1]"
+    assert result.citations[0].slug == "psych-safety"
+    assert result.citations[0].title == "Psychological Safety"
+    assert answerer.composed is not None
+
+
+def test_uncovered_question_refuses_without_composing():
+    answerer = _FakeAnswerer()
+    result = ask("something obscure", answerer=answerer, _retrieve=lambda q: _result(0.1, []))
+
+    assert result.refused is True
+    assert result.answer is None
+    assert result.citations == []
+    assert result.gap is not None and result.gap["kind"] == "low_coverage"
+    assert result.suggested_actions and "compendium ingest" in result.suggested_actions[0]
+    assert answerer.composed is None  # no composition call on refusal
+    assert answerer.rewrote == "something obscure"  # rewrite still ran
+
+
+def test_refusal_with_pages_suggests_synth():
+    result = ask(
+        "thin topic", answerer=_FakeAnswerer(),
+        _retrieve=lambda q: _result(0.2, [_page("x", "X Concept")]),
+    )
+    assert result.refused is True
+    assert result.suggested_actions == ['compendium synth concept "X Concept"']
+
+
+def test_rewrite_step_passthrough_when_disabled():
+    answerer = _FakeAnswerer()
+    disabled = rewrite_query("a question", answerer, enabled=False)
+    assert disabled.text == "a question"
+    assert disabled.input_tokens == 0 and disabled.output_tokens == 0
+    assert answerer.rewrote is None  # no call made
+
+    enabled = rewrite_query("a question", answerer, enabled=True)
+    assert enabled.text == "REWRITTEN:a question"
+    assert answerer.rewrote == "a question"
+
+
+def test_stub_answerer_is_deterministic_and_streams():
+    stub = StubAnswerer()
+    chunks: list[str] = []
+    completion = stub.compose("q", "[1] Page", on_token=chunks.append)
+    assert completion.text and chunks == [completion.text]
+    assert completion.input_tokens > 0 and completion.output_tokens > 0
+
+
+def test_cost_estimate_uses_rate_table_with_zero_fallback():
+    assert estimate_cost("claude-sonnet-4-5", 1000, 1000) == pytest.approx(0.018)
+    assert estimate_cost("unknown-model", 1000, 1000) == 0.0
+    assert estimate_cost("stub", 100, 50) == 0.0
 
 
 def _swap_db(url: str, dbname: str) -> str:
