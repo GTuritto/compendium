@@ -45,6 +45,14 @@ retrieval:
   page_coverage_threshold: 0.5
   top_k: 7
 
+# Composed answers (`compendium ask`, v0.2 Phase 6). The LLM endpoint/model/key
+# reuse the `synthesis:` block above. Below `refuse_below_coverage`, ask refuses
+# (no composition call) and names the next CLI command instead of answering.
+ask:
+  refuse_below_coverage: 0.3
+  prompt_template_id: ask-v1
+  rewrite: true          # LLM query rewrite (Shape D part 2); ask-only, off the query hot path
+
 # Fast-loop graph expansion (ADR-009, Phase 9). Walks semantic edges from the
 # top fused pages; a no-op when disabled, when no semantic edges exist, or when
 # Memgraph is unreachable.

@@ -692,6 +692,80 @@ def list_query_traces(conn: psycopg.Connection, limit: int = 20) -> list[dict[st
     ).fetchall()
 
 
+# --- ask traces (v0.2 Phase 6) ---------------------------------------------
+
+
+def insert_ask_trace(
+    conn: psycopg.Connection,
+    *,
+    query_trace_id: str | UUID,
+    prompt_template_id: str,
+    model: str,
+    endpoint: str,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    cost_estimate: float | None,
+    answer_text: str | None,
+    refused: bool,
+) -> UUID:
+    """Insert one ``ask_traces`` row and return its id.
+
+    Joined to the ``query_traces`` row produced by the retrieval via
+    ``query_trace_id``. A refusal still writes a row (``refused=true``,
+    ``answer_text`` null). Every ``compendium ask`` writes exactly one row.
+    """
+    row = conn.execute(
+        """
+        INSERT INTO ask_traces (
+            query_trace_id, prompt_template_id, model, endpoint,
+            input_tokens, output_tokens, cost_estimate, answer_text, refused
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            str(query_trace_id),
+            prompt_template_id,
+            model,
+            endpoint,
+            input_tokens,
+            output_tokens,
+            cost_estimate,
+            answer_text,
+            refused,
+        ),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
+def get_ask_trace(conn: psycopg.Connection, ask_trace_id: str | UUID) -> dict[str, Any] | None:
+    """A single ``ask_traces`` row by id, or None."""
+    return conn.execute(
+        "SELECT * FROM ask_traces WHERE id = %s", (str(ask_trace_id),)
+    ).fetchone()
+
+
+def get_ask_trace_with_query(
+    conn: psycopg.Connection, ask_trace_id: str | UUID
+) -> dict[str, Any] | None:
+    """An ``ask_traces`` row joined to its ``query_traces`` row, or None.
+
+    The query trace's text and coverage ride alongside the ask trace under the
+    ``query_text`` and ``query_coverage_score`` keys.
+    """
+    return conn.execute(
+        """
+        SELECT a.*, q.query_text AS query_text,
+               q.coverage_score AS query_coverage_score
+        FROM ask_traces a
+        JOIN query_traces q ON q.id = a.query_trace_id
+        WHERE a.id = %s
+        """,
+        (str(ask_trace_id),),
+    ).fetchone()
+
+
 def resolve_page_by_slug(
     conn: psycopg.Connection, slug: str
 ) -> dict[str, Any] | None:

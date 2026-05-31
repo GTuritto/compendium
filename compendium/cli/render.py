@@ -247,6 +247,52 @@ def query(result: Any, pages: list[Any], fmt: Format = "text") -> str:
     return "\n".join(lines)
 
 
+def ask(result: Any, fmt: Format = "text", *, answer_streamed: bool = False) -> str:
+    """Render an ``AskResult`` (v0.2 Phase 6).
+
+    ``--format json`` emits the full structured object. In text mode a refusal
+    prints the gap and suggested actions; a composed answer prints the answer
+    (unless ``answer_streamed``, when it was already streamed to stdout by the
+    handler), then the citation block and the trace footer.
+    """
+    if fmt == "json":
+        return to_json(
+            {
+                "answer": result.answer,
+                "refused": result.refused,
+                "citations": [asdict(c) for c in result.citations],
+                "coverage_score": result.coverage_score,
+                "trace_id": result.trace_id,
+                "ask_trace_id": result.ask_trace_id,
+                "gap": result.gap,
+                "suggested_actions": result.suggested_actions,
+            }
+        )
+
+    footer = (
+        f"coverage {fmt_coverage(result.coverage_score)}  "
+        f"trace {result.trace_id or '-'}  ask_trace {result.ask_trace_id or '-'}"
+    )
+    if result.refused:
+        lines = ["refused: coverage below threshold (no answer composed)"]
+        if result.gap:
+            lines.append(f"  gap: {fmt_payload(result.gap)}")
+        if result.suggested_actions:
+            lines.append("  suggested actions:")
+            lines += [f"    - {a}" for a in result.suggested_actions]
+        lines.append(footer)
+        return "\n".join(lines)
+
+    lines = []
+    if not answer_streamed:
+        lines.append(result.answer or "")
+    lines.append("citations:")
+    for c in result.citations:
+        lines.append(f"  {c.ref} {c.title} ({c.slug})  trace_rank={c.trace_rank}")
+    lines.append(footer)
+    return "\n".join(lines)
+
+
 def trace_list(rows: list[dict], fmt: Format = "text") -> str:
     if fmt == "json":
         return to_json(rows)

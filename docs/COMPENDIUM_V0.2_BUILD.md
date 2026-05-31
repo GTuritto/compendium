@@ -40,7 +40,20 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   inline synonym filter sourced from page aliases, regenerated on
   every `compendium reindex`; Qdrant HNSW parameters set
   explicitly. See [`operations/retrieval-tuning.md`](operations/retrieval-tuning.md).
-- Phases 6 → 8 — not started.
+- **Phase 6 — Composed answers (`ask`)** (merged 2026-05-31, PR #36):
+  `compendium ask "<question>"` returns an LLM-composed answer over
+  the top-K pages with structured page-anchored citations
+  (`{ref, slug, title, trace_rank}`), a refusal mode below
+  `ask.refuse_below_coverage` (default `0.3`) that names the next CLI
+  command instead of answering, an LLM query rewrite as the prompt's
+  first step (Shape D part 2, `ask`-only — the `query` hot path stays
+  LLM-free), and streaming `--format text` output. A new `ask_traces`
+  table (migration `0012`) records the prompt template id, model +
+  endpoint, token counts, a best-effort cost estimate, and the answer
+  text, joined to `query_traces` by `query_trace_id`. The composer
+  (`compendium/answer/`) reuses `pipeline.query` and the `SYNTHESIS_*`
+  config; it never re-retrieves. See [`operations/ask.md`](operations/ask.md).
+- Phases 7 → 8 — not started.
 
 ## v0.2 thesis
 

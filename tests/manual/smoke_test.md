@@ -281,3 +281,24 @@ invocation).
 | v0.2-5.4 | Query normalization end-to-end | `uv run python -m compendium query "The Psychological Safety concept"` | the latest `query_traces` row has `query_text="The Psychological Safety concept"` (raw) and `pipeline->>'normalized_query'='psychological safety concept'` (lowercased + stop-words stripped); the canonical concept page is at top-K |
 | v0.2-5.5 | Alias expansion via synonym filter | `uv run python -m compendium query "psych safety"` (against a corpus where the `psychological-safety` concept carries the `psych safety` alias) | the canonical concept page returns at top-K; the OpenSearch query against `body:psych safety` returns the page even though the body never literally contains `"psych safety"` (the synonym filter expanded it at index time) |
 | v0.2-5.6 | Tuning loop end-to-end | follow `docs/operations/retrieval-tuning.md` § "The tuning loop" — capture before, change one knob, reindex, capture after, diff | the diff shows the new baseline; per-query `test_golden_dataset` still passes; aggregate metric movement is the operator's directional signal |
+
+## Phase 6 (v0.2) — Composed answers (`ask`)
+
+Opt-in walk that exercises `compendium ask`: a covered question (answer with
+citations), an uncovered question (refusal with suggested actions), and the
+`ask_traces` row joined to `query_traces`. The operational reference is
+[../docs/operations/ask.md](../docs/operations/ask.md).
+
+Prerequisites: stores up; `.env` populated; a populated wiki (run the earlier
+phases' seeding or ingest a source + synth a concept first). The LLM uses the
+`SYNTHESIS_*` config; set `COMPENDIUM_SYNTH_STUB=1` to walk it deterministically
+with no network or cost (answers are stub text, but the structure, refusal, and
+traces are real).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-6.1 | Covered question answered + streamed | `uv run python -m compendium ask "<a question the corpus covers>"` | the composed answer streams to stdout token by token, then a `citations:` block (each `[n] Title (slug)  trace_rank=n`) and a footer (`coverage …  trace …  ask_trace …`); exit 0 |
+| v0.2-6.2 | Uncovered question refused | `uv run python -m compendium ask "an utterly unrelated question about nothing in the corpus"` | `refused`, no answer, a `gap:` line, and `suggested actions:` naming the next CLI command (`compendium ingest …` when nothing covers it, else `compendium synth concept "…"`); exit 0 |
+| v0.2-6.3 | `ask_traces` row joined to `query_traces` | after v0.2-6.1: `psql "$POSTGRES_URL" -c "SELECT a.prompt_template_id, a.model, a.input_tokens, a.output_tokens, a.cost_estimate, a.refused, q.query_text FROM ask_traces a JOIN query_traces q ON q.id = a.query_trace_id ORDER BY a.created_at DESC LIMIT 1;"` | one row: `prompt_template_id=ask-v1`, the model + token counts + a cost estimate, `refused=f`, and the joined `query_text` (the rewritten retrieval query) |
+| v0.2-6.4 | JSON contract | `uv run python -m compendium ask "<a covered question>" --format json` | stdout is exactly one JSON object with `answer`, `refused`, `citations` (each `{ref, slug, title, trace_rank}`), `coverage_score`, `trace_id`, `ask_trace_id`, `gap`, `suggested_actions` |
+| v0.2-6.5 | Refusal also writes an ask trace | after v0.2-6.2: `psql "$POSTGRES_URL" -c "SELECT refused, answer_text FROM ask_traces ORDER BY created_at DESC LIMIT 1;"` | one row with `refused=t` and a null `answer_text` |
