@@ -87,10 +87,11 @@ No schema migration, no data destruction. The OpenSearch index needs to be re-cr
 
 Rollback is removing the new code, reverting `pipeline.py` / `opensearch.py` / `qdrant.py` changes, deleting the operational doc and `baseline.json`. The pre-Phase-5 ranking quality returns on the next reindex.
 
-## Open Questions
+## Open Questions — resolved at the review gate (2026-05-31)
 
-- **Tolerance value.** `0.01` absolute is the proposal. Recommendation: confirm. A future phase can tighten as the corpus grows and metrics stabilize.
-- **Are synonyms one-directional (alias → canonical) or bidirectional?** OpenSearch's `synonym` filter accepts both. Recommendation: one-directional (`alias_a, alias_b => canonical`) so the canonical token always wins. Bidirectional would let queries containing the canonical match documents that only have an alias — a more permissive recall but a harder precision story.
-- **Should the normalizer drop stop-words BEFORE alias expansion or AFTER?** If "psychological safety" is a canonical name and "the psychological safety concept" is the query, stripping `the` first lets the alias-expansion check `psychological safety concept` which would not match. Recommendation: stop-words first (drop "the" → "psychological safety concept"), then alias expansion (no match → return as-is). The risk: a future alias `the X` would never match. Acceptable; aliases are normally noun phrases.
-- **Where does `synonyms.txt` live on disk?** OpenSearch needs a path it can read at index-creation time. Recommendation: a sub-path under the OpenSearch container's config dir, mounted from the host's `./synonyms/` (gitignored). The reindex helper writes the file before issuing the index-create call.
-- **Qdrant HNSW starting parameters.** Proposal: `m=16, ef_construct=128, hnsw_ef=64`. Recommendation: confirm as the starting point for the tuning loop; the loop in 5c may move them.
+- **Baseline regeneration mechanism.** RESOLVED: pytest flag (`--golden-baseline`); no new CLI verb.
+- **Tolerance value.** RESOLVED: `0.01` absolute.
+- **Synonym direction.** RESOLVED: one-directional (`alias_a, alias_b => canonical_title`). The canonical token always wins.
+- **Normalizer ordering.** RESOLVED: lowercase → stop-words → alias expansion. Drop `the` etc. before the alias check.
+- **`synonyms.txt` location.** RESOLVED: a sub-path under the OpenSearch container's config dir, mounted from the host's `./synonyms/` (gitignored). The reindex helper writes the file before issuing the index-create call.
+- **Qdrant HNSW starting parameters.** RESOLVED: `m=16, ef_construct=128, hnsw_ef=64` as the starting point for the loop in 5c; the loop may revise.
