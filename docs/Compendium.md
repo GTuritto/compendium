@@ -553,7 +553,7 @@ The extractor runs as a generator inside `compendium/curate/` and is invoked by 
 
 ### ADR-011: Callable access surface — MCP + HTTP (v0.2)
 
-**Status:** Accepted (v0.2). Reverses, narrowly, the v0.1 exclusion-list lines *"CLI + TUI only"*, *"No web UI in v0.1"*, *"Not a chat UI"*.
+**Status:** Accepted (v0.2 Phase 7, shipped 2026-05-31 via PR #38). Reverses, narrowly, the v0.1 exclusion-list lines *"CLI + TUI only"*, *"No web UI in v0.1"*, *"Not a chat UI"*: `compendium serve` (FastAPI on `127.0.0.1`, no auth) and `compendium mcp` (MCP stdio) expose six verbs over one shared facade. Localhost/stdio, colocated callers only; auth, TLS, and network-exposed transports stay deferred to v0.3+.
 
 #### Context
 
