@@ -302,3 +302,27 @@ traces are real).
 | v0.2-6.3 | `ask_traces` row joined to `query_traces` | after v0.2-6.1: `psql "$POSTGRES_URL" -c "SELECT a.prompt_template_id, a.model, a.input_tokens, a.output_tokens, a.cost_estimate, a.refused, q.query_text FROM ask_traces a JOIN query_traces q ON q.id = a.query_trace_id ORDER BY a.created_at DESC LIMIT 1;"` | one row: `prompt_template_id=ask-v1`, the model + token counts + a cost estimate, `refused=f`, and the joined `query_text` (the rewritten retrieval query) |
 | v0.2-6.4 | JSON contract | `uv run python -m compendium ask "<a covered question>" --format json` | stdout is exactly one JSON object with `answer`, `refused`, `citations` (each `{ref, slug, title, trace_rank}`), `coverage_score`, `trace_id`, `ask_trace_id`, `gap`, `suggested_actions` |
 | v0.2-6.5 | Refusal also writes an ask trace | after v0.2-6.2: `psql "$POSTGRES_URL" -c "SELECT refused, answer_text FROM ask_traces ORDER BY created_at DESC LIMIT 1;"` | one row with `refused=t` and a null `answer_text` |
+
+## Phase 7 (v0.2) — Access surface (MCP + HTTP)
+
+Opt-in walk that exercises `compendium serve` (HTTP on `127.0.0.1`) and
+`compendium mcp` (stdio). The operational reference is
+[../docs/operations/access-surface.md](../docs/operations/access-surface.md).
+
+Prerequisites: stores up; `.env` populated; a populated wiki (run the earlier
+phases' seeding or ingest a source first). The LLM uses the `SYNTHESIS_*`
+config; set `COMPENDIUM_SYNTH_STUB=1` (and `COMPENDIUM_EMBED_STUB=1` if you
+seeded with stub embeddings) to walk it deterministically with no network cost.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-7.1 | Start the HTTP server | `uv run python -m compendium serve &` then `curl -s 127.0.0.1:8787/index_status` | JSON `IndexStatusReport` (opensearch/qdrant counts + sync-lag); server bound to `127.0.0.1` |
+| v0.2-7.2 | `query` over HTTP | `curl -s -XPOST 127.0.0.1:8787/query -H 'content-type: application/json' -d '{"text":"psychological safety"}'` | JSON `RetrievalResult` — ranked `pages`, `coverage_score`, `trace_id` |
+| v0.2-7.3 | `ingest` raw bytes auto-syncs | `curl -s -XPOST 127.0.0.1:8787/ingest -H 'content-type: application/json' -d "{\"kind\":\"note\",\"filename\":\"sr.md\",\"content_base64\":\"$(printf '# Spaced Repetition\n\nSpaced repetition schedules reviews at increasing intervals.' | base64)\"}"` then repeat v0.2-7.2 for "spaced repetition intervals" | `IngestResult` (status + source_id + chunk_count); the follow-up `query` finds the new source without a manual reindex (the surface ran `index sync`) |
+| v0.2-7.4 | `ask` over HTTP (covered + refusal) | `curl -s -XPOST 127.0.0.1:8787/ask -H 'content-type: application/json' -d '{"question":"What is psychological safety?"}'` then an off-topic question | covered → `answer` + `citations[]` (`[1] {ref,slug,title,trace_rank}`) + `ask_trace_id`, `refused=false`; off-topic on a small corpus may still answer (coverage is structural) — raise `ask.refuse_below_coverage` to see `refused=true` + `suggested_actions` |
+| v0.2-7.5 | `ask` streaming | `curl -sN -XPOST 127.0.0.1:8787/ask/stream -H 'content-type: application/json' -d '{"question":"What is psychological safety?"}'` | the answer text arrives in chunks, then a final JSON line with `citations`, `coverage_score`, `trace_id`, `ask_trace_id` |
+| v0.2-7.6 | `page_list` / `page_get` | `curl -s '127.0.0.1:8787/page_list?kind=source'` then `curl -s '127.0.0.1:8787/page_get?kind=source&slug=<slug>'` | a filtered, newest-first page list; then frontmatter + body Markdown for the slug (404 for an unknown slug) |
+| v0.2-7.7 | MCP from a client | point an MCP-aware client at the command `uv run python -m compendium mcp`; `list_tools`; invoke `query` and `ask` | six tools listed (`query, ask, ingest, page_get, page_list, index_status`); `query` returns ranked pages; `ask` returns a composed answer (tokens stream as log notifications) with citations |
+| v0.2-7.8 | Loopback-only posture | from another host on the LAN, `curl --max-time 3 http://<this-host-ip>:8787/index_status` | connection refused / times out — the server bound `127.0.0.1` only (no auth, no exposure) |
+
+Stop the server: `kill %1` (or the `serve` PID).
