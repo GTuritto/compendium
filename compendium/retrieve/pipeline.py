@@ -25,6 +25,7 @@ from compendium.retrieve import search
 from compendium.retrieve.clients import async_opensearch_client, async_qdrant_client
 from compendium.retrieve.coverage import coverage_score
 from compendium.retrieve.fusion import FusedHit, reciprocal_rank_fusion
+from compendium.retrieve.normalize import AliasIndex, normalize_query
 
 # Candidate pool fetched from each store before fusion. Larger than top_k so
 # fusion has material to work with; the final ranking is trimmed to top_k.
@@ -138,10 +139,19 @@ async def run(
     os_client: Any | None = None,
     qd_client: Any | None = None,
     corpus_revision: str | None = None,
+    alias_index: AliasIndex | None = None,
 ) -> RetrievalResult:
     """Run the page-first pipeline. Clients/embedder are injectable for tests."""
     rrf_k, threshold, top_k = _retrieval_params()
     embedder = embedder or get_embedder()
+
+    # v0.2 Phase 5: rule-based normalization runs before fan-out.
+    # Lowercase → strip stop-words → alias expansion. The fan-out and the
+    # embedding use the normalized text; the raw text is preserved on the
+    # trace's `query_text` field for replay and history.
+    raw_query = query_text
+    normalized = normalize_query(query_text, alias_index)
+    query_text = normalized or raw_query
 
     owns_clients = os_client is None and qd_client is None
     os_client = os_client or async_opensearch_client()
@@ -218,7 +228,7 @@ async def run(
             gaps = [
                 {
                     "kind": "low_coverage",
-                    "query": query_text,
+                    "query": raw_query,
                     "coverage_score": coverage,
                     "threshold": threshold,
                 }
@@ -244,10 +254,14 @@ async def run(
     ]
     trace = {
         "corpus_revision": corpus_revision,
-        "query_text": query_text,
+        # The trace preserves the raw user input for replay / history; the
+        # normalized form rides in `pipeline.normalized_query` for v0.2
+        # Phase 5 (Shape D part 1, rule-based normalization).
+        "query_text": raw_query,
         "embedding_model": _embedding_model_name(),
         "query_embedding": query_vector,
         "pipeline": {
+            "normalized_query": query_text,
             "opensearch_pages": _stage_candidates(os_pages),
             "qdrant_pages": _stage_candidates(qd_pages),
             "fused_pages": _fused_candidates(fused_pages),
@@ -264,7 +278,7 @@ async def run(
     }
 
     return RetrievalResult(
-        query_text=query_text,
+        query_text=raw_query,
         pages=pages,
         coverage_score=coverage,
         fallback_to_chunks=fallback,
