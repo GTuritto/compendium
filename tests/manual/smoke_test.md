@@ -260,3 +260,24 @@ with a previously-failed `broken.pdf`.
 | v0.2-4.4 | Status reports the counts | `uv run python -m compendium inbox status --path /tmp/cdb-inbox-smoke` | text block shows `watcher_loaded=True, processed today=1, failed today=1`, `most_recent_processed` and `most_recent_failed` populated. `--format json` emits the same as a JSON object. Exit 0. |
 | v0.2-4.5 | Skip-filter ignores `.crdownload` | `cp tests/fixtures/sample.pdf /tmp/cdb-inbox-smoke/paper/x.pdf.crdownload` then `compendium inbox process --path /tmp/cdb-inbox-smoke` | the `.crdownload` file remains under `paper/`; no new `sources` row; the summary reports `skipped=1` |
 | v0.2-4.6 | Uninstall + idempotent uninstall | `uv run python -m compendium inbox uninstall` then again; then `uv run python -m compendium inbox status --path /tmp/cdb-inbox-smoke` | first uninstall removes the watcher unit and exits 0; second exits 0 with "not installed"; status reports `watcher_loaded=False` but still shows the file counts (the inbox directory and contents are preserved); exit 0 |
+
+## Phase 5 (v0.2) — Retrieval tuning
+
+Opt-in walk that exercises `tests/golden/baseline.json`, the
+`--golden-baseline` regeneration flag, the rule-based query
+normalizer, and the OpenSearch synonym filter + Qdrant HNSW
+parameters. The operational reference is
+[../docs/operations/retrieval-tuning.md](../docs/operations/retrieval-tuning.md).
+
+Prerequisites: stores up; `.env` populated; the golden corpus
+fixture (the test seeds it under `compendium_golden` on first
+invocation).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-5.1 | Baseline regenerates cleanly | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest -m golden --golden-baseline -q` | `tests/golden/baseline.json` is rewritten with the current per-query and aggregated metrics; the golden suite passes (no comparison gate) |
+| v0.2-5.2 | Default golden run compares + prints deltas | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest -m golden -q` | the suite passes; `test_golden_baseline` prints any drift > `0.01` absolute to stdout informationally (not gated in v0.2 Phase 5) |
+| v0.2-5.3 | Existing per-query gate still holds | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run pytest tests/test_golden.py::test_golden_dataset -m golden -q` | passes — every query's `must_include_slug` is in its `top_k` |
+| v0.2-5.4 | Query normalization end-to-end | `uv run python -m compendium query "The Psychological Safety concept"` | the latest `query_traces` row has `query_text="The Psychological Safety concept"` (raw) and `pipeline->>'normalized_query'='psychological safety concept'` (lowercased + stop-words stripped); the canonical concept page is at top-K |
+| v0.2-5.5 | Alias expansion via synonym filter | `uv run python -m compendium query "psych safety"` (against a corpus where the `psychological-safety` concept carries the `psych safety` alias) | the canonical concept page returns at top-K; the OpenSearch query against `body:psych safety` returns the page even though the body never literally contains `"psych safety"` (the synonym filter expanded it at index time) |
+| v0.2-5.6 | Tuning loop end-to-end | follow `docs/operations/retrieval-tuning.md` § "The tuning loop" — capture before, change one knob, reindex, capture after, diff | the diff shows the new baseline; per-query `test_golden_dataset` still passes; aggregate metric movement is the operator's directional signal |

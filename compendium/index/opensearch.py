@@ -14,92 +14,138 @@ from opensearchpy import OpenSearch
 PAGES_INDEX = "pages"
 CHUNKS_INDEX = "chunks"
 
-# Shared analysis block: the custom analyzer and the filters it references.
-_ANALYSIS = {
-    "analyzer": {
-        "compendium_text": {
-            "type": "custom",
-            "tokenizer": "standard",
-            "filter": ["lowercase", "asciifolding", "english_stop", "english_stemmer"],
-        }
-    },
-    "filter": {
+
+def _analysis(synonyms: list[str] | None = None) -> dict:
+    """Build the analysis block.
+
+    The ``compendium_text`` analyzer chain is:
+    ``standard tokenizer → lowercase → asciifolding → synonyms? → english_stop → english_stemmer``.
+    The synonym filter runs **before** the stemmer so the source aliases are
+    matched on their literal lowercased form, not on stemmed tokens (v0.2
+    Phase 5).
+    """
+    filters = ["lowercase", "asciifolding"]
+    filter_defs: dict[str, Any] = {
         "english_stop": {"type": "stop", "stopwords": "_english_"},
         "english_stemmer": {"type": "stemmer", "language": "english"},
-    },
-}
-
-_PAGES_BODY = {
-    "settings": {"number_of_shards": 1, "number_of_replicas": 0, "analysis": _ANALYSIS},
-    "mappings": {
-        "dynamic": "strict",
-        "properties": {
-            "id": {"type": "keyword"},
-            "kind": {"type": "keyword"},
-            "title": {
-                "type": "text",
-                "analyzer": "compendium_text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            },
-            "slug": {"type": "keyword"},
-            "status": {"type": "keyword"},
-            "corpus_revision": {"type": "keyword"},
-            "topic_ids": {"type": "keyword"},
-            "parent_topic_id": {"type": "keyword"},
-            "source_id": {"type": "keyword"},
-            "source_kind": {"type": "keyword"},
-            "inspection_status": {"type": "keyword"},
-            "aliases": {"type": "text", "analyzer": "compendium_text"},
-            "body": {"type": "text", "analyzer": "compendium_text"},
-            "created_at": {"type": "date"},
-            "updated_at": {"type": "date"},
+    }
+    if synonyms:
+        filters.append("compendium_synonyms")
+        filter_defs["compendium_synonyms"] = {
+            "type": "synonym",
+            "synonyms": list(synonyms),
+        }
+    filters.extend(["english_stop", "english_stemmer"])
+    return {
+        "analyzer": {
+            "compendium_text": {
+                "type": "custom",
+                "tokenizer": "standard",
+                "filter": filters,
+            }
         },
-    },
-}
+        "filter": filter_defs,
+    }
 
-_CHUNKS_BODY = {
-    "settings": {"number_of_shards": 1, "number_of_replicas": 0, "analysis": _ANALYSIS},
-    "mappings": {
-        "dynamic": "strict",
-        "properties": {
-            "id": {"type": "keyword"},
-            "source_id": {"type": "keyword"},
-            "source_kind": {"type": "keyword"},
-            "source_title": {
-                "type": "text",
-                "analyzer": "compendium_text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            },
-            "position": {"type": "integer"},
-            "parent_section": {"type": "keyword"},
-            "body": {"type": "text", "analyzer": "compendium_text"},
-            "token_count": {"type": "integer"},
-            "created_at": {"type": "date"},
+
+def _pages_body(synonyms: list[str] | None = None) -> dict:
+    return {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "analysis": _analysis(synonyms),
         },
-    },
-}
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "id": {"type": "keyword"},
+                "kind": {"type": "keyword"},
+                "title": {
+                    "type": "text",
+                    "analyzer": "compendium_text",
+                    "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                },
+                "slug": {"type": "keyword"},
+                "status": {"type": "keyword"},
+                "corpus_revision": {"type": "keyword"},
+                "topic_ids": {"type": "keyword"},
+                "parent_topic_id": {"type": "keyword"},
+                "source_id": {"type": "keyword"},
+                "source_kind": {"type": "keyword"},
+                "inspection_status": {"type": "keyword"},
+                "aliases": {"type": "text", "analyzer": "compendium_text"},
+                "body": {"type": "text", "analyzer": "compendium_text"},
+                "created_at": {"type": "date"},
+                "updated_at": {"type": "date"},
+            },
+        },
+    }
 
-_BODIES = {PAGES_INDEX: _PAGES_BODY, CHUNKS_INDEX: _CHUNKS_BODY}
+
+def _chunks_body(synonyms: list[str] | None = None) -> dict:
+    return {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "analysis": _analysis(synonyms),
+        },
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "id": {"type": "keyword"},
+                "source_id": {"type": "keyword"},
+                "source_kind": {"type": "keyword"},
+                "source_title": {
+                    "type": "text",
+                    "analyzer": "compendium_text",
+                    "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                },
+                "position": {"type": "integer"},
+                "parent_section": {"type": "keyword"},
+                "body": {"type": "text", "analyzer": "compendium_text"},
+                "token_count": {"type": "integer"},
+                "created_at": {"type": "date"},
+            },
+        },
+    }
 
 
-def recreate_index(client: OpenSearch, index: str) -> None:
-    """Drop the index if present and create it from its schema."""
+def _body_for(index: str, synonyms: list[str] | None = None) -> dict:
+    if index == PAGES_INDEX:
+        return _pages_body(synonyms)
+    if index == CHUNKS_INDEX:
+        return _chunks_body(synonyms)
+    raise ValueError(f"unknown index: {index}")
+
+
+def recreate_index(
+    client: OpenSearch, index: str, *, synonyms: list[str] | None = None
+) -> None:
+    """Drop the index if present and create it from its schema.
+
+    When ``synonyms`` is provided, the ``compendium_text`` analyzer gains an
+    inline ``synonym`` filter before the stemmer.
+    """
     if client.indices.exists(index=index):
         client.indices.delete(index=index)
-    client.indices.create(index=index, body=_BODIES[index])
+    client.indices.create(index=index, body=_body_for(index, synonyms))
 
 
-def create_indexes(client: OpenSearch) -> None:
+def create_indexes(
+    client: OpenSearch, *, synonyms: list[str] | None = None
+) -> None:
     """Create both indexes from their schemas, dropping any existing ones."""
-    recreate_index(client, PAGES_INDEX)
-    recreate_index(client, CHUNKS_INDEX)
+    recreate_index(client, PAGES_INDEX, synonyms=synonyms)
+    recreate_index(client, CHUNKS_INDEX, synonyms=synonyms)
 
 
-def ensure_indexes(client: OpenSearch) -> None:
+def ensure_indexes(
+    client: OpenSearch, *, synonyms: list[str] | None = None
+) -> None:
     """Create the indexes only if they do not already exist (non-destructive)."""
     for index in (PAGES_INDEX, CHUNKS_INDEX):
         if not client.indices.exists(index=index):
-            client.indices.create(index=index, body=_BODIES[index])
+            client.indices.create(index=index, body=_body_for(index, synonyms))
 
 
 def index_document(

@@ -18,7 +18,11 @@ from opensearchpy import AsyncOpenSearch
 from qdrant_client import AsyncQdrantClient
 
 from compendium.index.opensearch import CHUNKS_INDEX, PAGES_INDEX
-from compendium.index.qdrant import CHUNKS_COLLECTION, PAGES_COLLECTION
+from compendium.index.qdrant import (
+    CHUNKS_COLLECTION,
+    PAGES_COLLECTION,
+    SEARCH_PARAMS as _QDRANT_SEARCH_PARAMS,
+)
 
 # Fields the page multi_match searches, with a title boost.
 _PAGE_FIELDS = ["title^2", "aliases", "body"]
@@ -97,6 +101,7 @@ async def qdrant_pages(
         limit=size,
         with_payload=True,
         query_filter=query_filter,
+        search_params=_QDRANT_SEARCH_PARAMS,
     )
     return _qdrant_hits(response.points)
 
@@ -110,5 +115,6 @@ async def qdrant_chunks(
         query=vector,
         limit=size,
         with_payload=True,
+        search_params=_QDRANT_SEARCH_PARAMS,
     )
     return _qdrant_hits(response.points)

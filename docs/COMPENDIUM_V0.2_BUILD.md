@@ -30,7 +30,17 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   [`~/Compendium/inbox/<kind>/`](operations/inbox.md), routes to
   `processed/<YYYY-MM-DD>/` or `failed/<YYYY-MM-DD>/` with a `.error`
   sidecar on parse failure, and runs `index sync` per fire.
-- Phases 5 → 8 — not started.
+- **Phase 5 — Retrieval tuning** (merged 2026-05-31, PR #35):
+  per-query coverage / recall@K / MRR captured in
+  [`tests/golden/baseline.json`](../tests/golden/baseline.json) via
+  the new `--golden-baseline` pytest flag; rule-based query
+  normalization (lowercase → curated stop-words → alias expansion
+  against `wiki_pages.aliases`) wired at the head of
+  `pipeline.run()`; OpenSearch `compendium_text` analyzer gains an
+  inline synonym filter sourced from page aliases, regenerated on
+  every `compendium reindex`; Qdrant HNSW parameters set
+  explicitly. See [`operations/retrieval-tuning.md`](operations/retrieval-tuning.md).
+- Phases 6 → 8 — not started.
 
 ## v0.2 thesis
 

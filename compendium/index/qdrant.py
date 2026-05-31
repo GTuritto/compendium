@@ -31,7 +31,22 @@ _PAYLOAD_INDEXES = {
 }
 
 _VECTORS = models.VectorParams(size=EMBED_DIM, distance=models.Distance.COSINE)
-_HNSW = models.HnswConfigDiff(m=16, ef_construct=100, full_scan_threshold=10000)
+
+# HNSW parameters (v0.2 Phase 5 starting point per the resolved decision):
+#   - ``m=16``  — neighbours per node in the graph (bumped from qdrant default 16; same)
+#   - ``ef_construct=128`` — candidate set during graph construction
+#     (bumped from 100 to widen recall at index time)
+#   - ``hnsw_ef=64`` (the search-time parameter; see ``SEARCH_PARAMS`` below)
+# The values may move under the 5c tuning loop if a different triple
+# improves the golden aggregates without regressing assertions.
+_HNSW = models.HnswConfigDiff(m=16, ef_construct=128, full_scan_threshold=10000)
+
+#: The search-side HNSW knob: how many candidates Qdrant expands during
+#: nearest-neighbour search. Higher = better recall, slower query.
+#: Wired through ``compendium.retrieve.search`` so every page / chunk search
+#: passes the same value.
+SEARCH_PARAMS = models.SearchParams(hnsw_ef=64)
+
 _OPTIMIZERS = models.OptimizersConfigDiff(default_segment_number=2)
 
 

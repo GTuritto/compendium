@@ -23,6 +23,12 @@ def seed_corpus(vault_path: str) -> None:
 
     ingest(str(_FIXTURES / "sample.md"), kind="note")
     with connection() as conn:
-        synthesize_concept(conn, "psychological safety", aliases=[], vault_path=vault_path)
+        # v0.2 Phase 5: the concept ships with one alias so the
+        # OpenSearch synonym filter has something to expand on the
+        # post-tuning analyzer. The matching golden query is
+        # `q_a_alias_match` in dataset.yaml.
+        synthesize_concept(
+            conn, "psychological safety", aliases=["psych safety"], vault_path=vault_path
+        )
     reindex("all")
     rebuild()
