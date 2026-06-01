@@ -6,6 +6,8 @@ The bet: a maintained wiki of stable, citable, deduplicated pages produces bette
 
 Single-user and local. It is not a SaaS, not multi-user, and not a chat product. See [`docs/Compendium.md`](docs/Compendium.md) for the full scope and the ADRs, and [`docs/DECISIONS.md`](docs/DECISIONS.md) for a consolidated record of every significant decision and why it was made.
 
+**New here? Start with the [Instruction Manual](docs/MANUAL.md)** — how to install, how to use it day to day, and how to connect another system (your agents, scripts, or apps) to Compendium as long-term memory.
+
 ## Status
 
 v0.1 is feature-complete. All eleven phases (0–10) are merged: project skeleton, the PostgreSQL schema, the ingestion pipeline, wiki page generation, the OpenSearch + Qdrant derived indexes, page-first retrieval (`compendium query`), the Memgraph structural index (`compendium graph rebuild`), operational telemetry (`compendium trace`/`page diff`/`promotions`), the Textual ops console (`compendium tui`), the knowledge-graph curation loop (`compendium curate`), and the golden dataset & testing tier with CI (Phase 10). See `docs/COMPENDIUM_BUILD.md` for the v0.1 phase plan and `openspec/changes/` for change history.
