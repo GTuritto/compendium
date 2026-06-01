@@ -214,6 +214,27 @@ def test_upsert_extracted_edge_written_refreshed_and_curator_collision(extract_c
 
 
 @pytest.mark.integration
+def test_upsert_extracted_edge_protects_provenance_less_edge(extract_corpus):
+    # An edge with no extracted_by (e.g. a pre-Phase-8 `graph link` edge) is
+    # also protected: the extractor only ever refreshes its own llm edges.
+    from compendium.graph.client import graph_connection
+
+    concept, sources = _pages(extract_corpus)
+    c_label, c_id = schema.page_node_ref("concept", concept["id"], None)
+    s_label, s_id = schema.page_node_ref("source", sources[0]["id"], sources[0]["source_id"])
+    props = {"extracted_by": "llm", "model": "stub", "confidence": 0.9,
+             "extracted_at": "2026-06-01T00:00:00Z", "source_revision_id": "rev-1", "weight": 0.9}
+    with graph_connection() as driver:
+        schema.upsert_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id, {"weight": 1.0})
+        disp = schema.upsert_extracted_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id, props)
+        assert disp == "collision"
+        with driver.session() as s:
+            rec = s.run("MATCH (a {id:$a})-[r:RELATED_TO]-(b {id:$b}) RETURN r.extracted_by AS by",
+                        a=c_id, b=s_id).single()
+        assert rec["by"] is None  # untouched: never stamped llm
+
+
+@pytest.mark.integration
 def test_max_llm_extracted_at_none_on_cold_graph(extract_corpus):
     # A freshly reindexed graph has no llm edges.
     from compendium.graph.client import graph_connection
@@ -270,9 +291,10 @@ def test_curate_run_preserves_curator_edge(extract_corpus):
     concept, sources = _pages(extract_corpus)
     _, c_id = schema.page_node_ref("concept", concept["id"], None)
     s_label, s_id = schema.page_node_ref("source", sources[0]["id"], sources[0]["source_id"])
-    with graph_connection() as driver:
-        schema.upsert_edge(driver, "RELATED_TO", "Concept", c_id, s_label, s_id,
-                           {"weight": 1.0, "extracted_by": "curator"})
+    # Use the real curator path (graph.links.link), which stamps extracted_by="curator".
+    from compendium.graph.links import link
+
+    link(concept["slug"], sources[0]["slug"], "RELATED_TO")
 
     curate_run()
 
@@ -281,7 +303,7 @@ def test_curate_run_preserves_curator_edge(extract_corpus):
             "MATCH (a {id:$a})-[r:RELATED_TO]-(b {id:$b}) RETURN r.extracted_by AS by",
             a=c_id, b=s_id,
         ).single()
-    assert rec and rec["by"] == "curator"  # never overwritten
+    assert rec and rec["by"] == "curator"  # never overwritten by the extractor
 
 
 @pytest.mark.integration
@@ -291,8 +313,14 @@ def test_extracted_edges_are_walkable_by_expansion(extract_corpus):
     from compendium.graph.client import graph_connection
 
     curate_run()
-    concept, _ = _pages(extract_corpus)
-    _, c_id = schema.page_node_ref("concept", concept["id"], None)
     with graph_connection() as driver:
-        reached = browse.walk_semantic(driver, [c_id], 2)
-    assert reached, "fast-loop expansion should reach a page via a new LLM edge"
+        with driver.session() as s:
+            # an actual extracted edge; RELATED_TO is stored one-directional, so
+            # seed expansion from the edge's source to traverse it deterministically
+            rec = s.run(
+                "MATCH (a)-[:RELATED_TO {extracted_by:'llm'}]->(b) RETURN a.id AS a, b.id AS b LIMIT 1"
+            ).single()
+        assert rec, "expected at least one llm RELATED_TO edge"
+        reached = browse.walk_semantic(driver, [rec["a"]], 2)
+    reached_ids = {r.get("id") or r.get("entity_id") for r in reached}
+    assert rec["b"] in reached_ids, "fast-loop expansion should traverse the new LLM edge"

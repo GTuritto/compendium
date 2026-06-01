@@ -109,12 +109,13 @@ def upsert_extracted_edge(
 ) -> str:
     """MERGE an LLM-extracted semantic edge with provenance (ADR-010).
 
-    Never overwrites a curator edge (``extracted_by="curator"``); refreshes an
-    existing LLM edge in place. ``RELATED_TO`` is symmetric, so its endpoints are
-    canonicalised (lexicographic by id) to keep one edge per unordered pair and
-    the curator check looks in both directions. Returns the disposition:
-    ``"written"`` (new), ``"refreshed"`` (existing LLM edge updated), or
-    ``"collision"`` (a curator edge exists; left untouched).
+    Never overwrites a non-LLM edge: any existing edge whose ``extracted_by`` is
+    not ``"llm"`` (a curator edge, or one without provenance from an earlier
+    ``graph link``) is left untouched and reported ``"collision"``. An existing
+    ``extracted_by="llm"`` edge is refreshed in place. ``RELATED_TO`` is
+    symmetric, so its endpoints are canonicalised (lexicographic by id) to keep
+    one edge per unordered pair and the protection check looks in both
+    directions. Returns ``"written"``, ``"refreshed"``, or ``"collision"``.
     """
     if edge_type not in EXTRACTABLE_EDGES:
         raise ValueError(f"not an extractable edge type: {edge_type}")
@@ -131,17 +132,21 @@ def upsert_extracted_edge(
             "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
             a=from_id, b=to_id,
         ).single()
-        curator = bool(forward and forward["by"] == "curator")
-        existed = bool(forward and forward["exists"])
-        if symmetric and not curator:
+        # Protect any existing non-llm edge (curator, or provenance-less).
+        protected = bool(forward and forward["exists"] and forward["by"] != "llm")
+        llm_exists = bool(forward and forward["by"] == "llm")
+        if symmetric and not protected:
             reverse = session.run(
                 f"OPTIONAL MATCH (b:{to_label} {{id: $b}})-[r:{edge_type}]->(a:{from_label} {{id: $a}}) "
-                "RETURN r.extracted_by AS by",
+                "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
                 a=from_id, b=to_id,
             ).single()
-            curator = bool(reverse and reverse["by"] == "curator")
+            if reverse and reverse["exists"] and reverse["by"] != "llm":
+                protected = True
+            elif reverse and reverse["by"] == "llm":
+                llm_exists = True
 
-        if curator:
+        if protected:
             return "collision"
 
         session.run(
@@ -150,7 +155,7 @@ def upsert_extracted_edge(
             f"MERGE (a)-[r:{edge_type}]->(b) SET r += $props",
             a=from_id, b=to_id, props=props,
         )
-        return "refreshed" if existed else "written"
+        return "refreshed" if llm_exists else "written"
 
 
 def structural_pairs(driver: Driver, node_id: str) -> set[str]:
