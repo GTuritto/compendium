@@ -606,6 +606,33 @@ def all_wiki_page_ids(conn: psycopg.Connection) -> list[UUID]:
     return [row["id"] for row in conn.execute("SELECT id FROM wiki_pages ORDER BY id")]
 
 
+def pages_changed_since(
+    conn: psycopg.Connection, since: Any | None
+) -> list[dict[str, Any]]:
+    """Concept + source pages whose current revision is newer than ``since``.
+
+    The change-detection scope for the v0.2 Phase 8 edge extractor. When
+    ``since`` is None (cold start / full sweep), every concept and source page is
+    returned. Each row carries ``id, kind, slug, title, source_id,
+    current_revision_id`` so the extractor can resolve the graph node and stamp
+    ``source_revision_id`` provenance.
+    """
+    cols = "w.id, w.kind, w.slug, w.title, w.source_id, w.current_revision_id"
+    if since is None:
+        return conn.execute(
+            f"SELECT {cols} FROM wiki_pages w "
+            "WHERE w.kind IN ('concept', 'source') "
+            "ORDER BY w.created_at",
+        ).fetchall()
+    return conn.execute(
+        f"SELECT {cols} FROM wiki_pages w "
+        "JOIN wiki_page_revisions r ON r.id = w.current_revision_id "
+        "WHERE w.kind IN ('concept', 'source') AND r.created_at > %s "
+        "ORDER BY r.created_at",
+        (since,),
+    ).fetchall()
+
+
 def list_wiki_pages(
     conn: psycopg.Connection,
     *,

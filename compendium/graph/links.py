@@ -15,9 +15,6 @@ from compendium.graph.client import graph_connection
 
 SEMANTIC_EDGES = schema.SEMANTIC_EDGES  # RELATED_TO/PREREQUISITE_FOR/SYNTHESIZES/CONTRADICTS
 
-# Page kind -> graph node label.
-_LABEL = {"source": "Source", "concept": "Concept", "topic": "Topic"}
-
 
 class LinkError(Exception):
     """Raised when an edge cannot be created (bad endpoint or non-semantic type)."""
@@ -38,9 +35,8 @@ def link(from_slug: str, to_slug: str, edge_type: str, *, weight: float = 1.0) -
         if b is None:
             raise LinkError(f"page not found: {to_slug}")
         # Source pages are the :Source node keyed by source_id, not the page id.
-        a_id = str(a["source_id"]) if a["kind"] == "source" else str(a["id"])
-        b_id = str(b["source_id"]) if b["kind"] == "source" else str(b["id"])
-        a_label, b_label = _LABEL[a["kind"]], _LABEL[b["kind"]]
+        a_label, a_id = schema.page_node_ref(a["kind"], a["id"], a.get("source_id"))
+        b_label, b_id = schema.page_node_ref(b["kind"], b["id"], b.get("source_id"))
 
     with graph_connection() as driver:
         schema.upsert_edge(
