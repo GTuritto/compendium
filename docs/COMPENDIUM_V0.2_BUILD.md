@@ -66,7 +66,19 @@ v0.1 is feature-complete (phases 0–10 merged to `main`).
   sync`; `ask` streams over chunked HTTP and MCP notifications; the surface JSON
   reuses the render seam so it matches `--format json`. New deps: `fastapi`,
   `uvicorn`, `mcp`. See [`operations/access-surface.md`](operations/access-surface.md).
-- Phase 8 — not started.
+- **Phase 8 — Autonomous semantic-edge extraction** (merged 2026-06-01, PR #40;
+  **ships ADR-010**): a fifth slow-loop generator `from_extracted_edges`
+  (`compendium/curate/extract.py`) run inside `compendium curate run` writes
+  `RELATED_TO` and `PREREQUISITE_FOR` edges into Memgraph with provenance. Per
+  changed concept/source page (graph-derived watermark; cold-start / every-Nth-run
+  full sweep) it pulls the top-10 Qdrant neighbours, drops structurally-linked
+  pairs, and asks the LLM in one call per page to label each pair; labels
+  `>= 0.7` are written with `extracted_by="llm"` / `model` / `confidence` /
+  `extracted_at` / `source_revision_id` / `weight=confidence`. Curator edges are
+  never overwritten; LLM edges refresh; every proposal is logged. No schema
+  migration. See [`operations/edge-extraction.md`](operations/edge-extraction.md).
+
+**v0.2 is feature-complete: all eight phases are merged to `main`.**
 
 ## v0.2 thesis
 

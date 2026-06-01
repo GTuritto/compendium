@@ -67,6 +67,14 @@ graph_expansion:
 curation:
   thin_grounding_min: 2          # a concept with fewer GROUNDS edges is "thin"
   low_coverage_threshold: 0.5    # queries at/below this coverage are weak
+  # Autonomous semantic-edge extraction (ADR-010, v0.2 Phase 8). Runs inside
+  # `curate run`; writes RELATED_TO/PREREQUISITE_FOR with provenance. The LLM
+  # reuses the `synthesis:` config.
+  extract:
+    enabled: true
+    min_confidence: 0.7          # labels below this are dropped
+    top_k_neighbours: 10         # Qdrant neighbours per source page
+    full_sweep_every: 24         # re-sweep all pages every Nth run (cold start always sweeps)
 
 loops:
   slow_loop_interval_seconds: 3600
