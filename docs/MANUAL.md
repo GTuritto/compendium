@@ -8,6 +8,8 @@ you read and write, synthesizes a canonical Markdown wiki of concept / topic /
 source pages, and answers questions by retrieving from that wiki (with composed
 answers and citations). It runs on your own machine; it is not a cloud service.
 
+- Want to understand *how it works* and what each command actually does (the
+  principles + an in-depth tour of every operation)? [`PRINCIPLES.md`](PRINCIPLES.md).
 - New to the design? [`Compendium.md`](Compendium.md) (vision + ADRs) and
   [`DECISIONS.md`](DECISIONS.md) (every decision + why).
 - This manual is the practical front door: **Install → Use → Connect**.
@@ -20,10 +22,10 @@ answers and citations). It runs on your own machine; it is not a cloud service.
 
 | Need | Why | Install |
 | --- | --- | --- |
-| **`uv`** (Python 3.12) | runs Compendium and its deps | https://docs.astral.sh/uv/ |
-| **Docker + `docker compose`** | the four backing stores | Docker Desktop (set "start at login") |
-| **`pg_dump` / `pg_restore`** | `compendium backup` / `restore` | macOS: `brew install libpq && brew link --force libpq` |
-| **An OpenRouter API key** | synthesis + embeddings (BGE-M3, Claude Sonnet) | https://openrouter.ai |
+| **`uv`** (Python 3.12) | runs Compendium and its deps | <https://docs.astral.sh/uv/> |
+| **Docker + `docker compose`** | the four backing stores | Docker Desktop (macOS, "start at login") or Docker Engine (Ubuntu: `sudo systemctl enable --now docker`) |
+| **`pg_dump` / `pg_restore`** | `compendium backup` / `restore` | macOS: `brew install libpq && brew link --force libpq`; Ubuntu: `sudo apt install postgresql-client` |
+| **An OpenRouter API key** | synthesis + embeddings (BGE-M3, Claude Sonnet) | <https://openrouter.ai> |
 
 Compendium uses four backing stores, all run for you by `docker compose`:
 PostgreSQL (system of record), OpenSearch (lexical search), Qdrant (vector
@@ -43,6 +45,14 @@ stores up and waits for them, applies the database migrations, builds the
 derived indexes, and installs the four always-on services (backup, curation,
 inbox, access surface). If `.env` is missing it creates one from the template
 and stops so you can fill it in.
+
+> **Ubuntu / Linux server.** The services run as systemd **user** units. On a
+> headless box the installer also enables **lingering** (`loginctl enable-linger
+> $USER`) so they run without an active login — re-run with `sudo loginctl
+> enable-linger $USER` if it couldn't. Install the backup client with
+> `sudo apt install postgresql-client`, and enable Docker on boot with
+> `sudo systemctl enable --now docker`. Full Linux runbook:
+> [`operations/deployment.md`](operations/deployment.md) § Ubuntu / Linux server.
 
 ### 1.3 Configure `.env`
 
@@ -125,9 +135,11 @@ ingesting via the CLI, refresh the indexes: `compendium index sync` (or
 
 ```sh
 uv run python -m compendium synth concept "psychological safety"
-uv run python -m compendium synth concept "deliberate practice" --aliases "deep practice"
+uv run python -m compendium synth concept "deliberate practice" --alias "deep practice" --alias "deliberate training"
 uv run python -m compendium lint           # validate the vault
 ```
+
+(`--alias` is repeatable — pass it once per alias. Full options in Part 6.)
 
 A concept page is written to `vault/concepts/`, passes lint, and cites the
 chunks it drew on. Pages start as `draft`; promote when you trust them:
@@ -169,15 +181,22 @@ uv run python -m compendium graph status
 uv run python -m compendium tui                          # the full keyboard ops console
 ```
 
-### 2.7 Automate ingestion (the inbox)
+### 2.7 Automate ingestion (the inbox watcher — auto-ingest on file detection)
 
 ```sh
 uv run python -m compendium inbox install --path ~/Compendium/inbox
 ```
 
-Drop a file into `~/Compendium/inbox/<kind>/` (e.g. `paper/`) and it is ingested
-automatically, indexed, and moved to `processed/<date>/` (or `failed/<date>/`
-with a `.error` note). `compendium inbox status` shows recent counts.
+This installs an **OS file-watcher** (a systemd user `.path` unit on Linux, a
+LaunchAgent `WatchPaths` on macOS) that fires **automatically the moment a file
+appears** under `~/Compendium/inbox/<kind>/`. Drop `paper.pdf` into `paper/` and
+it is ingested with `--kind paper`, indexed, and moved to `processed/<date>/`
+(or `failed/<date>/` with a `.error` note) — no manual step. The seven
+subdirectories (`book/ article/ paper/ note/ web/ processed/ failed/`) are
+created for you; the **parent directory name is the kind**.
+
+`compendium inbox status` shows recent counts; `compendium inbox process` is the
+manual one-shot (mostly for testing — the watcher does this on its own).
 
 ### 2.8 Curate and back up
 
@@ -372,12 +391,105 @@ deploy/compendiumctl restart
 | `Configuration error: required environment variable(s) not set` | `.env` missing or incomplete — copy `.env.example` and fill it. |
 | `backup failed ... pg_dump` not found | install libpq: `brew install libpq && brew link --force libpq` (macOS). |
 | `query` returns nothing / `ask` refuses everything | the wiki is empty or the indexes are stale — `ingest` sources, `synth` a concept, then `reindex all`. |
-| Retrieval looks wrong right after running the test suite | the test tiers (`pytest -m golden|live|integration`) share the dev OpenSearch/Qdrant/Memgraph and recreate those collections. Run `compendium reindex all && compendium graph rebuild` to restore your corpus. PostgreSQL is unaffected. |
+| Retrieval looks wrong right after running the test suite | the test tiers (`pytest -m golden`, `-m live`, `-m integration`) share the dev OpenSearch/Qdrant/Memgraph and recreate those collections. Run `compendium reindex all && compendium graph rebuild` to restore your corpus. PostgreSQL is unaffected. |
 | `graph status` says unreachable | Memgraph is down — `docker compose up -d memgraph`. |
 | HTTP calls refused from another machine | by design — the surface binds `127.0.0.1`. Run the caller on the same host. |
 | Want to start clean | `docker compose down -v` (drops store volumes), then re-run `deploy/install.sh`. Back up first if the vault/DB matter. |
 
 ---
+
+## Part 6 — Command reference (every option and value)
+
+All commands run as `uv run python -m compendium <command> ...`. Positional
+arguments are shown in `<angle brackets>`; options in `[brackets]`. `choices`
+lists the only accepted values; `default` is what you get if you omit it. Run
+`uv run python -m compendium <command> --help` (and `<command> <sub> --help`)
+for the same, generated live.
+
+**Global:** any *read* command also accepts `--format {text,json}` (default
+`text`). Running `compendium` with no command loads/validates config and exits.
+
+### Content
+
+| Command | Positional | Options (choices / default) |
+| --- | --- | --- |
+| `ingest <path>` | `path` — file, URL, or directory | `--kind {book,article,paper,note,web}` (default `article`); `--mine` (flag — mark as authored by you); `--format` |
+| `synth <kind> <name>` | `kind` **{concept,topic}**; `name` | `--alias <text>` (repeatable — one per alias; concept only) |
+| `lint` | — | `--format` |
+| `pages <action>` | `action` **{build}** (backfill missing source pages) | — |
+
+### Retrieval
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `query <text>` | `text` — the question | `--top-k <int>` (default: config `retrieval.top_k`, 7); `--format` |
+| `ask <question>` | `question` | `--format` (text streams; json buffers one object) |
+
+### Derived indexes
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `reindex <target>` | `target` **{pages,chunks,all}** | `--format` |
+| `index <action>` | `action` **{sync,status}** | `--format` |
+
+### Graph
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `graph rebuild` | — | `--format` |
+| `graph status` | — | `--format` |
+| `graph link <from_slug> <to_slug>` | two page slugs | `--type {RELATED_TO,PREREQUISITE_FOR,SYNTHESIZES,CONTRADICTS}` (**required**) |
+
+### Inspection
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `trace list` | — | `--format` |
+| `trace show <id>` | trace id | `--format` |
+| `trace replay <id>` | trace id | `--persist` (flag — record the replay as a new trace); `--format` |
+| `page revisions <slug>` | page slug | `--format` |
+| `page diff <slug> <rev_a> <rev_b>` | slug; two revisions (ordinal `1`=oldest, or id prefix) | `--format` |
+| `page promote <slug>` | page slug | `--to {canonical,deprecated}` (**required**) |
+| `promotions list` | — | `--slug <slug>` (filter to one page); `--format` |
+| `tui` | — | — (interactive) |
+
+### Access surface
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `serve` | — (runs the HTTP server, foreground) | `--host <host>` (default `127.0.0.1`); `--port <int>` (default `8787`) |
+| `serve install` | — | `--host` (default `127.0.0.1`); `--port` (default `8787`) |
+| `serve uninstall` | — | — |
+| `serve status` | — | `--format` |
+| `mcp` | — (runs the MCP stdio server) | — |
+
+### Services (always-on units)
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `backup` | — (runs a backup now) | — (uses `BACKUP_LOCAL_DIR` / `BACKUP_RSYNC_DEST` from `.env`) |
+| `backup install` | — | `--at <HH:MM>` (default `02:00`) |
+| `backup uninstall` | — | — |
+| `restore <timestamp>` | `timestamp` — `YYYYMMDDTHHMMSSZ` | `--force` (flag — skip the confirmation) |
+| `schedule install` | — | `--every <cadence>` (default `1h`; accepts `Nh` / `Nm` / `NhMm`, min 1m, max 7d) |
+| `schedule uninstall` | — | — |
+| `schedule status` | — | `--format` |
+| `inbox install` | — | `--path <dir>` (default: `INBOX_PATH`, else `~/Compendium/inbox`) |
+| `inbox uninstall` | — | `--path <dir>` |
+| `inbox process` | — | `--path <dir>` |
+| `inbox status` | — | `--path <dir>`; `--format` |
+
+### Curation
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `curate run` | — (one slow-loop pass: signals + edge extraction) | `--format` |
+| `curate list` | — | `--format` |
+| `curate synth <signal_id>` | curation signal id | — |
+
+> **Behaviour knobs live in `config/settings.yaml`,** not as CLI flags — e.g.
+> `retrieval.top_k`, `ask.refuse_below_coverage`, `curation.extract.min_confidence`,
+> `curation.extract.top_k_neighbours`. Edit them there; the CLI reads them.
 
 ## Reference
 

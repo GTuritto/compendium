@@ -6,7 +6,7 @@ The bet: a maintained wiki of stable, citable, deduplicated pages produces bette
 
 Single-user and local. It is not a SaaS, not multi-user, and not a chat product. See [`docs/Compendium.md`](docs/Compendium.md) for the full scope and the ADRs, and [`docs/DECISIONS.md`](docs/DECISIONS.md) for a consolidated record of every significant decision and why it was made.
 
-**New here? Start with the [Instruction Manual](docs/MANUAL.md)** — how to install, how to use it day to day, and how to connect another system (your agents, scripts, or apps) to Compendium as long-term memory.
+**New here? Start with the [Instruction Manual](docs/MANUAL.md)** — how to install, how to use it day to day, and how to connect another system (your agents, scripts, or apps) to Compendium as long-term memory. To understand *how it works* — the principles and what each operation actually does — read [`docs/PRINCIPLES.md`](docs/PRINCIPLES.md).
 
 ## Status
 

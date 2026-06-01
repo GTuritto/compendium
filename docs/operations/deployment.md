@@ -66,6 +66,29 @@ The stores run under the dev `docker-compose.yml`. For an always-on host, enable
 containers come back after a reboot; the launchd/systemd units tolerate a brief
 store outage (the serve daemon restarts; the timers retry next fire).
 
+## Ubuntu / Linux server
+
+The four services use **systemd user units** on Linux (the macOS branch uses
+launchd). For a headless 24/7 Ubuntu box:
+
+1. **Prerequisites:** `uv` (<https://docs.astral.sh/uv/>), Docker Engine +
+   compose plugin, and the Postgres client for backups:
+   `sudo apt install postgresql-client`.
+2. **Docker on boot:** `sudo systemctl enable --now docker`.
+3. **Run `deploy/install.sh`.** It installs the four user units
+   (`compendium-{backup.timer,curate.timer,inbox.path,serve.service}`) and
+   **enables systemd lingering** (`loginctl enable-linger $USER`). Lingering is
+   essential: without it, user units only run while you have an active login
+   session, so a headless server would stop them on logout. If the script
+   couldn't enable it (no permission), run `sudo loginctl enable-linger $USER`.
+4. **Inspect:** `systemctl --user status compendium-serve.service`,
+   `systemctl --user list-timers`, and `deploy/compendiumctl logs` (which tails
+   `journalctl --user -u 'compendium-*'` on Linux).
+
+Everything else (the CLI, the verbs, the access surface) is identical to macOS.
+Lingering is the Linux analog of the macOS "stay logged in / auto-login"
+requirement for an always-on host.
+
 ## Updating
 
 ```sh

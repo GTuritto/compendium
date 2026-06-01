@@ -57,8 +57,13 @@ cmd_status() {
 }
 
 cmd_logs() {
+  if [ "$(uname)" = "Linux" ]; then
+    say "Following journald for the compendium user units (Ctrl-C to stop)"
+    journalctl --user -u 'compendium-*' -n 50 -f 2>/dev/null \
+      || echo "no journald logs (systemd --user available? try: journalctl --user -u compendium-serve.service)"
+    return
+  fi
   local dir="$HOME/Library/Logs/compendium"
-  [ -d "$dir" ] || dir="$HOME/.local/state/compendium"  # best-effort on Linux
   say "Tailing $dir/*.log (Ctrl-C to stop)"
   tail -n 50 -f "$dir"/*.log 2>/dev/null || echo "no logs yet at $dir"
 }
