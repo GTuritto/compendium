@@ -125,9 +125,11 @@ ingesting via the CLI, refresh the indexes: `compendium index sync` (or
 
 ```sh
 uv run python -m compendium synth concept "psychological safety"
-uv run python -m compendium synth concept "deliberate practice" --aliases "deep practice"
+uv run python -m compendium synth concept "deliberate practice" --alias "deep practice" --alias "deliberate training"
 uv run python -m compendium lint           # validate the vault
 ```
+
+(`--alias` is repeatable — pass it once per alias. Full options in Part 6.)
 
 A concept page is written to `vault/concepts/`, passes lint, and cites the
 chunks it drew on. Pages start as `draft`; promote when you trust them:
@@ -378,6 +380,99 @@ deploy/compendiumctl restart
 | Want to start clean | `docker compose down -v` (drops store volumes), then re-run `deploy/install.sh`. Back up first if the vault/DB matter. |
 
 ---
+
+## Part 6 — Command reference (every option and value)
+
+All commands run as `uv run python -m compendium <command> ...`. Positional
+arguments are shown in `<angle brackets>`; options in `[brackets]`. `choices`
+lists the only accepted values; `default` is what you get if you omit it. Run
+`uv run python -m compendium <command> --help` (and `<command> <sub> --help`)
+for the same, generated live.
+
+**Global:** any *read* command also accepts `--format {text,json}` (default
+`text`). Running `compendium` with no command loads/validates config and exits.
+
+### Content
+
+| Command | Positional | Options (choices / default) |
+| --- | --- | --- |
+| `ingest <path>` | `path` — file, URL, or directory | `--kind {book,article,paper,note,web}` (default `article`); `--mine` (flag — mark as authored by you); `--format` |
+| `synth <kind> <name>` | `kind` **{concept,topic}**; `name` | `--alias <text>` (repeatable — one per alias; concept only) |
+| `lint` | — | `--format` |
+| `pages <action>` | `action` **{build}** (backfill missing source pages) | — |
+
+### Retrieval
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `query <text>` | `text` — the question | `--top-k <int>` (default: config `retrieval.top_k`, 7); `--format` |
+| `ask <question>` | `question` | `--format` (text streams; json buffers one object) |
+
+### Derived indexes
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `reindex <target>` | `target` **{pages,chunks,all}** | `--format` |
+| `index <action>` | `action` **{sync,status}** | `--format` |
+
+### Graph
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `graph rebuild` | — | `--format` |
+| `graph status` | — | `--format` |
+| `graph link <from_slug> <to_slug>` | two page slugs | `--type {RELATED_TO,PREREQUISITE_FOR,SYNTHESIZES,CONTRADICTS}` (**required**) |
+
+### Inspection
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `trace list` | — | `--format` |
+| `trace show <id>` | trace id | `--format` |
+| `trace replay <id>` | trace id | `--persist` (flag — record the replay as a new trace); `--format` |
+| `page revisions <slug>` | page slug | `--format` |
+| `page diff <slug> <rev_a> <rev_b>` | slug; two revisions (ordinal `1`=oldest, or id prefix) | `--format` |
+| `page promote <slug>` | page slug | `--to {canonical,deprecated}` (**required**) |
+| `promotions list` | — | `--slug <slug>` (filter to one page); `--format` |
+| `tui` | — | — (interactive) |
+
+### Access surface
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `serve` | — (runs the HTTP server, foreground) | `--host <host>` (default `127.0.0.1`); `--port <int>` (default `8787`) |
+| `serve install` | — | `--host` (default `127.0.0.1`); `--port` (default `8787`) |
+| `serve uninstall` | — | — |
+| `serve status` | — | `--format` |
+| `mcp` | — (runs the MCP stdio server) | — |
+
+### Services (always-on units)
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `backup` | — (runs a backup now) | — (uses `BACKUP_LOCAL_DIR` / `BACKUP_RSYNC_DEST` from `.env`) |
+| `backup install` | — | `--at <HH:MM>` (default `02:00`) |
+| `backup uninstall` | — | — |
+| `restore <timestamp>` | `timestamp` — `YYYYMMDDTHHMMSSZ` | `--force` (flag — skip the confirmation) |
+| `schedule install` | — | `--every <cadence>` (default `1h`; accepts `Nh` / `Nm` / `NhMm`, min 1m, max 7d) |
+| `schedule uninstall` | — | — |
+| `schedule status` | — | `--format` |
+| `inbox install` | — | `--path <dir>` (default: `INBOX_PATH`, else `~/Compendium/inbox`) |
+| `inbox uninstall` | — | `--path <dir>` |
+| `inbox process` | — | `--path <dir>` |
+| `inbox status` | — | `--path <dir>`; `--format` |
+
+### Curation
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `curate run` | — (one slow-loop pass: signals + edge extraction) | `--format` |
+| `curate list` | — | `--format` |
+| `curate synth <signal_id>` | curation signal id | — |
+
+> **Behaviour knobs live in `config/settings.yaml`,** not as CLI flags — e.g.
+> `retrieval.top_k`, `ask.refuse_below_coverage`, `curation.extract.min_confidence`,
+> `curation.extract.top_k_neighbours`. Edit them there; the CLI reads them.
 
 ## Reference
 
