@@ -17,6 +17,13 @@ implemented and merged to `main`. They are derived from the code under `compendi
 design intent in [../Compendium.md](../Compendium.md) — where the two differ, the code wins.
 Build history is in [../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md).
 
+> **v0.2 note.** v0.2 (Phases 1–8) and the deployment tooling are now complete but are
+> **not yet folded into these diagrams.** The v0.2 surfaces — composed answers (`compendium
+> ask`), the MCP + HTTP access surface (`compendium serve` / `mcp`, ADR-011), the always-on
+> launchd/systemd services (ADR-012), and the LLM-extracted semantic edges (ADR-010) — are
+> documented in [`../operations/`](../operations/) and [`../DECISIONS.md`](../DECISIONS.md).
+> A full C4 redraw to include them is a tracked follow-up (see DECISIONS.md §7).
+
 ## Reviews
 
 - [review-2026-05-26.md](review-2026-05-26.md) — first deepening review (shallow vs deep

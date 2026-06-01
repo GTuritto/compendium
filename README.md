@@ -4,7 +4,7 @@ A personal knowledge synthesis system for one user, running locally. Compendium 
 
 The bet: a maintained wiki of stable, citable, deduplicated pages produces better answers over time than retrieval against static chunks. Every source you ingest improves every future query.
 
-This is v0.1, single-user and local. It is not a SaaS, not multi-user, and not a chat product. See `docs/Compendium.md` for the full scope.
+Single-user and local. It is not a SaaS, not multi-user, and not a chat product. See [`docs/Compendium.md`](docs/Compendium.md) for the full scope and the ADRs, and [`docs/DECISIONS.md`](docs/DECISIONS.md) for a consolidated record of every significant decision and why it was made.
 
 ## Status
 

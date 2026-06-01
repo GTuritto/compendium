@@ -218,6 +218,10 @@ Eight structural decisions anchor everything else. Each maps to one or more of t
 
 8. **The knowledge graph drives both retrieval expansion and curation.** Two loops over the same Memgraph: a fast query-time loop that walks the graph to surface related pages; a slow periodic loop that aggregates gaps and signals into curator-driven wiki synthesis. (ADR-009)
 
+> The full ADRs follow. For a one-page index of every decision — these ADRs plus
+> the cross-cutting rules, the foundational tech choices, and each phase's
+> resolved choices, each with its rationale — see [DECISIONS.md](DECISIONS.md).
+
 ### ADR-001: Canonical knowledge is the markdown wiki
 
 **Status:** Accepted.
