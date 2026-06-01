@@ -1,31 +1,37 @@
 # C4 Level 2 — Containers
 
-The runnable and storage units that make up Compendium.
+The runnable and storage units that make up Compendium (v0.2).
 
 ```mermaid
 C4Container
-  title Container Diagram — Compendium
+  title Container Diagram — Compendium (v0.2)
 
   Person(curator, "Curator / Reader", "One user")
+  System_Ext(agents, "Colocated agents", "Same-host callers")
   System_Ext(sources, "Source material", "Files and URLs")
-  System_Ext(inference, "Model inference", "OpenRouter or Docker Model Runner")
+  System_Ext(inference, "Model inference", "OpenRouter (LLM + embeddings)")
   System_Ext(obsidian, "Obsidian", "Read view")
 
   System_Boundary(compendium, "Compendium") {
-    Container(app, "Compendium application", "Python 3.12 (uv)", "CLI and Textual TUI: ingestion, synthesis, retrieval, curation")
-    ContainerDb(vault, "Markdown vault", "Plain files on disk", "Canonical wiki: concept, topic, and source pages")
-    ContainerDb(postgres, "PostgreSQL", "PostgreSQL 16", "Operational system of record: sources, chunks, pages, revisions, traces")
-    ContainerDb(opensearch, "OpenSearch", "OpenSearch 2.x", "Derived lexical (BM25) index of pages and chunks")
-    ContainerDb(qdrant, "Qdrant", "Qdrant", "Derived vector index of page and chunk embeddings")
-    ContainerDb(memgraph, "Memgraph", "Memgraph", "Derived knowledge graph: typed nodes and edges")
+    Container(app, "Compendium application", "Python 3.12 (uv)", "CLI + Textual TUI: ingest, synth, retrieve, ask, curate")
+    Container(access, "Access surface", "FastAPI (HTTP) + MCP (stdio)", "compendium serve / mcp: six verbs over a shared facade")
+    Container(services, "Always-on services", "launchd / systemd units", "backup, curate schedule, inbox watcher, serve daemon (ADR-012)")
+    ContainerDb(vault, "Markdown vault", "Plain files on disk", "Canonical wiki: concept, topic, source pages")
+    ContainerDb(postgres, "PostgreSQL", "PostgreSQL 16", "System of record: sources, chunks, pages, revisions, query/ask traces")
+    ContainerDb(opensearch, "OpenSearch", "OpenSearch 2.x", "Derived lexical (BM25) index")
+    ContainerDb(qdrant, "Qdrant", "Qdrant", "Derived vector index")
+    ContainerDb(memgraph, "Memgraph", "Memgraph", "Derived knowledge graph (incl. LLM-extracted edges)")
   }
 
   Rel(curator, app, "Operates", "CLI / TUI")
+  Rel(agents, access, "query / ask / ingest", "HTTP 127.0.0.1 / MCP stdio")
+  Rel(access, app, "Calls the shared facade", "in-process")
+  Rel(services, app, "Invoke on schedule / on file events / keep serve up")
   Rel(curator, obsidian, "Browses the wiki")
   Rel(obsidian, vault, "Reads")
 
   Rel(app, sources, "Reads and parses")
-  Rel(app, inference, "Synthesis and embeddings", "OpenAI-compatible API")
+  Rel(app, inference, "Synthesis, ask, edge extraction, embeddings", "OpenAI-compatible API")
   Rel(app, vault, "Reads and writes pages")
   Rel(app, postgres, "Reads and writes operational state", "psycopg 3")
   Rel(app, opensearch, "Indexes and queries", "HTTP")
@@ -37,16 +43,22 @@ C4Container
 
 ## Notes
 
-- **The Compendium application** is one Python process. The CLI
-  (`python -m compendium`) and the Textual TUI are two entrypoints into the
-  same package; ingestion runs synchronously in-process, with no job queue.
-- **The Markdown vault is canonical** (ADR-001). Everything else inside the
-  boundary is derived: PostgreSQL holds the operational record, and
-  OpenSearch, Qdrant, and Memgraph are caches rebuildable from PostgreSQL plus
-  the vault (ADR-005).
-- **PostgreSQL is the system of record** (ADR-004). The application writes
-  there first; the derived indexes follow via tracked sync state.
-- **All four stores are in use.** PostgreSQL and the vault are the durable
-  pair; OpenSearch (BM25), Qdrant (dense vectors), and Memgraph (typed graph)
-  are derived and rebuildable. They run as local Docker containers; see
+- **The Compendium application** is one Python package with multiple entrypoints
+  (the CLI `python -m compendium`, the Textual TUI). Ingestion runs synchronously
+  in-process, no job queue.
+- **The access surface (v0.2, ADR-011)** is a thin adapter, not a second brain:
+  `compendium serve` (FastAPI on `127.0.0.1`) and `compendium mcp` (MCP stdio)
+  both call **one shared facade** (`compendium/api/facade.py`) over the same
+  `pipeline.query` / `answer.ask` / `ingest` / repository readers the CLI uses,
+  and serialize through the same helper — so the surface JSON is byte-for-byte
+  the CLI's `--format json`. Six verbs: `query`, `ask`, `ingest`, `page_get`,
+  `page_list`, `index_status`.
+- **Always-on services (v0.2, ADR-012)** are user-level launchd/systemd units
+  that run the application on a cadence or on events: the daily backup, the
+  curation slow loop, the inbox file-watcher, and the access-surface daemon. See
   [c4-deployment.md](c4-deployment.md).
+- **The Markdown vault is canonical** (ADR-001); PostgreSQL is the system of
+  record (ADR-004); OpenSearch, Qdrant, and Memgraph are derived and rebuildable
+  (ADR-005). The graph now also holds LLM-extracted `RELATED_TO` /
+  `PREREQUISITE_FOR` edges with provenance (ADR-010), rebuilt on the next
+  `curate run`.
