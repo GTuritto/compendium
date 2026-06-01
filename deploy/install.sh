@@ -30,7 +30,12 @@ say "Compendium deployer  (repo: $REPO_ROOT  bind: $HOST:$PORT)"
 command -v uv >/dev/null     || { echo "ERROR: 'uv' not found (https://docs.astral.sh/uv/)"; exit 1; }
 command -v docker >/dev/null || { echo "ERROR: 'docker' not found"; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "ERROR: 'docker compose' not available"; exit 1; }
-command -v pg_dump >/dev/null || warn "pg_dump not on PATH -> 'compendium backup' will fail (macOS: brew install libpq && brew link --force libpq)"
+if ! command -v pg_dump >/dev/null; then
+  case "$(uname)" in
+    Darwin) warn "pg_dump not on PATH -> 'compendium backup' will fail (macOS: brew install libpq && brew link --force libpq)" ;;
+    *)      warn "pg_dump not on PATH -> 'compendium backup' will fail (Ubuntu: sudo apt install postgresql-client)" ;;
+  esac
+fi
 
 # 2. .env -------------------------------------------------------------------
 if [ ! -f .env ]; then
@@ -67,6 +72,16 @@ uv run python -m compendium reindex all
 uv run python -m compendium graph rebuild || warn "graph rebuild failed (Memgraph down?) -- non-fatal"
 
 # 6. Always-on services -----------------------------------------------------
+# On Linux, user systemd units only run without an active login session when
+# "lingering" is enabled -- essential for a headless 24/7 server.
+if [ "$(uname)" = "Linux" ]; then
+  if loginctl enable-linger "$USER" 2>/dev/null; then
+    say "systemd user lingering enabled ($USER) -- services run without a login session"
+  else
+    warn "could not enable systemd lingering; run:  sudo loginctl enable-linger $USER  (needed for 24/7 without an active login)"
+  fi
+fi
+
 say "Installing services (backup, schedule, inbox, serve)"
 uv run python -m compendium backup install   || warn "backup install failed"
 uv run python -m compendium schedule install  || warn "schedule install failed"

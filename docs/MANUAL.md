@@ -20,10 +20,10 @@ answers and citations). It runs on your own machine; it is not a cloud service.
 
 | Need | Why | Install |
 | --- | --- | --- |
-| **`uv`** (Python 3.12) | runs Compendium and its deps | https://docs.astral.sh/uv/ |
-| **Docker + `docker compose`** | the four backing stores | Docker Desktop (set "start at login") |
-| **`pg_dump` / `pg_restore`** | `compendium backup` / `restore` | macOS: `brew install libpq && brew link --force libpq` |
-| **An OpenRouter API key** | synthesis + embeddings (BGE-M3, Claude Sonnet) | https://openrouter.ai |
+| **`uv`** (Python 3.12) | runs Compendium and its deps | <https://docs.astral.sh/uv/> |
+| **Docker + `docker compose`** | the four backing stores | Docker Desktop (macOS, "start at login") or Docker Engine (Ubuntu: `sudo systemctl enable --now docker`) |
+| **`pg_dump` / `pg_restore`** | `compendium backup` / `restore` | macOS: `brew install libpq && brew link --force libpq`; Ubuntu: `sudo apt install postgresql-client` |
+| **An OpenRouter API key** | synthesis + embeddings (BGE-M3, Claude Sonnet) | <https://openrouter.ai> |
 
 Compendium uses four backing stores, all run for you by `docker compose`:
 PostgreSQL (system of record), OpenSearch (lexical search), Qdrant (vector
@@ -43,6 +43,14 @@ stores up and waits for them, applies the database migrations, builds the
 derived indexes, and installs the four always-on services (backup, curation,
 inbox, access surface). If `.env` is missing it creates one from the template
 and stops so you can fill it in.
+
+> **Ubuntu / Linux server.** The services run as systemd **user** units. On a
+> headless box the installer also enables **lingering** (`loginctl enable-linger
+> $USER`) so they run without an active login — re-run with `sudo loginctl
+> enable-linger $USER` if it couldn't. Install the backup client with
+> `sudo apt install postgresql-client`, and enable Docker on boot with
+> `sudo systemctl enable --now docker`. Full Linux runbook:
+> [`operations/deployment.md`](operations/deployment.md) § Ubuntu / Linux server.
 
 ### 1.3 Configure `.env`
 
@@ -171,15 +179,22 @@ uv run python -m compendium graph status
 uv run python -m compendium tui                          # the full keyboard ops console
 ```
 
-### 2.7 Automate ingestion (the inbox)
+### 2.7 Automate ingestion (the inbox watcher — auto-ingest on file detection)
 
 ```sh
 uv run python -m compendium inbox install --path ~/Compendium/inbox
 ```
 
-Drop a file into `~/Compendium/inbox/<kind>/` (e.g. `paper/`) and it is ingested
-automatically, indexed, and moved to `processed/<date>/` (or `failed/<date>/`
-with a `.error` note). `compendium inbox status` shows recent counts.
+This installs an **OS file-watcher** (a systemd user `.path` unit on Linux, a
+LaunchAgent `WatchPaths` on macOS) that fires **automatically the moment a file
+appears** under `~/Compendium/inbox/<kind>/`. Drop `paper.pdf` into `paper/` and
+it is ingested with `--kind paper`, indexed, and moved to `processed/<date>/`
+(or `failed/<date>/` with a `.error` note) — no manual step. The seven
+subdirectories (`book/ article/ paper/ note/ web/ processed/ failed/`) are
+created for you; the **parent directory name is the kind**.
+
+`compendium inbox status` shows recent counts; `compendium inbox process` is the
+manual one-shot (mostly for testing — the watcher does this on its own).
 
 ### 2.8 Curate and back up
 
@@ -374,7 +389,7 @@ deploy/compendiumctl restart
 | `Configuration error: required environment variable(s) not set` | `.env` missing or incomplete — copy `.env.example` and fill it. |
 | `backup failed ... pg_dump` not found | install libpq: `brew install libpq && brew link --force libpq` (macOS). |
 | `query` returns nothing / `ask` refuses everything | the wiki is empty or the indexes are stale — `ingest` sources, `synth` a concept, then `reindex all`. |
-| Retrieval looks wrong right after running the test suite | the test tiers (`pytest -m golden|live|integration`) share the dev OpenSearch/Qdrant/Memgraph and recreate those collections. Run `compendium reindex all && compendium graph rebuild` to restore your corpus. PostgreSQL is unaffected. |
+| Retrieval looks wrong right after running the test suite | the test tiers (`pytest -m golden`, `-m live`, `-m integration`) share the dev OpenSearch/Qdrant/Memgraph and recreate those collections. Run `compendium reindex all && compendium graph rebuild` to restore your corpus. PostgreSQL is unaffected. |
 | `graph status` says unreachable | Memgraph is down — `docker compose up -d memgraph`. |
 | HTTP calls refused from another machine | by design — the surface binds `127.0.0.1`. Run the caller on the same host. |
 | Want to start clean | `docker compose down -v` (drops store volumes), then re-run `deploy/install.sh`. Back up first if the vault/DB matter. |
