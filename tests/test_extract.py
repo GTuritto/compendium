@@ -34,6 +34,52 @@ def test_page_node_ref_maps_kinds_to_labels_and_ids():
     assert schema.page_node_ref("source", "pid-3", "src-9") == ("Source", "src-9")
 
 
+# --- unit: the LLM labeller parser + stub (no stores) ----------------------
+
+
+def _nbrs(*ids):
+    from compendium.curate.extract import Neighbour
+
+    return [Neighbour(entity_id=i, title=f"T-{i}", slug=i, kind="concept", score=0.5) for i in ids]
+
+
+def test_parse_labels_maps_numbers_filters_none_and_malformed():
+    from compendium.curate.extract import _parse_labels
+
+    neighbours = _nbrs("a", "b", "c")
+    text = (
+        '[{"n":1,"label":"RELATED_TO","confidence":0.92},'
+        '{"n":2,"label":"NONE","confidence":0.8},'              # NONE -> dropped
+        '{"n":3,"label":"PREREQUISITE_FOR","confidence":0.75,"direction":"backward"},'
+        '{"n":9,"label":"RELATED_TO","confidence":0.9},'        # out of range -> dropped
+        '{"label":"RELATED_TO"}]'                                # missing n/confidence -> dropped
+    )
+    labels = _parse_labels(text, neighbours)
+    assert [(lbl.neighbour_id, lbl.label, lbl.direction) for lbl in labels] == [
+        ("a", "RELATED_TO", "forward"),
+        ("c", "PREREQUISITE_FOR", "backward"),
+    ]
+    assert labels[0].confidence == 0.92
+
+
+def test_parse_labels_tolerates_code_fence_and_bad_json():
+    from compendium.curate.extract import _parse_labels
+
+    neighbours = _nbrs("a")
+    fenced = '```json\n[{"n":1,"label":"RELATED_TO","confidence":0.8}]\n```'
+    assert len(_parse_labels(fenced, neighbours)) == 1
+    assert _parse_labels("not json at all", neighbours) == []
+
+
+def test_stub_extractor_is_deterministic():
+    from compendium.curate.extract import StubExtractor
+
+    labels = StubExtractor().label("Source", "body", _nbrs("x", "y"))
+    assert len(labels) == 1
+    assert labels[0].neighbour_id == "x" and labels[0].label == "RELATED_TO"
+    assert StubExtractor().label("Source", "body", []) == []
+
+
 # --- integration fixture ---------------------------------------------------
 
 
