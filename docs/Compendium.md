@@ -499,7 +499,7 @@ A single loop (query-time only) was rejected: the wiki never improves systematic
 
 ### ADR-010: Autonomous LLM extraction of selected semantic edges (v0.2)
 
-**Status:** Accepted (v0.2). Reverses, selectively, the v0.1 exclusion-list rule *"Not automated semantic-edge extraction."*
+**Status:** Accepted (v0.2 Phase 8, shipped 2026-06-01 via PR #40). Reverses, selectively, the v0.1 exclusion-list rule *"Not automated semantic-edge extraction."* The slow-loop generator `from_extracted_edges` writes `RELATED_TO` / `PREREQUISITE_FOR` with provenance; `SYNTHESIZES` stays lifecycle-owned and `CONTRADICTS` curator-only. Curator edges are never overwritten.
 
 #### Context
 

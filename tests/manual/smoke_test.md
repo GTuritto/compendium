@@ -334,3 +334,26 @@ seeded with stub embeddings) to walk it deterministically with no network cost.
 | v0.2-7.8 | Loopback-only posture | from another host on the LAN, `curl --max-time 3 http://<this-host-ip>:8787/index_status` | connection refused / times out — the server bound `127.0.0.1` only (no auth, no exposure) |
 
 Stop the server: `kill %1` (or the `serve` PID).
+
+## Phase 8 (v0.2) — Autonomous semantic-edge extraction
+
+Opt-in walk that exercises the `from_extracted_edges` generator inside
+`compendium curate run`: it pulls Qdrant neighbours per changed page, labels
+pairs with the LLM, and writes `RELATED_TO`/`PREREQUISITE_FOR` edges into
+Memgraph with provenance. The operational reference is
+[../docs/operations/edge-extraction.md](../docs/operations/edge-extraction.md).
+
+Prerequisites: stores up; `.env` populated; a seeded corpus with at least two
+concept/source pages and the indexes + graph built (`reindex all` +
+`graph rebuild`). `COMPENDIUM_SYNTH_STUB=1` runs the deterministic stub labeller
+(no network/cost); unset it to use the real model.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.2-8.1 | Cold-start extraction | `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1 uv run python -m compendium curate run` (on a seeded corpus, before any LLM edges exist) | the run report's `extracted_edges.written >= 1`; `compendium graph status` now shows non-zero `RELATED_TO` and/or `PREREQUISITE_FOR` |
+| v0.2-8.2 | Edges carry provenance | `psql`/`mgconsole` Cypher: `MATCH ()-[r:RELATED_TO {extracted_by:"llm"}]->() RETURN r LIMIT 3` | each edge has `model`, `confidence`, `extracted_at`, `source_revision_id`, and `weight` (= confidence) populated |
+| v0.2-8.3 | Curator edge untouched | `compendium graph link <a-slug> <b-slug> --type RELATED_TO`; re-run `curate run`; inspect that edge | the edge keeps `extracted_by="curator"`; not overwritten; the run logs `dropped-by-collision` for that pair |
+| v0.2-8.4 | Structural pre-filter | identify a `GROUNDS`-linked source/concept pair; re-run `curate run` | no LLM `RELATED_TO`/`PREREQUISITE_FOR` is written between that structurally-linked pair |
+| v0.2-8.5 | Expansion finds new edges | `uv run python -m compendium query "<term hitting a page with a new LLM edge>"`, then `compendium trace show <trace-id>` (or inspect `query_traces.graph_expansion`) | the trace's `graph_expansion` reaches the linked neighbour via the new edge |
+| v0.2-8.6 | Incremental run is quiet | re-run `curate run` with no corpus change (and not a full-sweep tick) | `extracted_edges.written == 0`; no duplicate edges created |
+| v0.2-8.7 | Reversible by predicate | Cypher `MATCH ()-[r {extracted_by:"llm"}]-() WHERE r.confidence < 0.85 DELETE r` | only low-confidence LLM edges removed; curator edges and high-confidence LLM edges remain |
