@@ -71,11 +71,13 @@ Extraction iterates the pages indexed in Qdrant `pages` (concept and source page
 
 No schema migration. The feature is additive: new code in `compendium/curate/` and `compendium/graph/`, a config block, and Memgraph relationship properties on the two extracted edge types. `compendium graph rebuild` still drops and reprojects structural edges and curator semantic edges; LLM edges are re-created on the next `curate run` (they are derived, like the rest of the graph). Rollback is removing the generator + the config block, and optionally `MATCH ()-[r {extracted_by:"llm"}]-() DELETE r` to clear extracted edges.
 
-## Open Questions — for the review gate
+## Open Questions — resolved at the review gate (2026-06-01)
 
-1. **Change-detection watermark.** Recommendation: derive from the graph (`max(extracted_at)` over LLM edges) — no migration. Alternative: a small `edge_extraction_state` table.
-2. **Full-sweep cadence.** Recommendation: cold start (no LLM edges) + every `full_sweep_every` runs (config, e.g. 24). Alternative: time-based (e.g., weekly).
-3. **`weight` of LLM edges.** Recommendation: `weight = confidence` (curator edges stay `1.0`). Alternative: fixed `1.0`.
-4. **Source-page set.** Recommendation: concept + source pages (the Qdrant `pages` collection). Alternative: concept pages only.
-5. **Labeller module + prompt id.** Recommendation: `compendium/curate/extract.py` holds the generator; an `Extractor` seam (stub + LLM over `SYNTHESIS_*`) with prompt id `extract-v1`. Confirm vs a separate `extract_llm.py`.
-6. **Report shape.** Recommendation: add `extracted_edges: {written, refreshed, dropped_confidence, dropped_collision}` to `CurateReport` and the run summary. Confirm.
+All resolved by accepting the recommendation.
+
+1. **Change-detection watermark.** RESOLVED: derive from the graph (`max(extracted_at)` over LLM edges) — no migration.
+2. **Full-sweep cadence.** RESOLVED: cold start + every `full_sweep_every` runs (default 24).
+3. **`weight` of LLM edges.** RESOLVED: `weight = confidence` (curator edges stay `1.0`).
+4. **Source-page set.** RESOLVED: concept + source pages (the Qdrant `pages` collection).
+5. **Labeller module + prompt id.** RESOLVED: `compendium/curate/extract.py` + an `Extractor` seam (stub + LLM over `SYNTHESIS_*`), prompt id `extract-v1`.
+6. **Report shape.** RESOLVED: `extracted_edges: {written, refreshed, dropped_confidence, dropped_collision}` on `CurateReport` and the run summary.
