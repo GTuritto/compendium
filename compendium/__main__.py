@@ -249,13 +249,39 @@ def _ask(question: str, fmt: str) -> int:
     return 0
 
 
-def _serve(host: str, port: int) -> int:
+def _serve(action: str | None, host: str, port: int, fmt: str) -> int:
     log = get_logger("compendium.serve")
     try:
         load_config()
     except ConfigError as exc:
         return _config_error(exc)
 
+    from compendium.api import service
+
+    if action == "install":
+        try:
+            result = service.install_service(host=host, port=port)
+        except service.ServiceError as exc:
+            print(f"serve install failed at step {exc.step}: {exc.detail}", file=sys.stderr)
+            return 1
+        print(f"serve install: {result.path} ({result.detail})")
+        return 0
+    if action == "uninstall":
+        result = service.uninstall_service()
+        print(f"serve uninstall: {result.path} ({result.detail})")
+        return 0
+    if action == "status":
+        status = service.read_status()
+        if fmt == "json":
+            print(render.to_json(status.to_dict()))
+        else:
+            print(
+                f"serve: loaded={status.loaded} state={status.state} "
+                f"host={status.host} port={status.port}\n  unit: {status.unit_path}"
+            )
+        return 0 if status.loaded else 1
+
+    # No subcommand: run the server in the foreground.
     from compendium.api.http import run as run_http
 
     log.info("serve starting", host=host, port=port)
@@ -716,6 +742,14 @@ def main(argv: list[str] | None = None) -> int:
         help="bind host (default 127.0.0.1; non-loopback is a v0.3 concern, no auth)",
     )
     serve_parser.add_argument("--port", type=int, default=8787, help="bind port (default 8787)")
+    serve_sub = serve_parser.add_subparsers(dest="serve_action")
+    serve_install = serve_sub.add_parser(
+        "install", help="install the always-on access-surface unit (launchd/systemd)"
+    )
+    serve_install.add_argument("--host", default="127.0.0.1")
+    serve_install.add_argument("--port", type=int, default=8787)
+    serve_sub.add_parser("uninstall", help="remove the access-surface unit (idempotent)")
+    serve_sub.add_parser("status", help="report the access-surface unit state", parents=[fmt])
 
     subparsers.add_parser(
         "mcp",
@@ -879,7 +913,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ask":
         return _ask(args.question, fmt_arg)
     if args.command == "serve":
-        return _serve(args.host, args.port)
+        return _serve(getattr(args, "serve_action", None), args.host, args.port, fmt_arg)
     if args.command == "mcp":
         return _mcp()
     if args.command == "trace":
