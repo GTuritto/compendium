@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# compendiumctl -- start / stop / status / restart / logs for the whole stack.
+#
+# The backing stores run under docker compose; the four Compendium services run
+# as installed launchd/systemd units (see deploy/install.sh). This script drives
+# the runtime: it brings the stores up/down and reports on everything. The units
+# themselves persist across reboots and run on their own once installed.
+#
+# Usage:  deploy/compendiumctl {start|stop|status|restart|logs}
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
+
+wait_stores() {
+  for i in $(seq 1 60); do
+    docker compose exec -T postgres pg_isready -U compendium >/dev/null 2>&1 \
+      && curl -fsS -o /dev/null --max-time 2 http://localhost:9200 \
+      && curl -fsS -o /dev/null --max-time 2 http://localhost:6533/collections \
+      && return 0
+    sleep 2
+  done
+  return 1
+}
+
+cmd_start() {
+  say "Starting backing stores"
+  docker compose up -d
+  wait_stores && say "Stores ready" || { echo "ERROR: stores did not come up"; exit 1; }
+  # The serve unit (KeepAlive) and the timers run on their own; nudge serve.
+  if [ "$(uname)" = "Darwin" ]; then
+    launchctl kickstart -k "gui/$(id -u)/com.compendium.serve" >/dev/null 2>&1 || true
+  else
+    systemctl --user start compendium-serve.service >/dev/null 2>&1 || true
+  fi
+  cmd_status
+}
+
+cmd_stop() {
+  say "Stopping backing stores (services idle until restart)"
+  docker compose stop
+  say "Stopped. Installed services remain (use the *-uninstall verbs to remove them)."
+}
+
+cmd_status() {
+  say "Backing stores"
+  docker compose ps --format 'table {{.Service}}\t{{.Status}}' 2>/dev/null || docker compose ps
+  echo
+  say "Services"
+  { uv run python -m compendium serve status    2>/dev/null || true; } | head -1 | sed 's/^/  serve    /'
+  { uv run python -m compendium schedule status 2>/dev/null || true; } | head -1 | sed 's/^/  curate   /'
+  { uv run python -m compendium inbox status    2>/dev/null || true; } | head -1 | sed 's/^/  inbox    /'
+  echo
+  say "Indexes"
+  uv run python -m compendium index status 2>/dev/null | sed 's/^/  /' || echo "  (unavailable)"
+}
+
+cmd_logs() {
+  local dir="$HOME/Library/Logs/compendium"
+  [ -d "$dir" ] || dir="$HOME/.local/state/compendium"  # best-effort on Linux
+  say "Tailing $dir/*.log (Ctrl-C to stop)"
+  tail -n 50 -f "$dir"/*.log 2>/dev/null || echo "no logs yet at $dir"
+}
+
+case "${1:-status}" in
+  start)   cmd_start ;;
+  stop)    cmd_stop ;;
+  status)  cmd_status ;;
+  restart) cmd_stop; cmd_start ;;
+  logs)    cmd_logs ;;
+  *) echo "usage: compendiumctl {start|stop|status|restart|logs}" >&2; exit 2 ;;
+esac
