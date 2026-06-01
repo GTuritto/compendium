@@ -8,6 +8,8 @@ you read and write, synthesizes a canonical Markdown wiki of concept / topic /
 source pages, and answers questions by retrieving from that wiki (with composed
 answers and citations). It runs on your own machine; it is not a cloud service.
 
+- Want to understand *how it works* and what each command actually does (the
+  principles + an in-depth tour of every operation)? [`PRINCIPLES.md`](PRINCIPLES.md).
 - New to the design? [`Compendium.md`](Compendium.md) (vision + ADRs) and
   [`DECISIONS.md`](DECISIONS.md) (every decision + why).
 - This manual is the practical front door: **Install → Use → Connect**.
