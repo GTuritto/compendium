@@ -1,6 +1,6 @@
 # Compendium — Architecture (C4)
 
-C4-model architecture documentation for Compendium v0.1, in Mermaid.
+C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
 
 | Level | Diagram | Audience |
 |---|---|---|
@@ -11,18 +11,21 @@ C4-model architecture documentation for Compendium v0.1, in Mermaid.
 | — | [Deployment](c4-deployment.md) | Operating the system |
 | — | [Dynamic: ingestion flow](c4-dynamic-ingestion.md) | Developers |
 | — | [Dynamic: query flow](c4-dynamic-query.md) | Developers |
+| — | [Dynamic: ask flow](c4-dynamic-ask.md) — composed answers (v0.2) | Developers |
+| UML | [Data model](uml-data-model.md) — persisted entities + result/contract types | Developers |
 
-These diagrams describe the **as-built v0.1 architecture**: all eleven phases (0–10) are
-implemented and merged to `main`. They are derived from the code under `compendium/`, not the
-design intent in [../Compendium.md](../Compendium.md) — where the two differ, the code wins.
-Build history is in [../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md).
+These diagrams describe the **as-built v0.2 architecture**: all v0.1 phases (0–10) and all v0.2
+phases (1–8), plus the deployment tooling, are implemented and merged to `main`. They are
+derived from the code under `compendium/`, not the design intent in
+[../Compendium.md](../Compendium.md) — where the two differ, the code wins. Build history is in
+[../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md) and [../COMPENDIUM_V0.2_BUILD.md](../COMPENDIUM_V0.2_BUILD.md).
 
-> **v0.2 note.** v0.2 (Phases 1–8) and the deployment tooling are now complete but are
-> **not yet folded into these diagrams.** The v0.2 surfaces — composed answers (`compendium
-> ask`), the MCP + HTTP access surface (`compendium serve` / `mcp`, ADR-011), the always-on
-> launchd/systemd services (ADR-012), and the LLM-extracted semantic edges (ADR-010) — are
-> documented in [`../operations/`](../operations/) and [`../DECISIONS.md`](../DECISIONS.md).
-> A full C4 redraw to include them is a tracked follow-up (see DECISIONS.md §7).
+The v0.2 surfaces are folded in: composed answers (`compendium ask`, [ask flow](c4-dynamic-ask.md)),
+the MCP + HTTP access surface (`compendium serve` / `mcp`, ADR-011 — in the
+[context](c4-context.md) and [container](c4-containers.md) views), the always-on
+launchd/systemd services (ADR-012 — in the [deployment](c4-deployment.md) view), and the
+LLM-extracted semantic edges (ADR-010 — noted on the graph store). The decision rationale is in
+[../DECISIONS.md](../DECISIONS.md); the operator runbooks in [../operations/](../operations/).
 
 ## Reviews
 
