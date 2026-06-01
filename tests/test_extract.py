@@ -232,3 +232,67 @@ def test_structural_pairs_finds_grounded_source(extract_corpus):
         pairs = schema.structural_pairs(driver, c_id)
     # the concept GROUNDS chunks that are PART_OF a source -> that source is structural
     assert pairs, "expected at least one structurally-linked page"
+
+
+# --- integration: the generator end-to-end via `curate run` ----------------
+
+
+@pytest.mark.integration
+def test_curate_run_writes_extracted_edges_with_provenance(extract_corpus):
+    from compendium.curate.run import run as curate_run
+    from compendium.graph import schema
+    from compendium.graph.client import graph_connection
+
+    report = curate_run()  # cold start -> full sweep; stub extractor relates a neighbour
+    assert report.extracted_edges.get("written", 0) >= 1
+
+    with graph_connection() as driver:
+        assert schema.edge_count(driver, "RELATED_TO") >= 1
+        with driver.session() as s:
+            rows = s.run(
+                "MATCH ()-[r:RELATED_TO]->() "
+                "RETURN r.extracted_by AS by, r.model AS model, r.confidence AS conf, "
+                "r.weight AS w, r.extracted_at AS at, r.source_revision_id AS rev"
+            ).data()
+    assert rows
+    for r in rows:
+        assert r["by"] == "llm" and r["model"] == "stub"
+        assert r["conf"] is not None and r["w"] == r["conf"]  # weight = confidence
+        assert r["at"] and r["rev"]  # provenance populated
+
+
+@pytest.mark.integration
+def test_curate_run_preserves_curator_edge(extract_corpus):
+    from compendium.curate.run import run as curate_run
+    from compendium.graph import schema
+    from compendium.graph.client import graph_connection
+
+    concept, sources = _pages(extract_corpus)
+    _, c_id = schema.page_node_ref("concept", concept["id"], None)
+    s_label, s_id = schema.page_node_ref("source", sources[0]["id"], sources[0]["source_id"])
+    with graph_connection() as driver:
+        schema.upsert_edge(driver, "RELATED_TO", "Concept", c_id, s_label, s_id,
+                           {"weight": 1.0, "extracted_by": "curator"})
+
+    curate_run()
+
+    with graph_connection() as driver, driver.session() as s:
+        rec = s.run(
+            "MATCH (a {id:$a})-[r:RELATED_TO]-(b {id:$b}) RETURN r.extracted_by AS by",
+            a=c_id, b=s_id,
+        ).single()
+    assert rec and rec["by"] == "curator"  # never overwritten
+
+
+@pytest.mark.integration
+def test_extracted_edges_are_walkable_by_expansion(extract_corpus):
+    from compendium.curate.run import run as curate_run
+    from compendium.graph import browse, schema
+    from compendium.graph.client import graph_connection
+
+    curate_run()
+    concept, _ = _pages(extract_corpus)
+    _, c_id = schema.page_node_ref("concept", concept["id"], None)
+    with graph_connection() as driver:
+        reached = browse.walk_semantic(driver, [c_id], 2)
+    assert reached, "fast-loop expansion should reach a page via a new LLM edge"

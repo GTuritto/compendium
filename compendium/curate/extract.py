@@ -205,3 +205,150 @@ def get_extractor() -> Extractor:
 
     config = load_config()
     return LLMExtractor(config.synthesis_endpoint, config.synthesis_model, config.synthesis_api_key)
+
+
+# --- the generator (one slow-loop pass over changed pages) -----------------
+
+
+@dataclass
+class ExtractReport:
+    """Per-run extraction tally, folded into the curate report + run summary."""
+
+    written: int = 0
+    refreshed: int = 0
+    dropped_confidence: int = 0
+    dropped_collision: int = 0
+    pages: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "written": self.written,
+            "refreshed": self.refreshed,
+            "dropped_confidence": self.dropped_confidence,
+            "dropped_collision": self.dropped_collision,
+            "pages": self.pages,
+        }
+
+
+def extract_cfg() -> dict[str, Any]:
+    """The ``curation.extract`` config block, with defaults."""
+    from compendium.config import load_config
+
+    c = (load_config().settings.get("curation", {}) or {}).get("extract", {}) or {}
+    return {
+        "enabled": bool(c.get("enabled", True)),
+        "min_confidence": float(c.get("min_confidence", 0.7)),
+        "top_k_neighbours": int(c.get("top_k_neighbours", 10)),
+        "full_sweep_every": int(c.get("full_sweep_every", 24)),
+    }
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def from_extracted_edges(conn: Any, driver: Any, qclient: Any, cfg: dict[str, Any]) -> ExtractReport:
+    """Extract `RELATED_TO`/`PREREQUISITE_FOR` edges for changed pages (ADR-010).
+
+    For each concept/source page changed since the watermark (or all pages on a
+    full sweep): kNN -> drop structural collisions -> one LLM call -> drop below
+    ``min_confidence`` -> upsert with provenance (``weight = confidence``).
+    Curator edges are never overwritten. Every proposal is logged via structlog.
+    """
+    from datetime import datetime
+
+    from compendium.db import repository
+    from compendium.graph import schema
+    from compendium.logging import get_logger
+
+    log = get_logger("compendium.curate.extract")
+    extractor = get_extractor()
+    report = ExtractReport()
+
+    # Change-detection watermark + periodic full sweep (cold start always sweeps).
+    watermark = schema.max_llm_extracted_at(driver)
+    completed_runs = repository.count_analysis_runs(conn)
+    full_sweep = watermark is None or (completed_runs % cfg["full_sweep_every"] == 0)
+    since = None if full_sweep else datetime.fromisoformat(watermark)
+    pages = repository.pages_changed_since(conn, since)
+
+    for page in pages:
+        report.pages += 1
+        page_id = str(page["id"])
+        s_label, s_id = schema.page_node_ref(page["kind"], page["id"], page.get("source_id"))
+
+        neighbours = nearest_neighbours(qclient, page_id, cfg["top_k_neighbours"])
+        if not neighbours:
+            continue
+
+        # Pre-filter pairs already linked by structural edges.
+        structural = schema.structural_pairs(driver, s_id)
+        fresh: list[Neighbour] = []
+        for n in neighbours:
+            n_row = repository.get_wiki_page(conn, n.entity_id)
+            if n_row is None:
+                continue
+            n_label, n_id = schema.page_node_ref(n_row["kind"], n_row["id"], n_row.get("source_id"))
+            if n_id in structural:
+                report.dropped_collision += 1
+                log.info("edge proposal", source=page["slug"], neighbour=n.slug,
+                         disposition="dropped-by-collision", reason="structural")
+                continue
+            fresh.append(n)
+        if not fresh:
+            continue
+
+        body = _page_body(conn, page)
+        labels = extractor.label(page["title"], body, fresh)
+        by_id = {n.entity_id: n for n in fresh}
+
+        for lbl in labels:
+            neighbour = by_id.get(lbl.neighbour_id)
+            if neighbour is None:
+                continue
+            if lbl.confidence < cfg["min_confidence"]:
+                report.dropped_confidence += 1
+                log.info("edge proposal", source=page["slug"], neighbour=neighbour.slug,
+                         label=lbl.label, confidence=lbl.confidence,
+                         disposition="dropped-by-confidence")
+                continue
+
+            n_row = repository.get_wiki_page(conn, lbl.neighbour_id)
+            n_label, n_id = schema.page_node_ref(n_row["kind"], n_row["id"], n_row.get("source_id"))
+            props = {
+                "extracted_by": "llm",
+                "model": extractor.model,
+                "confidence": lbl.confidence,
+                "extracted_at": _now_iso(),
+                "source_revision_id": str(page["current_revision_id"]) if page["current_revision_id"] else "",
+                "weight": lbl.confidence,
+            }
+            # PREREQUISITE_FOR is directed; "backward" means neighbour -> source.
+            if lbl.label == "PREREQUISITE_FOR" and lbl.direction == "backward":
+                disp = schema.upsert_extracted_edge(driver, lbl.label, n_label, n_id, s_label, s_id, props)
+            else:
+                disp = schema.upsert_extracted_edge(driver, lbl.label, s_label, s_id, n_label, n_id, props)
+
+            if disp == "written":
+                report.written += 1
+            elif disp == "refreshed":
+                report.refreshed += 1
+            elif disp == "collision":
+                report.dropped_collision += 1
+            log.info("edge proposal", source=page["slug"], neighbour=neighbour.slug,
+                     label=lbl.label, confidence=lbl.confidence, disposition=disp)
+
+    return report
+
+
+def _page_body(conn: Any, page: dict[str, Any]) -> str:
+    """The page's body markdown (current revision), for the labeller prompt."""
+    from compendium.db import repository
+
+    rev_id = page.get("current_revision_id")
+    if not rev_id:
+        return ""
+    rev = repository.get_revision(conn, rev_id)
+    return (rev or {}).get("body", "") or ""

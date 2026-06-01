@@ -1000,6 +1000,12 @@ def open_analysis_run(conn: psycopg.Connection) -> UUID:
     return row["id"]
 
 
+def count_analysis_runs(conn: psycopg.Connection) -> int:
+    """Number of ``graph_analysis_runs`` rows (drives the periodic full sweep)."""
+    row = conn.execute("SELECT count(*) AS n FROM graph_analysis_runs").fetchone()
+    return int(row["n"]) if row else 0
+
+
 def complete_analysis_run(
     conn: psycopg.Connection, run_id: str | UUID, *, signal_count: int, summary: dict[str, Any]
 ) -> None:
