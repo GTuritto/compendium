@@ -1,0 +1,86 @@
+# Compendium production bundle: four backing stores (network-internal) plus the
+# always-on REST access surface, published to the BIND_HOST interface only.
+#
+# TRUSTED SINGLE-USER LAN ONLY -- no auth, no TLS (ADR-011). The host firewall
+# is the access control. See DEPLOY.md.
+#
+# This compose is self-contained: the build context is this folder.
+name: compendium
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: compendium
+      POSTGRES_USER: compendium
+      POSTGRES_PASSWORD: compendium
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compendium -d compendium"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Compendium_dev_0
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.0
+    volumes:
+      - qdrantdata:/qdrant/storage
+    restart: unless-stopped
+
+  memgraph:
+    image: memgraph/memgraph:2.18.1
+    command: ["--log-level=WARNING"]
+    volumes:
+      - memgraphdata:/var/lib/memgraph
+    restart: unless-stopped
+
+  serve:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      SERVE_HOST: 0.0.0.0
+      SERVE_PORT: "8787"
+      VAULT_PATH: /app/vault
+    volumes:
+      - vault:/app/vault
+    ports:
+      # Publish only on BIND_HOST (set in .env). Pin to this server's LAN IP.
+      - "${BIND_HOST:-0.0.0.0}:8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      memgraph:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  osdata:
+  qdrantdata:
+  memgraphdata:
+  vault:

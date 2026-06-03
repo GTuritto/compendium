@@ -1,0 +1,40 @@
+[project]
+name = "compendium"
+version = "0.1.0"
+description = "Personal knowledge synthesis system: ingest sources, synthesize a canonical Markdown wiki, retrieve page-first."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13",
+    "ebooklib>=0.20",
+    "fastapi>=0.136.3",
+    "httpx>=0.27",
+    "mcp>=1.27.2",
+    "neo4j>=5.28",
+    "openai>=2.37.0",
+    "opensearch-py[async]>=3.2.0",
+    "psycopg[binary]>=3.2",
+    "pymupdf>=1.27.2.3",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "qdrant-client>=1.18.0",
+    "structlog>=24.1",
+    "textual>=0.80",
+    "trafilatura>=2.0.0",
+    "uvicorn>=0.48.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = [
+    "golden: golden-dataset quality tests (slower; nightly CI tier)",
+    "integration: tests requiring live backing stores (skip when unreachable)",
+    "live: tests that hit real model endpoints; opt-in, never in CI's default tier",
+]

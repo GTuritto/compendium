@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review #2 — Compendium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .label { font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <header class="space-y-5">
+        <div class="flex items-baseline justify-between flex-wrap gap-3">
+          <h1 class="font-serif text-4xl tracking-tight">Architecture review #2 — Compendium</h1>
+          <span class="text-sm text-slate-500">2026-05-26 · second pass</span>
+        </div>
+        <div class="text-sm bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg px-4 py-3">
+          <strong>Since review #1:</strong> candidate 1 (the CLI presentation seam, <code>compendium/cli/render.py</code>) is implemented in PR #20.
+          This pass re-confirms the still-open candidates and explores the modules #1 didn't touch — the TUI, the synth/promote/curation
+          path, and the ingest/wiki write path.
+        </div>
+        <p class="text-slate-600 max-w-3xl">
+          The headline finding: shipping the CLI render seam exposed its mirror image. The six TUI screens re-implement the
+          <em>same</em> scalar formatting the render seam just centralized — coverage to three places, the same date format, the
+          fallback flag. Presentation now leaks across two surfaces. The rest are deepenings of workflows whose ordering lives in
+          callers rather than in one module.
+        </p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 border-t border-slate-200 pt-4">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 border-2 border-slate-700 bg-white"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leakage / duplication</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 deep"></span> deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ===== CANDIDATE 1 (NEW) ===== -->
+        <article id="c1" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">new</span>
+            </div>
+            <h2 class="font-serif text-2xl">1 · Make the render seam the single presentation surface (CLI + TUI)</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              compendium/cli/render.py · tui/screens/dashboard.py · workbench.py · sources.py · pages.py · curation.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-0 divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="label text-rose-500 mb-3">Before · two surfaces format the same data</p>
+              <pre class="mermaid">
+flowchart TD
+  RES["result rows / objects"]
+  RES --> RENDER["cli/render.py<br/>coverage :.3f · date · flag"]
+  RES --> S1["dashboard._populate<br/>coverage :.3f · date"]
+  RES --> S2["workbench._populate<br/>coverage :.3f · flag"]
+  RES --> S3["curation._populate<br/>date · payload[:50]"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class S1,S2,S3 leak
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">The same `:.3f` / `%Y-%m-%d %H:%M` / fallback logic is copied into render and into 6 screens.</p>
+            </div>
+            <div class="p-6 bg-slate-50/60">
+              <p class="label text-emerald-600 mb-3">After · shared scalar formatters</p>
+              <pre class="mermaid">
+flowchart TD
+  RES2["result rows / objects"] --> FMT["render.fmt_*<br/>coverage · date · flag"]
+  FMT --> CLI["render.&lt;cmd&gt; (text/json)"]
+  FMT --> TUI["screens build cells"]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class FMT deep
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">One home for `fmt_coverage`, `fmt_ts`, `fmt_fallback`; CLI strings and TUI cells both consume them.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>The render seam centralized CLI formatting, but the TUI screens still reformat the same scalars in their <code>_populate</code> methods — coverage, timestamps, the fallback flag, payload truncation. Change a format and you touch render plus up to six screens.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>Extract the scalar formatters (<code>fmt_coverage</code>, <code>fmt_ts</code>, <code>fmt_fallback</code>) into the render module; the TUI builds its table cells from them. CLI gets whole-string renderers, TUI gets the per-cell pieces — both from one place.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: one format, both surfaces</li>
+                <li>leverage: the render seam already exists — extend it</li>
+                <li>deletion test: format reappears in 6 screens</li>
+                <li>tests already cover the formatters (test_render)</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CANDIDATE 2 (carried) ===== -->
+        <article id="c2" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-stone-200 text-stone-600">carried from #1</span>
+            </div>
+            <h2 class="font-serif text-2xl">2 · One projection seam; put Memgraph on the sync queue</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">index/sync.py · index/documents.py · graph/projection.py · graph/rebuild.py</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-0 divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="label text-rose-500 mb-3">Before</p>
+              <pre class="mermaid">
+flowchart TD
+  ENT["page / chunk"]
+  ENT --> D1["documents.* (OS)"]
+  ENT --> D2["documents.* (Qdrant)"]
+  ENT --> D3["projection.* (Memgraph)"]
+  D1 --> Q["index_sync_state<br/>per-row recovery"]
+  D2 --> Q
+  D3 -.->|off-queue rebuild.py| R["full re-run only"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class D3,R leak
+              </pre>
+            </div>
+            <div class="p-6 bg-slate-50/60">
+              <p class="label text-emerald-600 mb-3">After</p>
+              <pre class="mermaid">
+flowchart TD
+  ENT2["page / chunk"] --> P["project(entity)"]
+  P --> A1["OpenSearch adapter"]
+  P --> A2["Qdrant adapter"]
+  P --> A3["Memgraph adapter"]
+  A1 --> QQ["index_sync_state"]
+  A2 --> QQ
+  A3 --> QQ
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class P deep
+              </pre>
+            </div>
+          </div>
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>The entity→store mapping is re-derived across <code>documents.py</code>, <code>projection.py</code>, and a separate <code>rebuild.py</code>; Memgraph isn't on <code>index_sync_state</code>, so it has no per-row failure recovery. <span class="text-slate-500">The smoke walk made this concrete: `graph rebuild` after promote wiped the auto-added `SYNTHESIZES` edge, because rebuild re-derives only the structural edges.</span></p>
+            <p><span class="label text-slate-400">Solution</span><br/>One projection interface, one adapter per store; the graph joins the sync queue so all three drain and recover through one path.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: schema change hits one module</li>
+                <li>graph gains per-row recovery</li>
+                <li>three adapters make the seam real</li>
+                <li>one drain path to test</li>
+              </ul>
+            </div>
+            <div class="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">
+              <strong>ADR note:</strong> consistent with ADR-005 (stores stay derived); revisits only the implicit off-queue rebuild choice.
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CANDIDATE 3 (NEW) ===== -->
+        <article id="c3" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">new</span>
+            </div>
+            <h2 class="font-serif text-2xl">3 · The curation lifecycle as one deep operation</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">curate/synth.py · trace/promote.py · curate/promote_hook.py · __main__.py · tui/screens/curation.py</p>
+          </div>
+
+          <div class="p-6 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="label text-rose-500 mb-3">Before · ordering lives in callers</p>
+              <div class="space-y-1.5 text-sm">
+                <div class="border border-slate-200 rounded-lg p-2.5">caller: <code>synth_from_signal()</code> → draft, signal <span class="font-medium">in_progress</span></div>
+                <div class="text-center text-slate-400">↓ <span class="text-xs">caller must remember to promote</span></div>
+                <div class="border border-slate-200 rounded-lg p-2.5"><code>promote()</code> → re-writes vault, snapshot</div>
+                <div class="text-center text-slate-400">↓ <span class="text-xs">inline import</span></div>
+                <div class="border border-rose-200 bg-rose-50/40 rounded-lg p-2.5"><code>address_on_promote()</code> → close signal, add edges <span class="text-rose-700">(silent no-op if not found)</span></div>
+                <p class="text-xs text-slate-500 pt-1">The invariant "open → in_progress → addressed" lives in no single module. Synth-but-never-promote leaves a signal stuck forever; no type or seam prevents it.</p>
+              </div>
+            </div>
+            <div>
+              <p class="label text-emerald-600 mb-3">After · one module owns the transition</p>
+              <div class="space-y-2 text-sm">
+                <div class="border border-slate-300 rounded-lg p-3 deep text-slate-100">
+                  <p class="font-mono text-xs text-slate-400">curate lifecycle module</p>
+                  <p class="mt-1">owns the open → in_progress → addressed state machine and the promote+address ordering; callers express intent, not sequence.</p>
+                </div>
+                <div class="border border-slate-200 rounded-lg p-3">CLI and TUI both call one entry; the hook stops being an inline import buried in <code>promote()</code>.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>Synth → promote → address spans four modules; the ordering and the signal state machine live in callers (an inline import inside <code>promote()</code>, a silent no-op in the hook). Nothing prevents out-of-order or half-finished transitions.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>One module owns the signal lifecycle and the promote+address ordering; the hook becomes part of that module's implementation, not a caller responsibility.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: the state machine in one place</li>
+                <li>leverage: CLI + TUI share one entry</li>
+                <li>stuck-signal class of bug disappears</li>
+                <li>interface is the test surface</li>
+              </ul>
+            </div>
+            <div class="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">
+              <strong>ADR note:</strong> keep curator approval (ADR-009: no autonomous promotion). This deepens the <em>locality</em> of the workflow — it does not auto-promote; the curator still triggers the transition.
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CANDIDATE 4 (NEW) ===== -->
+        <article id="c4" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">new</span>
+            </div>
+            <h2 class="font-serif text-2xl">4 · Collapse the TUI load cycle into one Screen helper</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">tui/screens/*.py (10 repetitions) · tui/data.py</p>
+          </div>
+
+          <div class="p-6">
+            <p class="label text-slate-400 mb-3">The same five lines, ten times</p>
+            <div class="grid md:grid-cols-2 gap-6 items-center">
+              <pre class="text-xs bg-slate-900 text-slate-100 rounded-lg p-4 overflow-x-auto">@work(thread=True, exclusive=True)
+def load(self):
+    try:
+        payload = tui_data.dashboard()
+    except Exception as exc:
+        self.app.call_from_thread(self._error, str(exc))
+        return
+    self.app.call_from_thread(self._populate, payload)</pre>
+              <div class="text-sm text-slate-600 space-y-2">
+                <p>This block recurs across all six screens (10 worker actions). The "run blocking call in a thread → route result or error back to the UI" cycle is pure boilerplate.</p>
+                <p>A <code>Screen</code> base method — <code>self.load_async(fn, on_ok=self._populate)</code> — would absorb the decorator, the try/except, and the two <code>call_from_thread</code> hops.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/><code>@work(thread=True)</code> + try/except + two <code>call_from_thread</code> calls is copied into ten screen actions; the thread-safety contract is restated each time.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>One <code>Screen</code> base helper owns the load-or-error cycle; screens pass a data function and a populate callback.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: thread-safety contract in one place</li>
+                <li>leverage: every screen action shrinks to one call</li>
+                <li>deletion test: the cycle reappears 10×</li>
+                <li>error routing becomes consistent</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CANDIDATE 5 (carried + new facet) ===== -->
+        <article id="c5" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden opacity-95">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">Speculative</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">local-substitutable</span>
+            </div>
+            <h2 class="font-serif text-2xl">5 · Smaller cleanups: store lifecycle, vault re-reads, repo boilerplate</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">graph/client.py · index|retrieve/clients.py · wiki/page.py · ingest/adapters/markdown.py · db/repository.py</p>
+          </div>
+          <div class="px-7 py-5 space-y-3">
+            <ul class="text-sm text-slate-700 space-y-2 list-disc list-inside">
+              <li><strong>Memgraph lifecycle</strong> (carried): the Bolt driver is built in ~6 modules and closed by hand; a <code>graph_connection()</code> context manager would mirror the one enforced Postgres seam in <code>db/connection.py</code>.</li>
+              <li><strong>Vault body re-reads</strong> (new): <code>promote</code>, <code>sync</code>, <code>projection</code>, <code>promote_hook</code>, and <code>lint</code> each <code>parse_markdown(path.read_text())</code> just to get the body — a <code>page_body(page)</code> accessor would localize it. And two different <code>parse_markdown</code> functions exist (<code>wiki/page.py</code> vs <code>ingest/adapters/markdown.py</code>) — a navigability snag worth renaming.</li>
+              <li><strong>repository.py boilerplate</strong> (carried): three identical <code>all_*_ids</code>, duplicated WHERE-builders, inconsistent UUID coercion. Collapse the copy-paste only.</li>
+            </ul>
+            <div class="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">
+              <strong>ADR note:</strong> the repository stays shallow by the "raw SQL, no ORM" rule (ADR-004) — collapse duplication, don't add a query layer.
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ===== TOP RECOMMENDATION ===== -->
+      <section id="top-recommendation">
+        <div class="rounded-2xl deep text-slate-100 p-8 shadow-md">
+          <p class="label text-emerald-400 mb-2">Tackle first</p>
+          <h2 class="font-serif text-3xl mb-3"><a href="#c1" class="hover:underline">1 · Make the render seam the single presentation surface</a></h2>
+          <p class="text-slate-300 max-w-3xl">
+            It compounds the work you just merged. The render seam already exists and is tested; the only thing keeping presentation
+            from being truly single-home is the handful of scalar formatters the TUI screens still duplicate. Lowest risk, highest
+            leverage, no ADR friction. Then candidate 2 (the projection seam) for the deepest payoff — the smoke walk's wiped
+            <code>SYNTHESIZES</code> edge is exactly the recovery gap it closes.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>
