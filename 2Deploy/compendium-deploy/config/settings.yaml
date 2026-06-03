@@ -1,0 +1,80 @@
+# Compendium configuration.
+#
+# Secret and per-machine values come from environment variables (see
+# .env.example). This file references them with ${VAR} and holds the
+# non-secret behavior configuration. ${VAR:-default} supplies a default
+# when the variable is unset.
+
+storage:
+  postgres_url: ${POSTGRES_URL}
+  opensearch_url: ${OPENSEARCH_URL}
+  qdrant_url: ${QDRANT_URL}
+  memgraph_url: ${MEMGRAPH_URL}
+
+vault:
+  path: ${VAULT_PATH}
+
+synthesis:
+  endpoint: ${SYNTHESIS_ENDPOINT}
+  model: ${SYNTHESIS_MODEL}
+  api_key: ${OPENROUTER_API_KEY:-}
+
+embeddings:
+  endpoint: ${EMBEDDINGS_ENDPOINT}
+  model: ${EMBED_MODEL}
+  api_key: ${EMBEDDINGS_API_KEY:-}
+
+backup:
+  local_dir: ${BACKUP_LOCAL_DIR:-./backups}
+  rsync_dest: ${BACKUP_RSYNC_DEST:-}
+
+inbox:
+  path: ${INBOX_PATH:-~/Compendium/inbox}
+
+# --- Non-secret behavior config ---
+
+ingestion:
+  max_source_bytes: 209715200   # 200 MB
+  min_text_tokens: 1000
+  chunk:
+    target_tokens: 512
+    overlap_tokens: 64
+
+retrieval:
+  rrf_k: 60
+  page_coverage_threshold: 0.5
+  top_k: 7
+
+# Composed answers (`compendium ask`, v0.2 Phase 6). The LLM endpoint/model/key
+# reuse the `synthesis:` block above. Below `refuse_below_coverage`, ask refuses
+# (no composition call) and names the next CLI command instead of answering.
+ask:
+  refuse_below_coverage: 0.3
+  prompt_template_id: ask-v1
+  rewrite: true          # LLM query rewrite (Shape D part 2); ask-only, off the query hot path
+
+# Fast-loop graph expansion (ADR-009, Phase 9). Walks semantic edges from the
+# top fused pages; a no-op when disabled, when no semantic edges exist, or when
+# Memgraph is unreachable.
+graph_expansion:
+  enabled: true
+  seed_k: 3          # how many top fused pages to seed the walk from
+  max_hops: 2
+  decay: 0.5         # score multiplier per hop
+  weight: 0.3        # expansion contribution relative to a direct hit
+
+# Slow-loop curation thresholds (ADR-009, Phase 9).
+curation:
+  thin_grounding_min: 2          # a concept with fewer GROUNDS edges is "thin"
+  low_coverage_threshold: 0.5    # queries at/below this coverage are weak
+  # Autonomous semantic-edge extraction (ADR-010, v0.2 Phase 8). Runs inside
+  # `curate run`; writes RELATED_TO/PREREQUISITE_FOR with provenance. The LLM
+  # reuses the `synthesis:` config.
+  extract:
+    enabled: true
+    min_confidence: 0.7          # labels below this are dropped
+    top_k_neighbours: 10         # Qdrant neighbours per source page
+    full_sweep_every: 24         # re-sweep all pages every Nth run (cold start always sweeps)
+
+loops:
+  slow_loop_interval_seconds: 3600

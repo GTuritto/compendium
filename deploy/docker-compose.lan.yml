@@ -1,0 +1,90 @@
+# Compendium LAN deployment: the four backing stores (network-internal) plus
+# the always-on REST access surface, published to ONE host interface.
+#
+# TRUSTED SINGLE-USER LAN ONLY. The access surface has no auth and no TLS
+# (ADR-011). The only exposed port is serve's 8787, pinned to the server's LAN
+# IP. Restrict who can reach it with the host firewall -- see deploy/README-lan.md.
+#
+# Usage (on the server, e.g. 192.168.35.70):
+#   cp deploy/.env.lan.example deploy/.env.lan   # fill in API keys
+#   docker compose -f deploy/docker-compose.lan.yml up -d --build
+name: compendium-lan
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: compendium
+      POSTGRES_USER: compendium
+      POSTGRES_PASSWORD: compendium
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compendium -d compendium"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Compendium_dev_0
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.0
+    volumes:
+      - qdrantdata:/qdrant/storage
+    restart: unless-stopped
+
+  memgraph:
+    image: memgraph/memgraph:2.18.1
+    command: ["--log-level=WARNING"]
+    volumes:
+      - memgraphdata:/var/lib/memgraph
+    restart: unless-stopped
+
+  serve:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - .env.lan
+    environment:
+      SERVE_HOST: 0.0.0.0
+      SERVE_PORT: "8787"
+      VAULT_PATH: /app/vault
+    volumes:
+      - vault:/app/vault
+    ports:
+      # Publish only on the address in BIND_HOST (set in .env.lan). Pin it to
+      # this server's LAN IP, e.g. 192.168.35.70; 0.0.0.0 binds all interfaces.
+      - "${BIND_HOST:-0.0.0.0}:8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      memgraph:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  osdata:
+  qdrantdata:
+  memgraphdata:
+  vault:

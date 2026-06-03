@@ -1,6 +1,7 @@
 # Secrets and local config
 .env
 .env.local
+deploy/.env.lan
 
 # Local backups (v0.2 Phase 2 default; see docs/operations/backup-restore.md).
 backups/

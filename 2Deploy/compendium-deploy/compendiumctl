@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Lifecycle wrapper for the Compendium production bundle (Docker Compose).
+#   ./compendiumctl start|stop|restart|status|logs|update|cli|ingest ...
+set -euo pipefail
+cd "$(dirname "$0")"
+
+DC="docker compose"
+
+usage() {
+  cat <<'EOF'
+Usage: ./compendiumctl <command> [args]
+
+  start            Build (if needed) and start all services
+  stop             Stop all services (data volumes are kept)
+  restart          Restart all services
+  status           Show service status
+  logs [service]   Tail logs (default: serve)
+  update           Rebuild the app image and restart serve
+  cli <args...>    Run any `compendium` CLI command inside the serve container
+  ingest <args...> Shortcut for `cli ingest ...` then `cli index sync`
+  destroy          Stop and DELETE all data volumes (irreversible)
+EOF
+}
+
+cmd="${1:-}"; shift || true
+case "${cmd}" in
+  start)    $DC up -d --build ;;
+  stop)     $DC stop ;;
+  restart)  $DC restart ;;
+  status)   $DC ps ;;
+  logs)     $DC logs -f "${1:-serve}" ;;
+  update)   $DC build serve && $DC up -d serve ;;
+  cli)      $DC exec serve /app/.venv/bin/python -m compendium "$@" ;;
+  ingest)
+    $DC exec serve /app/.venv/bin/python -m compendium ingest "$@"
+    $DC exec serve /app/.venv/bin/python -m compendium index sync
+    ;;
+  destroy)  $DC down -v ;;
+  ""|-h|--help|help) usage ;;
+  *) echo "Unknown command: ${cmd}" >&2; usage; exit 1 ;;
+esac

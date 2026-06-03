@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — Compendium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .grain { background-image: radial-gradient(#e7e5e4 1px, transparent 1px); background-size: 18px 18px; }
+      .label { font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <header class="space-y-5">
+        <div class="flex items-baseline justify-between flex-wrap gap-3">
+          <h1 class="font-serif text-4xl tracking-tight">Architecture review — Compendium</h1>
+          <span class="text-sm text-slate-500">2026-05-26 · v0.1 (phases 0–10 merged)</span>
+        </div>
+        <p class="text-slate-600 max-w-3xl">
+          The deep seams already exist and are exemplary — the <code class="text-sm">Embedder</code> protocol with
+          its stub/real adapters, <code class="text-sm">pipeline.run()</code>'s injectable clients, the graph-expansion
+          hook that never leaks Memgraph into retrieval. The friction concentrates in four places where modules stayed
+          <em>shallow</em>: presentation re-derived per call site, the projection mapping copied per store, store-client
+          construction duplicated across a sync/async split, and a repository whose shallowness is mandated by an ADR.
+        </p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 border-t border-slate-200 pt-4">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 border-2 border-slate-700 bg-white"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leakage</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 deep"></span> deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ============ CANDIDATE 1 ============ -->
+        <article id="c1" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+            </div>
+            <h2 class="font-serif text-2xl">1 · Pull presentation out of the CLI behind one seam</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              compendium/__main__.py · ingest/pipeline.py · index/sync.py · retrieve/pipeline.py · trace/* · wiki/lint.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-0 divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="label text-rose-500 mb-3">Before · shallow CLI doing the work</p>
+              <pre class="mermaid">
+flowchart TD
+  CLI["__main__.py<br/>706 lines · ~17 formatters"]
+  CLI -->|raw SELECT id FROM sources| PG[(Postgres)]
+  CLI -->|count stored/unchanged/failed| AGG[aggregate inline]
+  CLI -->|build clients + reachability| ST[stores]
+  CLI -->|json.dumps + text fmt| OUT[stdout]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class PG,AGG,ST leak
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">Counting, a raw query, client wiring, and 17 ad-hoc formatters all live at the leaf.</p>
+            </div>
+            <div class="p-6 bg-slate-50/60">
+              <p class="label text-emerald-600 mb-3">After · parse → call → render</p>
+              <pre class="mermaid">
+flowchart TD
+  CLI2["__main__.py<br/>parse args · call · print"]
+  CLI2 --> MOD["modules return<br/>result objects"]
+  CLI2 --> REND["render(result, fmt)"]
+  REND -.->|text| OUT2[stdout]
+  REND -.->|json| OUT2
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class REND deep
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">Modules own their aggregates; one render seam, two adapters (text, json).</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>Aggregation, a raw <code class="text-sm">SELECT</code>, client construction, and ~17 one-off formatters leak into the CLI; the modules hand back bare lists and dicts.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>Modules return rich result objects; one presentation module renders any of them as text or JSON. Handlers shrink to parse → call → print.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>interface shrinks at every handler</li>
+                <li>locality: formatting in one module</li>
+                <li>leverage: formatters become pure, testable</li>
+                <li>deletes the raw SQL from the CLI</li>
+                <li>two adapters justify the seam: text, json</li>
+                <li>deletion test: complexity reappears across 17 sites</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 2 ============ -->
+        <article id="c2" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+            <h2 class="font-serif text-2xl">2 · One projection seam; put Memgraph on the sync queue</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              index/sync.py · index/documents.py · graph/projection.py · graph/rebuild.py · index/opensearch.py · index/qdrant.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-0 divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="label text-rose-500 mb-3">Before · mapping copied per store</p>
+              <pre class="mermaid">
+flowchart TD
+  ENT["page / chunk row"]
+  ENT --> D1["documents.page_document<br/>(OpenSearch)"]
+  ENT --> D2["documents.page_payload<br/>(Qdrant)"]
+  ENT --> D3["projection.project_page<br/>(Memgraph)"]
+  D1 --> Q1["index_sync_state queue<br/>per-row recovery"]
+  D2 --> Q1
+  D3 -.->|off-queue: rebuild.py<br/>no failure recovery| R["full re-run only"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class D3,R leak
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">A schema change touches three mappers; graph drains off-queue with no per-row recovery.</p>
+            </div>
+            <div class="p-6 bg-slate-50/60">
+              <p class="label text-emerald-600 mb-3">After · one projection, three adapters, one queue</p>
+              <pre class="mermaid">
+flowchart TD
+  ENT2["page / chunk row"] --> PROJ["project(entity)<br/>one interface"]
+  PROJ --> A1["OpenSearch adapter"]
+  PROJ --> A2["Qdrant adapter"]
+  PROJ --> A3["Memgraph adapter"]
+  A1 --> QQ["index_sync_state queue"]
+  A2 --> QQ
+  A3 --> QQ
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class PROJ deep
+              </pre>
+              <p class="text-sm text-slate-600 mt-2">All three drain — and recover — through one path; the mapping lives once.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>The entity→store mapping is re-derived across <code class="text-sm">documents.py</code>, <code class="text-sm">projection.py</code>, a three-branch <code class="text-sm">_write_one</code>, and a separate <code class="text-sm">rebuild.py</code>; Memgraph isn't on <code class="text-sm">index_sync_state</code>, so it has no per-row failure recovery.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>One "project entity to derived stores" interface with one adapter per store; the graph joins the sync queue so all three drain and recover through one path.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: schema change hits one module</li>
+                <li>leverage: one drain path for all stores</li>
+                <li>graph gains per-row failure recovery</li>
+                <li>three adapters make the seam real</li>
+                <li>"how a page reaches all indexes" reads in one place</li>
+                <li>tests target the projection interface, not 6 files</li>
+              </ul>
+            </div>
+            <div class="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">
+              <strong>ADR note:</strong> consistent with ADR-005 (the stores stay derived and distinct). It revisits only the <em>implicit</em> choice that graph rebuild is an off-queue command — worth reopening because that asymmetry is a real recovery gap, not a styling preference.
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 3 ============ -->
+        <article id="c3" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">local-substitutable</span>
+            </div>
+            <h2 class="font-serif text-2xl">3 · One factory + lifecycle per store, mirroring <code class="font-mono text-xl">db.connection</code></h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              index/clients.py · retrieve/clients.py · graph/client.py · db/connection.py
+            </p>
+          </div>
+
+          <div class="p-6 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="label text-rose-500 mb-3">Before</p>
+              <div class="space-y-2 text-sm">
+                <div class="border border-slate-200 rounded-lg p-3">
+                  <p class="font-mono text-xs text-slate-500">db/connection.py</p>
+                  <p class="mt-1">Postgres: <span class="text-emerald-700 font-medium">one managed seam</span> — <code class="text-xs">connection()</code> commits/rolls back/closes.</p>
+                </div>
+                <div class="border border-rose-200 bg-rose-50/40 rounded-lg p-3">
+                  <p class="font-mono text-xs text-slate-500">index/clients.py + retrieve/clients.py</p>
+                  <p class="mt-1">OpenSearch/Qdrant: URL-from-config + ctor args <span class="text-rose-700 font-medium">copied across sync and async</span> factories.</p>
+                </div>
+                <div class="border border-rose-200 bg-rose-50/40 rounded-lg p-3">
+                  <p class="font-mono text-xs text-slate-500">graph/client.py</p>
+                  <p class="mt-1">Memgraph: driver built in <span class="text-rose-700 font-medium">6 modules</span>, <code class="text-xs">.close()</code> by hand — no enforced lifecycle.</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="label text-emerald-600 mb-3">After</p>
+              <div class="space-y-2 text-sm">
+                <div class="border border-slate-300 rounded-lg p-3 deep text-slate-100">
+                  <p class="font-mono text-xs text-slate-400">shared resolution + lifecycle</p>
+                  <p class="mt-1">One config→URL resolver; a <code class="text-xs">graph_connection()</code> context manager like Postgres'.</p>
+                </div>
+                <div class="border border-slate-200 rounded-lg p-3">
+                  <p>Sync (indexing) and async (query) stay as <span class="font-medium">two real adapters</span> — they share resolution, not return type.</p>
+                </div>
+                <div class="border border-slate-200 rounded-lg p-3">
+                  <p>Memgraph closure becomes structural, not a thing 6 call sites must remember.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>OpenSearch/Qdrant URL+arg construction is duplicated across the sync and async factories; Memgraph drivers are built in six modules and closed by hand, unlike the one enforced Postgres lifecycle.</p>
+            <p><span class="label text-slate-400">Solution</span><br/>A single config-resolution step plus a <code class="text-sm">graph_connection()</code> context manager mirroring <code class="text-sm">db.connection</code>. The sync/async split stays — it's two genuine adapters.</p>
+            <div>
+              <p class="label text-slate-400 mb-2">Wins</p>
+              <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm text-slate-700 list-disc list-inside">
+                <li>locality: URL/auth logic in one place</li>
+                <li>leverage: enforced close, like Postgres</li>
+                <li>two adapters (sync index, async query) are real</li>
+                <li>removes a class of leaked-driver bugs</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 4 ============ -->
+        <article id="c4" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden opacity-95">
+          <div class="px-7 pt-6 pb-5 border-b border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">Speculative</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+            </div>
+            <h2 class="font-serif text-2xl">4 · <code class="font-mono text-xl">repository.py</code> boilerplate (mostly leave it shallow)</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">compendium/db/repository.py · 1035 lines · 53 functions</p>
+          </div>
+
+          <div class="p-6">
+            <!-- mass diagram: interface vs implementation -->
+            <p class="label text-slate-400 mb-4">Shallow by design — interface surface ≈ implementation</p>
+            <div class="flex items-end gap-8 h-40">
+              <div class="flex items-end gap-2">
+                <div class="text-center">
+                  <div class="w-16 bg-slate-700 rounded-t" style="height:120px"></div>
+                  <p class="label mt-1 text-slate-500">iface</p>
+                </div>
+                <div class="text-center">
+                  <div class="w-16 bg-slate-300 rounded-t" style="height:128px"></div>
+                  <p class="label mt-1 text-slate-500">impl</p>
+                </div>
+                <p class="text-sm text-slate-600 ml-2 self-center max-w-[10rem]">~75% are one-query pass-throughs: interface nearly matches implementation.</p>
+              </div>
+              <div class="flex items-end gap-2 border-l border-slate-200 pl-8">
+                <div class="text-center">
+                  <div class="w-16 bg-slate-300 rounded-t" style="height:36px"></div>
+                  <p class="label mt-1 text-slate-500">iface</p>
+                </div>
+                <div class="text-center">
+                  <div class="w-16 deep rounded-t" style="height:140px"></div>
+                  <p class="label mt-1 text-slate-500">impl</p>
+                </div>
+                <p class="text-sm text-slate-600 ml-2 self-center max-w-[11rem]">The deep ones already earn their keep: <code class="text-xs">enqueue_index</code>, <code class="text-xs">set_page_topics</code>, <code class="text-xs">ensure_corpus_revision</code>.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-7 py-5 border-t border-slate-100 space-y-3">
+            <p><span class="label text-slate-400">Problem</span><br/>Three identical <code class="text-sm">all_*_ids</code> functions, duplicated dynamic <code class="text-sm">WHERE</code>-builders, and inconsistent UUID coercion (str vs <code class="text-sm">UUID</code> at the seam).</p>
+            <p><span class="label text-slate-400">Solution</span><br/>Collapse only the trivial duplication and standardize UUID coercion. Do <strong>not</strong> add a query-builder or ORM.</p>
+            <div class="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">
+              <strong>ADR note — don't deepen broadly:</strong> the repository's shallowness is mandated by the "raw SQL, no ORM; thin <code class="text-xs">db/</code> repository" rule. A deeper query abstraction would contradict it. Listed so future reviews stop re-suggesting it — the only real win here is deleting copy-paste, not adding depth.
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ============ TOP RECOMMENDATION ============ -->
+      <section id="top-recommendation">
+        <div class="rounded-2xl deep text-slate-100 p-8 shadow-md">
+          <p class="label text-emerald-400 mb-2">Tackle first</p>
+          <h2 class="font-serif text-3xl mb-3">
+            <a href="#c1" class="hover:underline">1 · Pull presentation out of the CLI</a>
+          </h2>
+          <p class="text-slate-300 max-w-3xl">
+            Highest leverage for the lowest risk: it touches no ADR, concentrates the most scattered complexity
+            (~17 formatters, an inline query, client wiring), and turns presentation into pure, testable adapters
+            behind one seam. Do it first, then candidate&nbsp;2 — the projection seam — for the deeper architectural
+            payoff of giving Memgraph the same per-row recovery the other two stores already have.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>
