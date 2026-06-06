@@ -22,6 +22,13 @@ the access surface. Agent callers read (`query`, `ask`, `page_get`, `page_list`,
 
 ## Surfaces and seams
 
+**Page kind.** A first-class strategy record (`compendium/wiki/page_kind.py`), one per kind
+(`source`, `concept`, `topic`), that is the single home for that kind's required frontmatter
+fields, frontmatter shape, vault DB fields, vault subdirectory, and lint rules. `page.py`,
+`lint.py`, and `vault.py` consult the registry rather than branching on `kind`. Distinct from the
+`Page` dataclass, which stays a flat data carrier — this records the per-kind *rules*, not a
+subclassing of the *data*.
+
 **Access surface.** The callable layer of Compendium, introduced in v0.2: two transports
 (MCP over stdio; HTTP REST/JSON on `127.0.0.1`) sharing one internal facade over the existing
 `pipeline.query`, `ingest`, and `ask` functions. The set of verbs is deliberately narrower
