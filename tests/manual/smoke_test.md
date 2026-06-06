@@ -396,3 +396,15 @@ frontmatter contract, lint, and vault behaviour.
 | arch3.2 | Lint clean | `compendium lint` on the seeded vault | 0 errors, exit 0 |
 | arch3.3 | Per-kind lint still fires | hand-edit a source page to drop `source_id` (or a concept's `topic_ids` to a non-resolving id); `compendium lint` | the same per-kind rule fires (`kind-specific-fields` / `topic-ids-resolve`); exit 1 |
 | arch3.4 | Rules live in one place | `grep -nE 'kind ==' compendium/wiki/{page,lint,vault}.py` | no per-kind *rule* branch remains; the only match is lint's cross-page topic-id lookup (context construction the topic rule consumes) |
+
+## Arch fix 4 — SignalGenerator registry (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus with a low-coverage gap. `COMPENDIUM_EMBED_STUB=1
+COMPENDIUM_SYNTH_STUB=1`. Confirms the registry-driven slow loop produces the same signals.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch4.1 | Same signals + summary | seed a gap (empty pages, query, reindex), `compendium curate run` | same `by_kind` / `skipped` / `extracted_edges` summary as before; signals inserted with the same kinds/priorities |
+| arch4.2 | Graph-down skip is kind-derived | stop Memgraph, `compendium curate run` | `skipped` lists exactly `thin_grounding`, `dangling_concept`, `unresolved_contradiction`; the low-coverage signal is still inserted; exit 0 |
+| arch4.3 | Extractor still a separate step | `curate run` with stores up | `extracted_edges` counts are populated by the extraction step, which is absent from the SignalGenerator registry |
+| arch4.4 | Rules in one place | `grep -nE 'graph_kinds|"thin_grounding"' compendium/curate/run.py` | no hardcoded kind-list; kinds + store-requirements live only in `signal_generator.py` / the registry |

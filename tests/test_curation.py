@@ -149,7 +149,11 @@ def test_curate_run_memgraph_down_still_yields_postgres_signals(curation_env, mo
     _force_gap_trace("team learning")
     report = curate_run()
     assert "low_coverage_query" in report.by_kind
-    assert "thin_grounding" in report.skipped_generators
+    # Graph down -> exactly the three graph generators' kinds are skipped, and
+    # the list is derived from the registry (not a hardcoded literal in run.py).
+    assert set(report.skipped_generators) >= {
+        "thin_grounding", "dangling_concept", "unresolved_contradiction",
+    }
 
 
 def test_expansion_logs_graph_expansion(curation_env):

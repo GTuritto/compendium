@@ -53,6 +53,14 @@ the source kind (`inbox/paper/`, `inbox/note/`, etc.); processed files move to
 
 ## Graph and curation
 
+**Signal generator.** A first-class strategy record (`compendium/curate/signal_generator.py`), one
+per slow-loop generator, that is the single home for the signal `kinds` it emits, the stores it
+`requires` (`postgres` / `graph`), and how it `generate`s candidate signals from a
+`GenerationContext`. `compendium curate run` iterates the registry rather than hardwiring the calls
+or restating the kinds as a literal. Distinct from the autonomous **LLM-extracted edge** writer
+(ADR-010), which is not a signal generator — it writes edges and returns counts, and runs as a
+separate step.
+
 **Edge type.** A first-class value object (`compendium/graph/edge_type.py`), distinct from the
 raw Cypher relationship name, that carries every per-type rule a caller might branch on: whether
 the type is `automatic` (structural: `PART_OF`/`EVIDENCES`/`GROUNDS`), `symmetric` (`RELATED_TO`),

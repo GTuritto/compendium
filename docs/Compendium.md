@@ -457,6 +457,8 @@ FastAPI plus a small SPA was rejected for v0.1 on cost against benefit, but not 
 
 **Status:** Accepted.
 
+**Implementation note (post-v0.2 architecture fix):** the slow loop's signal generators live in one strategy registry, `compendium/curate/signal_generator.py` (a `SignalGenerator` record per generator — its `kinds`, the stores it `requires`, and `generate(ctx)`), consulted by `compendium curate run` instead of hardwired calls and a hardcoded kind-list. The autonomous edge extractor (ADR-010) is deliberately not a `SignalGenerator` — it writes edges and returns counts, and stays a separate run step. Behaviour-preserving.
+
 #### Context
 
 ADR-002 places Memgraph in the stack as a structural index. ADR-006 commits topic and concept pages to existing as graph nodes. None of that, by itself, says what the graph does for retrieval quality or for the wiki's evolution over time.
