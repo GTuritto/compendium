@@ -21,7 +21,7 @@ The system SHALL provide an `EdgeType` value object (`compendium/graph/edge_type
 
 ### Requirement: All semantic-edge writes go through one provenance-enforcing seam
 
-The system SHALL provide `schema.upsert_semantic_edge` and route every semantic-edge writer (curator links, LLM extraction, the SYNTHESIZES lifecycle) through it. The seam SHALL own canonicalisation for symmetric types, the "never overwrite a `extracted_by != "llm"` edge" protection (checked in both directions for symmetric types), and provenance stamping. The generic `schema.upsert_edge` SHALL reject a semantic edge type, directing callers to the seam; it remains the writer for the three structural types only.
+The system SHALL provide `schema.upsert_semantic_edge` and route every semantic-edge writer (curator links, LLM extraction, the SYNTHESIZES lifecycle) through it. The seam SHALL own: LLM-path canonicalisation for symmetric types, the "an LLM write never overwrites a non-LLM edge" protection (checked in both directions for symmetric types), and provenance stamping. The generic `schema.upsert_edge` SHALL reject a semantic edge type, directing callers to the seam; it remains the writer for the three structural types only.
 
 #### Scenario: A curator edge is never overwritten by extraction
 
@@ -29,10 +29,11 @@ The system SHALL provide `schema.upsert_semantic_edge` and route every semantic-
 - **WHEN** the LLM extractor labels that same pair `RELATED_TO` and writes through the seam
 - **THEN** the existing curator edge is left unchanged and the write returns `"collision"` — regardless of which orientation the curator originally used
 
-#### Scenario: Curator symmetric edges are canonicalised
+#### Scenario: A curator symmetric edge keeps its orientation and is still protected
 
 - **WHEN** a curator links `RELATED_TO` from a higher-id page to a lower-id page
-- **THEN** the stored edge is canonicalised (one edge per unordered pair), matching the orientation the extractor would use, so the two write paths cannot produce a duplicate pair
+- **THEN** the edge is stored in the curator's orientation (not flipped), so fast-loop expansion — which walks edges *directed* from a seed — still reaches the neighbour from the page the curator linked; and a later LLM extraction of the same pair is still reported `"collision"` because the seam checks both directions for a symmetric type
+- **NOTE** canonicalisation (lexicographic-by-id) is applied on the LLM write path only, where the extractor dedupes its own writes; it is deliberately not applied to curator/lifecycle writes, to preserve directed-expansion reachability
 
 #### Scenario: SYNTHESIZES edges carry provenance
 

@@ -50,3 +50,26 @@ def test_edge_types_order_is_structural_then_semantic() -> None:
     # EDGE_TYPES preserves the historical AUTOMATIC_EDGES + SEMANTIC_EDGES order
     # (it is the Cypher label whitelist; order is part of the contract).
     assert et.EDGE_TYPES == et.AUTOMATIC_EDGES + et.SEMANTIC_EDGES
+
+
+def test_upsert_edge_rejects_semantic_types() -> None:
+    # The guard fires before any driver use, so driver=None is fine.
+    import pytest
+
+    from compendium.graph import schema
+
+    for semantic in et.SEMANTIC_EDGES:
+        with pytest.raises(ValueError, match="upsert_semantic_edge"):
+            schema.upsert_edge(None, semantic, "Concept", "a", "Source", "b")
+
+
+def test_upsert_semantic_edge_rejects_structural_types() -> None:
+    import pytest
+
+    from compendium.graph import schema
+
+    for structural in et.AUTOMATIC_EDGES:
+        with pytest.raises(ValueError, match="not a semantic edge type"):
+            schema.upsert_semantic_edge(
+                None, structural, "Chunk", "a", "Source", "b", provenance={},
+            )

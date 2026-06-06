@@ -77,7 +77,7 @@ been routed through `upsert_semantic_edge` — so no commit is left red.
 compendium/graph/
   edge_type.py            # NEW — EdgeType dataclass + registry + derived tuples
   schema.py               # MODIFIED — tuples derived; upsert_semantic_edge; upsert_edge guard
-  links.py                # MODIFIED — curator write via the seam (canonicalised)
+  links.py                # MODIFIED — curator write via the seam (orientation preserved)
   browse.py               # MODIFIED — _SEMANTIC_RELS from walkable_rel_pattern()
 compendium/curate/
   extract.py              # MODIFIED — _ACTIONABLE -> EXTRACTABLE_EDGES
@@ -92,7 +92,7 @@ tests/
 | # | Layer | Scenario | Verify |
 | --- | --- | --- | --- |
 | 1 | unit | `EdgeType` derived tuples | each equals the known-good set (extractable / walkable / symmetric / automatic / curator-settable) |
-| 2 | unit | `upsert_semantic_edge` | written / refreshed / collision; curator edge survives LLM re-extraction in either orientation; symmetric write canonicalised |
+| 2 | unit | `upsert_semantic_edge` | written / refreshed / collision; curator edge survives LLM re-extraction in either orientation; LLM symmetric write canonicalised (curator write keeps orientation) |
 | 3 | unit | `upsert_edge` guard | raises on a semantic type; writes a structural type as before |
 | 4 | regression | `test_extract.py` / graph / curate suites | green — extractor provenance, collision, expansion unchanged |
 | 5 | grep gate | one literal source | extractable/walkable/curator sets exist only in the registry |
@@ -104,7 +104,7 @@ Appended to `tests/manual/smoke_test.md` on completion.
 
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| arch2.1 | Curator symmetric edge canonicalised | `compendium graph link <hi-id> <lo-id> --type RELATED_TO`; inspect orientation | stored canonical (one edge per unordered pair), matching the extractor |
+| arch2.1 | Curator edge keeps orientation, still protected | `compendium graph link <a> <b> --type RELATED_TO`; inspect; then `curate run` | stored in the curator's orientation (not flipped) so directed expansion reaches it; extraction of the same pair is dropped-by-collision (both directions). Canonicalisation is LLM-write-only |
 | arch2.2 | Curator edge survives extraction | `graph link … --type RELATED_TO`; `curate run`; inspect | edge keeps `extracted_by="curator"`; run logs `dropped-by-collision` |
 | arch2.3 | Expansion walks the same set | query a term hitting a linked page; `trace show` | `graph_expansion` walks RELATED_TO/PREREQUISITE_FOR/SYNTHESIZES (not CONTRADICTS) |
 | arch2.4 | CONTRADICTS still curator-only | `graph link … --type CONTRADICTS` | accepted (curator-set); not walked by expansion, not written by the extractor |

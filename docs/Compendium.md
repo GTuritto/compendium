@@ -505,6 +505,8 @@ A single loop (query-time only) was rejected: the wiki never improves systematic
 
 **Status:** Accepted (v0.2 Phase 8, shipped 2026-06-01 via PR #40). Reverses, selectively, the v0.1 exclusion-list rule *"Not automated semantic-edge extraction."* The slow-loop generator `from_extracted_edges` writes `RELATED_TO` / `PREREQUISITE_FOR` with provenance; `SYNTHESIZES` stays lifecycle-owned and `CONTRADICTS` curator-only. Curator edges are never overwritten.
 
+**Implementation note (post-v0.2 architecture fix):** the per-type rules for ADR-009 and ADR-010 (symmetric / walkable / extractable / curator-settable) live in one value object, `compendium/graph/edge_type.py`, and every semantic-edge write — curator `graph link`, the LLM extractor, and the lifecycle `SYNTHESIZES` hook — goes through one provenance-enforcing seam, `schema.upsert_semantic_edge` (protects curator edges, stamps provenance, canonicalises symmetric edges on the LLM path only — curator edges keep their orientation so directed expansion still reaches them). The generic `upsert_edge` writes structural edges only. Behaviour-preserving; consolidates rules that were previously restated across five modules.
+
 #### Context
 
 ADR-009 declared semantic edges curator-driven in v0.1: the curator approves every `RELATED_TO`, `PREREQUISITE_FOR`, `SYNTHESIZES`, and `CONTRADICTS` edge through `compendium graph link` or, in the case of `SYNTHESIZES`, through the promote hook in `curate/lifecycle`. That preserves trust ("every meaningful change was approved by a human"), but it leaves the graph thin: most pairs of pages that are *in fact* related never get an edge, because the curator never has time. A thin graph means the fast-loop expansion (ADR-009) under-fires.

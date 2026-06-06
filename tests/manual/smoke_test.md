@@ -369,3 +369,17 @@ status / uninstall identically after consolidation behind `compendium/service_un
 | arch1.2 | Generated units unchanged | inspect each written plist / unit file | identical content to pre-fix (trigger keys, ProgramArguments, WorkingDirectory, log paths) |
 | arch1.3 | Status reports unchanged | `compendium schedule status --format json`; `compendium inbox status --format json`; `compendium serve status --format json` | same JSON shape/values as before the fix |
 | arch1.4 | Uninstall idempotent | run each `uninstall` twice | first removes; second is a no-op (`not installed`); inbox directory preserved |
+
+## Arch fix 2 — EdgeType value object + provenance seam (behaviour-preserving)
+
+Prerequisites: stores up; a seeded corpus with ≥2 pages and the graph built.
+`COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`. Confirms the consolidated edge
+rules + the one provenance seam preserve ADR-009/010 behaviour.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch2.1 | Curator edge keeps orientation, still protected | `compendium graph link <a> <b> --type RELATED_TO`; inspect in Memgraph, then `curate run` | stored in the curator's orientation (a→b, not flipped) so expansion reaches b from a; a later extraction of the same pair is `dropped-by-collision` (the seam checks both directions). Canonicalisation is LLM-write-only. |
+| arch2.2 | Curator edge survives extraction | after arch2.1, `compendium curate run`; inspect that edge | keeps `extracted_by="curator"`; the run logs `dropped-by-collision` for that pair; not overwritten |
+| arch2.3 | Expansion walks the same set | query a term hitting a linked page, then `compendium trace show <id>` | `graph_expansion` walks `RELATED_TO`/`PREREQUISITE_FOR`/`SYNTHESIZES` only (CONTRADICTS excluded), as before |
+| arch2.4 | CONTRADICTS still curator-only | `compendium graph link <a> <b> --type CONTRADICTS` | accepted (curator-set); never walked by expansion or written by the extractor |
+| arch2.5 | Structural seam guard | (dev) `schema.upsert_edge(driver, "RELATED_TO", …)` | raises `ValueError` directing to `upsert_semantic_edge`; structural `PART_OF`/`EVIDENCES`/`GROUNDS` writes unaffected |

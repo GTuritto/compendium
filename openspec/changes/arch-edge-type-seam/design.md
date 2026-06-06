@@ -13,7 +13,7 @@ Deepening target, in the review's vocabulary: a **missing seam** — the per-typ
 - One `EdgeType` value object + registry as the single source of per-type rules; the five scattered literals/strings derive from it.
 - One `upsert_semantic_edge` seam that every semantic-edge writer (curator links, LLM extraction, SYNTHESIZES lifecycle) goes through, owning canonicalisation + the curator-protection invariant + provenance stamping.
 - `upsert_edge` reserved for structural edges (guard rejects semantic types).
-- Behaviour preserved: same rules, same invariant, same walkable set, same CLI; plus two consistency fixes (curator `RELATED_TO` canonicalised; `SYNTHESIZES` carries provenance).
+- Behaviour preserved: same rules, same invariant, same walkable set, same CLI, same edge orientations; plus one consistency fix (`SYNTHESIZES` carries explicit provenance instead of none).
 
 **Non-Goals:**
 
@@ -60,8 +60,8 @@ upsert_semantic_edge(driver, edge_type, from_label, from_id, to_label, to_id, *,
 
 It owns the logic currently split between `upsert_extracted_edge` and `links.py`:
 
-- **Canonicalisation:** if `EdgeType[edge_type].symmetric` and `from_id > to_id`, swap endpoints (so one edge per unordered pair, orientation-independent). This now applies to curator links too — closing the inconsistency where `links.py` wrote non-canonical `RELATED_TO`.
-- **Curator protection:** an existing edge whose `extracted_by != "llm"` is never overwritten → `"collision"` (both directions checked for symmetric types), exactly as `upsert_extracted_edge` does today.
+- **Canonicalisation (LLM path only):** if `EdgeType[edge_type].symmetric` and the write is `extracted_by="llm"` and `from_id > to_id`, swap endpoints (so the extractor keeps one edge per unordered pair). Curator/lifecycle writes are **not** canonicalised — fast-loop expansion (`browse.walk_semantic`) walks edges *directed* from a seed, so flipping a curator edge would make it unreachable from the page the curator linked. The collision check below looks in both directions, so a curator edge in either orientation is still protected without canonicalising it.
+- **Curator protection:** an `extracted_by="llm"` write never overwrites an existing non-LLM edge → `"collision"` (both directions checked for symmetric types), exactly as `upsert_extracted_edge` does today. A curator/lifecycle write has authority and refreshes in place.
 - **Provenance stamping:** writes `provenance` (the caller supplies `extracted_by` + the rest) onto the relationship.
 
 Callers:
@@ -75,14 +75,14 @@ Callers:
 
 `upsert_edge` gains a guard: if `EdgeType[edge_type]` is not `automatic`, raise `ValueError("use upsert_semantic_edge for semantic edges")`. Structural projection is unaffected (writes only the three automatic types). This makes "semantic writes go through the provenance seam" a checked invariant, not a convention.
 
-### Decision: behaviour-preserving, with two deliberate consistency fixes
+### Decision: behaviour-preserving, with one deliberate consistency fix
 
-The rules, the walkable set, the curator-protection semantics, and the CLI are identical. Two pre-existing inconsistencies are corrected as a side effect of routing through one seam: (1) curator `RELATED_TO` is now canonicalised like the extractor's; (2) `SYNTHESIZES` edges now carry `extracted_by="curator"` provenance instead of none. Both are strict improvements and are called out in tasks/tests so they are not mistaken for regressions.
+The rules, the walkable set, the curator-protection semantics, the CLI, and edge orientations are identical. One pre-existing inconsistency is corrected as a side effect of routing through one seam: `SYNTHESIZES` edges now carry `extracted_by="curator"` provenance instead of none (so they are explicitly protected from LLM overwrite — they were already non-extractable, so this is belt-and-braces). Curator-edge canonicalisation was considered and **rejected**: it would flip the orientation of a curator `RELATED_TO` whose `from_id > to_id`, and because expansion walks edges directed from a seed, the curator's linked page would no longer reach the neighbour. Canonicalisation therefore stays on the LLM path only, matching today's behaviour.
 
 ## Risks / Trade-offs
 
 - **A semantic writer not yet routed through the seam would now raise** (the `upsert_edge` guard). Mitigation: grep for every `upsert_edge(...semantic...)` call site (links, lifecycle) and migrate them in the same change; a test asserts `upsert_edge` rejects a semantic type.
-- **Curator-canonicalisation changes the stored orientation** of curator `RELATED_TO` edges written before this change. Mitigation: orientation is not user-visible (expansion and status are orientation-agnostic for symmetric edges); no migration needed, and new writes are canonical.
+- **Directed expansion vs symmetric edges.** `browse.walk_semantic` walks edges directed from a seed, so a symmetric `RELATED_TO` is reachable only from its stored `from` endpoint. This is pre-existing behaviour; the change preserves it by *not* canonicalising curator edges (see the canonicalisation decision). A proper fix — undirected traversal for symmetric types — is out of scope here (it would change extracted-edge expansion too) and noted for a future change.
 - **Drift between registry and Cypher whitelist.** Mitigation: `EDGE_TYPES` (the Cypher label whitelist) is derived from the same registry, so they cannot diverge.
 
 ## Migration Plan

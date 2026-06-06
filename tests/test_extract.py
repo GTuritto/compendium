@@ -207,8 +207,8 @@ def test_upsert_extracted_edge_written_refreshed_and_curator_collision(extract_c
         assert again == "refreshed"  # no duplicate edge
 
         # a curator edge on the same pair is never overwritten
-        schema.upsert_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id,
-                           {"weight": 1.0, "extracted_by": "curator"})
+        schema.upsert_semantic_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id,
+                                    provenance={"weight": 1.0, "extracted_by": "curator"})
         coll = schema.upsert_extracted_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id, props)
         assert coll == "collision"
 
@@ -225,7 +225,10 @@ def test_upsert_extracted_edge_protects_provenance_less_edge(extract_corpus):
     props = {"extracted_by": "llm", "model": "stub", "confidence": 0.9,
              "extracted_at": "2026-06-01T00:00:00Z", "source_revision_id": "rev-1", "weight": 0.9}
     with graph_connection() as driver:
-        schema.upsert_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id, {"weight": 1.0})
+        # Seed a provenance-less edge (no extracted_by) through the seam — a
+        # non-llm write, so it has curator authority and stamps no provenance.
+        schema.upsert_semantic_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id,
+                                    provenance={"weight": 1.0})
         disp = schema.upsert_extracted_edge(driver, "RELATED_TO", c_label, c_id, s_label, s_id, props)
         assert disp == "collision"
         with driver.session() as s:

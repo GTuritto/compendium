@@ -19,7 +19,7 @@ This is a **missing seam** (per-type rules with no single home) plus a **leaky s
 ## What Changes
 
 - **An `EdgeType` value object** (`compendium/graph/edge_type.py`): one frozen record per edge type carrying `name`, `automatic`, `symmetric`, `walkable` (walked by fast-loop expansion), `extractable` (LLM may write it), and `curator_settable`. A registry plus derived tuples — `SEMANTIC_EDGES`, `AUTOMATIC_EDGES`, `EXTRACTABLE_EDGES`, `WALKABLE_EDGES`, `CURATOR_SETTABLE_EDGES` — replace the five scattered literals. The five sites consult the object instead of restating the rule.
-- **A provenance-enforcing write seam** `schema.upsert_semantic_edge(driver, edge_type, …, provenance)` that **all** semantic-edge writers go through. It owns, in one place: canonicalisation for symmetric types (driven by `EdgeType.symmetric`), the "never overwrite `extracted_by="curator"`" protection (checking both directions for symmetric types), and provenance stamping. `upsert_extracted_edge` becomes a thin `extracted_by="llm"` wrapper over it; `graph/links.py` and `curate/lifecycle.py` route through it (so curator `RELATED_TO` is now canonicalised, and `SYNTHESIZES` carries explicit provenance).
+- **A provenance-enforcing write seam** `schema.upsert_semantic_edge(driver, edge_type, …, provenance)` that **all** semantic-edge writers go through. It owns, in one place: LLM-path canonicalisation for symmetric types (driven by `EdgeType.symmetric`), the "an LLM write never overwrites a non-LLM edge" protection (checking both directions for symmetric types), and provenance stamping. `upsert_extracted_edge` becomes a thin `extracted_by="llm"` wrapper over it; `graph/links.py` and `curate/lifecycle.py` route through it (so `SYNTHESIZES` carries explicit provenance). Curator edges keep their orientation (canonicalisation stays LLM-only, because fast-loop expansion walks edges directed from a seed — flipping a curator edge would make it unreachable from the page the curator linked).
 - **The generic `schema.upsert_edge` is reserved for structural edges.** It gains a guard: a semantic `edge_type` raises, directing callers to `upsert_semantic_edge`. Structural projection (`graph/projection.py`) is unchanged (it only writes `PART_OF`/`EVIDENCES`/`GROUNDS`).
 - **The five consumers consult the object:** `browse._SEMANTIC_RELS` is derived from `WALKABLE_EDGES`; `extract._ACTIONABLE` becomes `EXTRACTABLE_EDGES`; `__main__` edge-type `choices` come from `CURATOR_SETTABLE_EDGES`; `schema.SEMANTIC_EDGES`/`EXTRACTABLE_EDGES` are derived from the registry (names preserved as aliases).
 
@@ -34,9 +34,11 @@ This is a **missing seam** (per-type rules with no single home) plus a **leaky s
 <!-- No behaviour change to ADR-009 (curator-driven semantic edges) or ADR-010
 (autonomous RELATED_TO/PREREQUISITE_FOR extraction with provenance). The
 "never overwrite curator edges" invariant and the per-type rules are identical;
-they are relocated and made consistent (curator RELATED_TO is now canonicalised,
-matching the extractor; SYNTHESIZES carries explicit provenance). The walkable
-set is unchanged (CONTRADICTS still not walked). No graph re-projection needed. -->
+they are relocated to one object + one seam, and SYNTHESIZES gains explicit
+provenance (`extracted_by="curator"`) instead of none. Symmetric canonicalisation
+stays LLM-only; curator edges keep their orientation (directed-expansion
+reachability). The walkable set is unchanged (CONTRADICTS still not walked). No
+graph re-projection needed. -->
 
 ## Impact
 

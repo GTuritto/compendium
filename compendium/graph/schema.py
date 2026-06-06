@@ -63,11 +63,17 @@ def upsert_edge(
 ) -> None:
     """MERGE both endpoint nodes by id, then MERGE the typed relationship.
 
+    Structural edges only (``PART_OF`` / ``EVIDENCES`` / ``GROUNDS``). Semantic
+    edges carry provenance and the curator-protection invariant, so they must go
+    through :func:`upsert_semantic_edge`; this function rejects them.
+
     Order-free: if an endpoint has not been projected yet it is created here as
     a bare node (later filled in by its own upsert).
     """
     if edge_type not in EDGE_TYPES:
         raise ValueError(f"unknown edge type: {edge_type}")
+    if _et.is_semantic(edge_type):
+        raise ValueError(f"use upsert_semantic_edge for semantic edge: {edge_type}")
     if from_label not in NODE_LABELS or to_label not in NODE_LABELS:
         raise ValueError(f"unknown node label in edge {from_label}->{to_label}")
     with driver.session() as session:
@@ -132,11 +138,17 @@ def upsert_semantic_edge(
     if from_label not in NODE_LABELS or to_label not in NODE_LABELS:
         raise ValueError(f"unknown node label in edge {from_label}->{to_label}")
 
-    symmetric = _et.is_symmetric(edge_type)
-    if symmetric and from_id > to_id:
-        from_label, from_id, to_label, to_id = to_label, to_id, from_label, from_id
-
     by_llm = provenance.get("extracted_by") == "llm"
+
+    # Canonicalise symmetric edges on the LLM path only: the extractor dedupes
+    # its own writes by orientation. A curator/lifecycle write keeps the caller's
+    # orientation, because fast-loop expansion (browse.walk_semantic) walks edges
+    # *directed* from a seed — flipping a curator edge would make it unreachable
+    # from the page the curator linked. The collision check below looks in both
+    # directions, so a curator edge in either orientation is still protected.
+    symmetric = _et.is_symmetric(edge_type)
+    if symmetric and by_llm and from_id > to_id:
+        from_label, from_id, to_label, to_id = to_label, to_id, from_label, from_id
 
     with driver.session() as session:
         forward = session.run(
