@@ -16,8 +16,7 @@ import psycopg
 from compendium.db import repository
 from compendium.wiki.lint import LintIssue, errors_only, lint_page
 from compendium.wiki.page import Page, content_hash
-
-_SUBDIR = {"concept": "concepts", "topic": "topics", "source": "sources"}
+from compendium.wiki.page_kind import PAGE_KIND_REGISTRY
 
 
 class LintError(Exception):
@@ -63,8 +62,12 @@ def write_page(conn: psycopg.Connection, page: Page, *, vault_path: str) -> Page
     if errors:
         raise LintError(errors)
 
-    rel_path = f"{_SUBDIR[page.kind]}/{page.slug}.md"
+    kind_spec = PAGE_KIND_REGISTRY[page.kind]
+    rel_path = f"{kind_spec.subdir}/{page.slug}.md"
     page_uuid = UUID(page.id)
+    # Kind-specific values come from the registry (raw); UUID coercion to the DB
+    # types stays here at the vault boundary.
+    raw = kind_spec.db_fields(page)
     fields = {
         "slug": page.slug,
         "title": page.title,
@@ -72,20 +75,14 @@ def write_page(conn: psycopg.Connection, page: Page, *, vault_path: str) -> Page
         "content_hash": page.content_hash,
         "status": page.status,
         "corpus_revision": page.corpus_revision,
-        "aliases": page.aliases if page.kind == "concept" else [],
+        "aliases": raw["aliases"],
         "parent_topic_id": (
-            UUID(page.parent_topic_id)
-            if page.kind == "topic" and page.parent_topic_id
-            else None
+            UUID(raw["parent_topic_id"]) if raw["parent_topic_id"] else None
         ),
-        "source_id": (
-            UUID(page.source_id) if page.kind == "source" and page.source_id else None
-        ),
-        "source_kind": page.source_kind if page.kind == "source" else None,
-        "source_metadata": page.source_metadata if page.kind == "source" else None,
-        "inspection_status": (
-            page.inspection_status if page.kind == "source" else None
-        ),
+        "source_id": UUID(raw["source_id"]) if raw["source_id"] else None,
+        "source_kind": raw["source_kind"],
+        "source_metadata": raw["source_metadata"],
+        "inspection_status": raw["inspection_status"],
     }
     if is_update:
         repository.update_wiki_page(conn, page_uuid, **fields)
@@ -105,7 +102,7 @@ def write_page(conn: psycopg.Connection, page: Page, *, vault_path: str) -> Page
         generator=page.generator,
     )
     repository.set_current_revision(conn, page_uuid, revision_id)
-    if page.kind == "concept":
+    if kind_spec.writes_topic_links:
         repository.set_page_topics(
             conn, page_uuid, [UUID(t) for t in page.topic_ids]
         )

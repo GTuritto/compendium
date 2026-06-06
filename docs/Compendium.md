@@ -226,6 +226,8 @@ Eight structural decisions anchor everything else. Each maps to one or more of t
 
 **Status:** Accepted.
 
+**Implementation note (post-v0.2 architecture fix):** the per-page-kind rules (required fields, frontmatter shape, vault DB fields, vault subdirectory, lint rules) for the three kinds live in one strategy registry, `compendium/wiki/page_kind.py`; `page.py`, `lint.py`, and `vault.py` consult it instead of branching on `kind`. The `Page` dataclass stays a flat carrier. Behaviour-preserving; consolidates rules that were previously restated across those three modules.
+
 #### Context
 
 Compendium ingests books, articles, and notes and produces a persistent representation of what those sources collectively say. There is a choice about where the truth lives: in PostgreSQL rows, in a vector database, in a knowledge graph, in markdown files on disk, or in some combination. Whichever store is canonical, everything else must derive from it; otherwise drift and silent corruption become inevitable.

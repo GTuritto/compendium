@@ -383,3 +383,16 @@ rules + the one provenance seam preserve ADR-009/010 behaviour.
 | arch2.3 | Expansion walks the same set | query a term hitting a linked page, then `compendium trace show <id>` | `graph_expansion` walks `RELATED_TO`/`PREREQUISITE_FOR`/`SYNTHESIZES` only (CONTRADICTS excluded), as before |
 | arch2.4 | CONTRADICTS still curator-only | `compendium graph link <a> <b> --type CONTRADICTS` | accepted (curator-set); never walked by expansion or written by the extractor |
 | arch2.5 | Structural seam guard | (dev) `schema.upsert_edge(driver, "RELATED_TO", …)` | raises `ValueError` directing to `upsert_semantic_edge`; structural `PART_OF`/`EVIDENCES`/`GROUNDS` writes unaffected |
+
+## Arch fix 3 — PageKind strategy registry (behaviour-preserving)
+
+Prerequisites: stores up; migrated DB; clean-ish vault. `COMPENDIUM_EMBED_STUB=1
+COMPENDIUM_SYNTH_STUB=1`. Confirms the consolidated per-kind rules preserve the
+frontmatter contract, lint, and vault behaviour.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch3.1 | Frontmatter + subdirs unchanged | ingest a source; `synth concept "<term>"`; inspect `vault/concepts/*.md` + `vault/sources/*.md` | same frontmatter fields + order per kind; pages land in `concepts/` and `sources/` |
+| arch3.2 | Lint clean | `compendium lint` on the seeded vault | 0 errors, exit 0 |
+| arch3.3 | Per-kind lint still fires | hand-edit a source page to drop `source_id` (or a concept's `topic_ids` to a non-resolving id); `compendium lint` | the same per-kind rule fires (`kind-specific-fields` / `topic-ids-resolve`); exit 1 |
+| arch3.4 | Rules live in one place | `grep -nE 'kind ==' compendium/wiki/{page,lint,vault}.py` | no per-kind *rule* branch remains; the only match is lint's cross-page topic-id lookup (context construction the topic rule consumes) |
