@@ -57,3 +57,4 @@ vault/sources/*.md
 # OS cruft
 .DS_Store
 *.swp
+mutants/

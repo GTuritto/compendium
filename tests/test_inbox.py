@@ -96,11 +96,12 @@ def test_linux_service_unit_invokes_inbox_process(tmp_path) -> None:
 
 
 def test_platform_detect_refuses_unsupported(monkeypatch) -> None:
-    from compendium.inbox import install as install_module
+    # Platform detection now lives once, in the shared service_unit seam.
+    import compendium.service_unit as su
 
-    monkeypatch.setattr(install_module.sys, "platform", "freebsd14")
-    with pytest.raises(InboxError) as excinfo:
-        install_module._platform()
+    monkeypatch.setattr(su.sys, "platform", "freebsd14")
+    with pytest.raises(InboxError) as excinfo:  # InboxError is an alias of ServiceUnitError
+        su.platform()
     assert excinfo.value.step == "platform"
     assert "freebsd14" in excinfo.value.detail
 

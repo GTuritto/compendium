@@ -45,6 +45,26 @@ comes up on login/boot and restarts on crash. The other three are
 timer/path-triggered. MCP (`compendium mcp`, stdio) is launched per agent
 session by the MCP client, not as a persistent unit.
 
+### Shared mechanism (`compendium/service_unit/`)
+
+All four services install / uninstall / report status through one seam,
+`compendium/service_unit/`, rather than each reimplementing the launchd /
+systemd lifecycle. A service hands the seam a `UnitDescriptor` (label,
+program args, working dir) plus a `Trigger` — the only axis that differs
+between them:
+
+| Service | Trigger | macOS keys | Linux unit |
+| --- | --- | --- | --- |
+| Curation | `Interval(seconds)` | `StartInterval` | `.timer` (`OnUnitActiveSec`) |
+| Backup | `Calendar(hour, minute)` | `StartCalendarInterval` | `.timer` (`OnCalendar`) |
+| Inbox | `WatchPaths(paths)` | `WatchPaths` | `.path` (`PathChanged`) |
+| Access surface | `AlwaysOn()` | `RunAtLoad` + `KeepAlive` | `.service` (`Restart=always`) |
+
+Two adapters (`launchd.py`, `systemd.py`) render the per-OS units and run the
+`launchctl` / `systemctl` calls through an injectable runner. One
+`ServiceUnitError` and one platform check serve all four. Adding a fifth
+service is a new descriptor, not another copy of the lifecycle.
+
 ## Lifecycle
 
 ```sh
