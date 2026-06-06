@@ -612,6 +612,8 @@ Curator/operations commands — `curate`, `trace`, `page promote`, `reindex`, `g
 
 **Status:** Accepted (v0.2 Phase 3, shipped 2026-05-30 via PR #33). Reverses the v0.1 stack-discipline rule *"no daemon, no production-like Docker orchestration"* in a single specific direction: a personal-host service. Does **not** reverse *"local-first; no SaaS observability; no cloud deployment"*. Phase 3 ships the launchd/systemd timer-fires-CLI as the **v0.2 interim** for scheduled curation; Phase 7's access-surface daemon is the long-term home for in-process scheduling.
 
+**Implementation note (post-v0.2 architecture fix):** all four services (backup, curate, inbox, serve) install / uninstall / report status through one shared seam, `compendium/service_unit/`, with two adapters (launchd, systemd) over a `UnitDescriptor` + closed `Trigger` taxonomy (`Interval` / `Calendar` / `WatchPaths` / `AlwaysOn`). This consolidates four duplicated lifecycle implementations behind one interface; it does not change this ADR's posture, and is the natural home for the future in-process-scheduling absorption.
+
 #### Context
 
 v0.1 ran as a short-lived CLI process invoked per command, against always-on backing stores (Postgres, OpenSearch, Qdrant, Memgraph) under a dev-only `docker-compose.yml` on the curator's laptop. The stack-discipline rule "no daemon" applied to Compendium itself: it was a tool you invoked, not a process that stayed up.

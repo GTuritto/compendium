@@ -357,3 +357,15 @@ concept/source pages and the indexes + graph built (`reindex all` +
 | v0.2-8.5 | Expansion finds new edges | `uv run python -m compendium query "<term hitting a page with a new LLM edge>"`, then `compendium trace show <trace-id>` (or inspect `query_traces.graph_expansion`) | the trace's `graph_expansion` reaches the linked neighbour via the new edge |
 | v0.2-8.6 | Incremental run is quiet | re-run `curate run` with no corpus change (and not a full-sweep tick) | `extracted_edges.written == 0`; no duplicate edges created |
 | v0.2-8.7 | Reversible by predicate | Cypher `MATCH ()-[r {extracted_by:"llm"}]-() WHERE r.confidence < 0.85 DELETE r` | only low-confidence LLM edges removed; curator edges and high-confidence LLM edges remain |
+
+## Arch fix 1 — OS service-unit seam (behaviour-preserving)
+
+Run on the primary host (macOS). Confirms the four services still install /
+status / uninstall identically after consolidation behind `compendium/service_unit/`.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch1.1 | All four install with unchanged labels/paths | `compendium schedule install --every 1h`; `compendium backup install`; `compendium inbox install`; `compendium serve install` | plists at `~/Library/LaunchAgents/com.compendium.{curate,backup,inbox,serve}.plist` (Linux: units under `~/.config/systemd/user/`); all loaded |
+| arch1.2 | Generated units unchanged | inspect each written plist / unit file | identical content to pre-fix (trigger keys, ProgramArguments, WorkingDirectory, log paths) |
+| arch1.3 | Status reports unchanged | `compendium schedule status --format json`; `compendium inbox status --format json`; `compendium serve status --format json` | same JSON shape/values as before the fix |
+| arch1.4 | Uninstall idempotent | run each `uninstall` twice | first removes; second is a no-op (`not installed`); inbox directory preserved |
