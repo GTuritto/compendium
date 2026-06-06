@@ -15,15 +15,17 @@ from typing import Any
 
 from neo4j import Driver
 
+from compendium.graph import edge_type as _et
+
 # Node labels (the four structural node types).
 NODE_LABELS = ("Source", "Concept", "Topic", "Chunk")
 
-# All seven edge types. The three automatic ones are populated in Phase 6; the
-# four semantic ones are defined here as the contract for Phase 9 but are not
-# written in this phase.
-AUTOMATIC_EDGES = ("PART_OF", "EVIDENCES", "GROUNDS")
-SEMANTIC_EDGES = ("RELATED_TO", "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS")
-EDGE_TYPES = AUTOMATIC_EDGES + SEMANTIC_EDGES
+# All seven edge types. Per-type rules (automatic / symmetric / walkable /
+# extractable / curator-settable) live in compendium/graph/edge_type.py; these
+# tuples derive from that single registry so a rule is stated once.
+AUTOMATIC_EDGES = _et.AUTOMATIC_EDGES
+SEMANTIC_EDGES = _et.SEMANTIC_EDGES
+EDGE_TYPES = _et.EDGE_TYPES
 
 # Indexes: id on every label, slug on the page-backed labels.
 _SLUG_INDEXED = ("Concept", "Topic")
@@ -61,11 +63,17 @@ def upsert_edge(
 ) -> None:
     """MERGE both endpoint nodes by id, then MERGE the typed relationship.
 
+    Structural edges only (``PART_OF`` / ``EVIDENCES`` / ``GROUNDS``). Semantic
+    edges carry provenance and the curator-protection invariant, so they must go
+    through :func:`upsert_semantic_edge`; this function rejects them.
+
     Order-free: if an endpoint has not been projected yet it is created here as
     a bare node (later filled in by its own upsert).
     """
     if edge_type not in EDGE_TYPES:
         raise ValueError(f"unknown edge type: {edge_type}")
+    if _et.is_semantic(edge_type):
+        raise ValueError(f"use upsert_semantic_edge for semantic edge: {edge_type}")
     if from_label not in NODE_LABELS or to_label not in NODE_LABELS:
         raise ValueError(f"unknown node label in edge {from_label}->{to_label}")
     with driver.session() as session:
@@ -83,7 +91,7 @@ def upsert_edge(
 _PAGE_LABEL = {"source": "Source", "concept": "Concept", "topic": "Topic"}
 
 # The two edge types the v0.2 Phase 8 extractor (ADR-010) may write autonomously.
-EXTRACTABLE_EDGES = ("RELATED_TO", "PREREQUISITE_FOR")
+EXTRACTABLE_EDGES = _et.EXTRACTABLE_EDGES
 
 
 def page_node_ref(kind: str, page_id: str, source_id: str | None) -> tuple[str, str]:
@@ -98,6 +106,87 @@ def page_node_ref(kind: str, page_id: str, source_id: str | None) -> tuple[str, 
     return label, node_id
 
 
+def upsert_semantic_edge(
+    driver: Driver,
+    edge_type: str,
+    from_label: str,
+    from_id: str,
+    to_label: str,
+    to_id: str,
+    *,
+    provenance: dict[str, Any],
+) -> str:
+    """MERGE a semantic edge with provenance — the one write path for every
+    semantic-edge writer (curator links, the LLM extractor, the SYNTHESIZES
+    lifecycle). Returns ``"written"``, ``"refreshed"``, or ``"collision"``.
+
+    Owns three rules in one place:
+
+    - **Canonicalisation.** For a symmetric type (``RELATED_TO``) the endpoints
+      are ordered lexicographically by id, so there is one edge per unordered
+      pair regardless of the orientation the caller supplied.
+    - **Curator protection.** A write whose ``extracted_by="llm"`` never
+      overwrites an existing non-LLM edge (a curator edge, or a provenance-less
+      one): it is left untouched and reported ``"collision"`` (both directions
+      are checked for a symmetric type). A curator/lifecycle write (any other
+      ``extracted_by``) has authority and refreshes in place.
+    - **Provenance stamping.** ``provenance`` (which carries ``extracted_by`` and
+      the rest) is set onto the relationship.
+    """
+    if not _et.is_semantic(edge_type):  # raises KeyError on unknown via BY_NAME
+        raise ValueError(f"not a semantic edge type: {edge_type}")
+    if from_label not in NODE_LABELS or to_label not in NODE_LABELS:
+        raise ValueError(f"unknown node label in edge {from_label}->{to_label}")
+
+    by_llm = provenance.get("extracted_by") == "llm"
+
+    # Canonicalise symmetric edges on the LLM path only: the extractor dedupes
+    # its own writes by orientation. A curator/lifecycle write keeps the caller's
+    # orientation, because fast-loop expansion (browse.walk_semantic) walks edges
+    # *directed* from a seed — flipping a curator edge would make it unreachable
+    # from the page the curator linked. The collision check below looks in both
+    # directions, so a curator edge in either orientation is still protected.
+    symmetric = _et.is_symmetric(edge_type)
+    if symmetric and by_llm and from_id > to_id:
+        from_label, from_id, to_label, to_id = to_label, to_id, from_label, from_id
+
+    with driver.session() as session:
+        forward = session.run(
+            f"OPTIONAL MATCH (a:{from_label} {{id: $a}})-[r:{edge_type}]->(b:{to_label} {{id: $b}}) "
+            "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
+            a=from_id, b=to_id,
+        ).single()
+        existed = bool(forward and forward["exists"])
+        # An LLM write must not clobber a non-LLM (curator / provenance-less) edge.
+        protected = by_llm and existed and forward["by"] != "llm"
+        llm_exists = bool(forward and forward["by"] == "llm")
+        if symmetric and not protected:
+            reverse = session.run(
+                f"OPTIONAL MATCH (b:{to_label} {{id: $b}})-[r:{edge_type}]->(a:{from_label} {{id: $a}}) "
+                "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
+                a=from_id, b=to_id,
+            ).single()
+            if reverse and reverse["exists"]:
+                existed = True
+                if by_llm and reverse["by"] != "llm":
+                    protected = True
+                elif reverse["by"] == "llm":
+                    llm_exists = True
+
+        if protected:
+            return "collision"
+
+        session.run(
+            f"MERGE (a:{from_label} {{id: $a}}) "
+            f"MERGE (b:{to_label} {{id: $b}}) "
+            f"MERGE (a)-[r:{edge_type}]->(b) SET r += $props",
+            a=from_id, b=to_id, props=provenance,
+        )
+        if by_llm:
+            return "refreshed" if llm_exists else "written"
+        return "refreshed" if existed else "written"
+
+
 def upsert_extracted_edge(
     driver: Driver,
     edge_type: str,
@@ -107,55 +196,17 @@ def upsert_extracted_edge(
     to_id: str,
     props: dict[str, Any],
 ) -> str:
-    """MERGE an LLM-extracted semantic edge with provenance (ADR-010).
-
-    Never overwrites a non-LLM edge: any existing edge whose ``extracted_by`` is
-    not ``"llm"`` (a curator edge, or one without provenance from an earlier
-    ``graph link``) is left untouched and reported ``"collision"``. An existing
-    ``extracted_by="llm"`` edge is refreshed in place. ``RELATED_TO`` is
-    symmetric, so its endpoints are canonicalised (lexicographic by id) to keep
-    one edge per unordered pair and the protection check looks in both
-    directions. Returns ``"written"``, ``"refreshed"``, or ``"collision"``.
+    """LLM-extracted semantic edge (ADR-010): a thin wrapper over
+    :func:`upsert_semantic_edge` that asserts the type is extractable and stamps
+    ``extracted_by="llm"`` provenance (``props`` already carries it plus model /
+    confidence / extracted_at / source_revision_id / weight). Returns
+    ``"written"`` / ``"refreshed"`` / ``"collision"``.
     """
     if edge_type not in EXTRACTABLE_EDGES:
         raise ValueError(f"not an extractable edge type: {edge_type}")
-    if from_label not in NODE_LABELS or to_label not in NODE_LABELS:
-        raise ValueError(f"unknown node label in edge {from_label}->{to_label}")
-
-    symmetric = edge_type == "RELATED_TO"
-    if symmetric and from_id > to_id:
-        from_label, from_id, to_label, to_id = to_label, to_id, from_label, from_id
-
-    with driver.session() as session:
-        forward = session.run(
-            f"OPTIONAL MATCH (a:{from_label} {{id: $a}})-[r:{edge_type}]->(b:{to_label} {{id: $b}}) "
-            "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
-            a=from_id, b=to_id,
-        ).single()
-        # Protect any existing non-llm edge (curator, or provenance-less).
-        protected = bool(forward and forward["exists"] and forward["by"] != "llm")
-        llm_exists = bool(forward and forward["by"] == "llm")
-        if symmetric and not protected:
-            reverse = session.run(
-                f"OPTIONAL MATCH (b:{to_label} {{id: $b}})-[r:{edge_type}]->(a:{from_label} {{id: $a}}) "
-                "RETURN r.extracted_by AS by, r IS NOT NULL AS exists",
-                a=from_id, b=to_id,
-            ).single()
-            if reverse and reverse["exists"] and reverse["by"] != "llm":
-                protected = True
-            elif reverse and reverse["by"] == "llm":
-                llm_exists = True
-
-        if protected:
-            return "collision"
-
-        session.run(
-            f"MERGE (a:{from_label} {{id: $a}}) "
-            f"MERGE (b:{to_label} {{id: $b}}) "
-            f"MERGE (a)-[r:{edge_type}]->(b) SET r += $props",
-            a=from_id, b=to_id, props=props,
-        )
-        return "refreshed" if llm_exists else "written"
+    return upsert_semantic_edge(
+        driver, edge_type, from_label, from_id, to_label, to_id, provenance=props,
+    )
 
 
 def structural_pairs(driver: Driver, node_id: str) -> set[str]:

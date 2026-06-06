@@ -12,6 +12,7 @@ from typing import Any
 from neo4j import Driver
 
 from compendium.graph.client import run_cypher
+from compendium.graph.edge_type import walkable_rel_pattern
 from compendium.graph.schema import NODE_LABELS
 
 _MAX_HOPS = 5
@@ -35,7 +36,9 @@ def search_nodes(driver: Driver, term: str, limit: int = 25) -> list[dict[str, A
     ]
 
 
-_SEMANTIC_RELS = "RELATED_TO|PREREQUISITE_FOR|SYNTHESIZES"
+# The fast-loop expansion walks the walkable semantic edges (CONTRADICTS excluded),
+# sourced from the EdgeType registry so the set is defined once.
+_SEMANTIC_RELS = walkable_rel_pattern()
 
 
 def walk_semantic(driver: Driver, seed_ids: list[str], max_hops: int) -> list[dict[str, Any]]:

@@ -46,6 +46,15 @@ the source kind (`inbox/paper/`, `inbox/note/`, etc.); processed files move to
 
 ## Graph and curation
 
+**Edge type.** A first-class value object (`compendium/graph/edge_type.py`), distinct from the
+raw Cypher relationship name, that carries every per-type rule a caller might branch on: whether
+the type is `automatic` (structural: `PART_OF`/`EVIDENCES`/`GROUNDS`), `symmetric` (`RELATED_TO`),
+`walkable` by fast-loop expansion, `extractable` by the LLM (ADR-010), and `curator_settable` via
+`graph link` (ADR-009). It is the single source those rules are read from; the derived sets
+(`SEMANTIC_EDGES`, `EXTRACTABLE_EDGES`, `WALKABLE_EDGES`, `CURATOR_SETTABLE_EDGES`) are computed
+from it. Every semantic-edge write goes through one provenance-enforcing seam
+(`schema.upsert_semantic_edge`); the generic `upsert_edge` writes structural edges only.
+
 **LLM-extracted edge.** A semantic edge in Memgraph written by the v0.2 autonomous extractor
 (`RELATED_TO` or `PREREQUISITE_FOR` only). Distinguished from a curator-added edge by its
 **edge provenance** properties — never confused with curator work, prunable by predicate

@@ -713,9 +713,11 @@ def main(argv: list[str] | None = None) -> int:
     graph_link = graph_sub.add_parser("link", help="add a curator semantic edge")
     graph_link.add_argument("from_slug")
     graph_link.add_argument("to_slug")
+    from compendium.graph.edge_type import CURATOR_SETTABLE_EDGES
+
     graph_link.add_argument(
         "--type", dest="edge_type", required=True,
-        choices=["RELATED_TO", "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS"],
+        choices=list(CURATOR_SETTABLE_EDGES),
     )
 
     query_parser = subparsers.add_parser(

@@ -39,9 +39,10 @@ def link(from_slug: str, to_slug: str, edge_type: str, *, weight: float = 1.0) -
         b_label, b_id = schema.page_node_ref(b["kind"], b["id"], b.get("source_id"))
 
     with graph_connection() as driver:
-        # Stamp curator provenance so the Phase 8 extractor (ADR-010) never
-        # overwrites a curator-set edge.
-        schema.upsert_edge(
+        # Route through the one semantic-edge seam: it stamps curator provenance
+        # (so the Phase 8 extractor never overwrites this edge) and canonicalises
+        # symmetric types (RELATED_TO), matching the extractor's orientation.
+        schema.upsert_semantic_edge(
             driver, edge_type, a_label, a_id, b_label, b_id,
-            {"weight": weight, "extracted_by": "curator"},
+            provenance={"weight": weight, "extracted_by": "curator"},
         )
