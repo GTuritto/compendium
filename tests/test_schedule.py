@@ -118,11 +118,12 @@ def test_linux_timer_unit_carries_the_right_interval() -> None:
 
 
 def test_platform_detect_refuses_unsupported(monkeypatch) -> None:
-    from compendium.schedule import install as install_module
+    # Platform detection now lives once, in the shared service_unit seam.
+    import compendium.service_unit as su
 
-    monkeypatch.setattr(install_module.sys, "platform", "freebsd14")
-    with pytest.raises(ScheduleError) as excinfo:
-        install_module._platform()
+    monkeypatch.setattr(su.sys, "platform", "freebsd14")
+    with pytest.raises(ScheduleError) as excinfo:  # ScheduleError is an alias of ServiceUnitError
+        su.platform()
     assert excinfo.value.step == "platform"
     assert "freebsd14" in excinfo.value.detail
 

@@ -9,20 +9,17 @@ from __future__ import annotations
 
 import re
 
+from compendium.service_unit import ServiceUnitError
+
 _MIN_SECONDS = 60
 _MAX_SECONDS = 7 * 24 * 3600  # 7 days
 
 # Match Nh, Nm, or NhMm (digits + h, digits + m, or digits + h + digits + m).
 _INTERVAL_PATTERN = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
 
-
-class ScheduleError(Exception):
-    """A scheduler step failed or was rejected by a guard."""
-
-    def __init__(self, step: str, detail: str) -> None:
-        super().__init__(f"{step}: {detail}")
-        self.step = step
-        self.detail = detail
+# The four services share one error type; ``ScheduleError`` is preserved as an
+# alias so callers and tests that catch it keep working.
+ScheduleError = ServiceUnitError
 
 
 def parse_interval(value: str) -> int:
