@@ -74,8 +74,12 @@ def address_on_promote(
                 with graph_connection() as driver:
                     if graph_reachable(driver):
                         for source_id in source_ids:
-                            schema.upsert_edge(
+                            # SYNTHESIZES is lifecycle-owned; route through the
+                            # semantic-edge seam with curator-class provenance so
+                            # an LLM extraction can never overwrite it.
+                            schema.upsert_semantic_edge(
                                 driver, "SYNTHESIZES",
                                 "Concept", str(page["id"]), "Source", source_id,
+                                provenance={"extracted_by": "curator"},
                             )
     return str(signal["id"])

@@ -18,12 +18,14 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from compendium.graph.edge_type import EXTRACTABLE_EDGES
 from compendium.index.qdrant import PAGES_COLLECTION
 
 PROMPT_TEMPLATE_ID = "extract-v1"
 
-# The two labels the extractor may assign (plus NONE, which is dropped).
-_ACTIONABLE = ("RELATED_TO", "PREREQUISITE_FOR")
+# The labels the extractor may assign (plus NONE, which is dropped) — the
+# extractable set from the EdgeType registry (single source).
+_ACTIONABLE = EXTRACTABLE_EDGES
 _SOURCE_BODY_BUDGET = 800
 
 
