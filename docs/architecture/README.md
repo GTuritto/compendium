@@ -14,9 +14,10 @@ C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
 | — | [Dynamic: ask flow](c4-dynamic-ask.md) — composed answers (v0.2) | Developers |
 | UML | [Data model](uml-data-model.md) — persisted entities + result/contract types | Developers |
 
-These diagrams describe the **as-built v0.2 architecture**: all v0.1 phases (0–10) and all v0.2
-phases (1–8), plus the deployment tooling, are implemented and merged to `main`. They are
-derived from the code under `compendium/`, not the design intent in
+These diagrams describe the **as-built v0.2 architecture** plus the post-v0.2 architecture
+fixes: all v0.1 phases (0–10), all v0.2 phases (1–8), the deployment tooling, and the
+post-v0.2 deepening seams (PRs #48–#55, incl. ADR-013) are implemented and merged to `main`.
+They are derived from the code under `compendium/`, not the design intent in
 [../Compendium.md](../Compendium.md) — where the two differ, the code wins. Build history is in
 [../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md) and [../COMPENDIUM_V0.2_BUILD.md](../COMPENDIUM_V0.2_BUILD.md).
 
@@ -35,6 +36,10 @@ LLM-extracted semantic edges (ADR-010 — noted on the graph store). The decisio
 - [review-2026-05-26-2.md](review-2026-05-26-2.md) — second pass, five candidates, all
   implemented and merged (PRs #22–#26). Visual:
   [architecture-review-2026-05-26-2.html](architecture-review-2026-05-26-2.html).
+- Review #3 (2026-06-07) — four candidates: one correctness fix (semantic-edge persistence,
+  ADR-013) + three deepenings (cached config, model-client seam, ask composition), all merged
+  (PRs #52–#55). Plan: [../../Plans/arch-review-3-plan.md](../../Plans/arch-review-3-plan.md).
+  See the post-v0.2 seams table below.
 
 ## Architecture seams (from the review-#2 refactors)
 
@@ -48,6 +53,28 @@ landed change is one new or consolidated **seam**:
 | Curation lifecycle | the `open → in_progress → addressed` signal state machine | `curate/lifecycle.py` |
 | Store projection | one `StoreProjector` per derived store, dispatched by `index_kind` | `index/projectors.py` |
 | Graph lifecycle | a `graph_connection()` context manager for the Bolt driver | `graph/client.py` |
+
+## Architecture seams (post-v0.2 fixes)
+
+A further set of deepening fixes merged after v0.2. Fixes 1–4 (strategy/value registries)
+landed as PRs #48–#51; the review-#3 set (one correctness fix plus three deepenings) as
+PRs #52–#55. Each is one named seam, folded into the Level-3 component view and notes.
+
+| Seam | What it owns | Module |
+| --- | --- | --- |
+| Service unit | launchd/systemd unit generation behind a `UnitDescriptor` + `Trigger` taxonomy | `service_unit/` |
+| Edge type | per-type semantic-edge rules + the one provenance write path | `graph/edge_type.py`, `schema.upsert_semantic_edge` |
+| Page kind | per-kind frontmatter/lint/vault rules as a registry | `wiki/page_kind.py` |
+| Signal generator | the slow-loop generators (kinds + required stores + generate) | `curate/signal_generator.py` |
+| **Semantic-edge persistence** (ADR-013) | dual-write coordinator → PostgreSQL `semantic_edges` + Memgraph; rebuild replay | `graph/semantic_edges.py`, migration `0013` |
+| **Cached config** | one cached parse + per-section readers (URLs/secrets stay uncached) | `config.get_config()`, `config_sections.py` |
+| **Model client** | one `get_model_client(role)` registry + a `COMPENDIUM_LLM_STUB` offline switch | `model_clients.py` |
+| **Ask composition** | DB-free `compose_answer`; `ask` is the single-path orchestrator | `answer/compose.py` |
+
+The semantic-edge persistence fix is the only correctness change (it closed a `graph rebuild`
+data-loss bug); the rest are behaviour-preserving deepenings. Plan of record:
+[../../Plans/arch-review-3-plan.md](../../Plans/arch-review-3-plan.md). Decision: ADR-013 in
+[../Compendium.md](../Compendium.md).
 
 ## The shape of the system, in one paragraph
 

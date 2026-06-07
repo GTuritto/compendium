@@ -96,6 +96,21 @@ classDiagram
     +jsonb summary
     +timestamptz created_at
   }
+  class SemanticEdge {
+    +UUID id
+    +str edge_type
+    +str from_label
+    +str from_id
+    +str to_label
+    +str to_id
+    +str extracted_by
+    +str model
+    +float confidence
+    +str extracted_at
+    +str source_revision_id
+    +float weight
+    +timestamptz created_at
+  }
 
   Source "1" --> "*" Chunk : has
   Source "1" --> "0..1" WikiPage : source page
@@ -108,8 +123,13 @@ classDiagram
 Notes: PostgreSQL is the only permanent schema (ADR-004). `WikiPage.file_path`
 points at the canonical Markdown in the vault (ADR-001). `ask_traces` (v0.2
 Phase 6, migration 0012) is a companion to `query_traces`, joined by
-`query_trace_id`. The derived stores (OpenSearch / Qdrant / Memgraph) are not
-shown — they are projections of these rows + the vault.
+`query_trace_id`. `semantic_edges` (post-v0.2 fix, migration 0013, ADR-013) is
+the system-of-record home for the graph's semantic edges (`RELATED_TO` /
+`PREREQUISITE_FOR` / `SYNTHESIZES` / `CONTRADICTS`) with their provenance; one row
+per directed edge, replayed into Memgraph on `graph rebuild`. The derived stores
+(OpenSearch / Qdrant / Memgraph) are not shown — they are projections of these
+rows + the vault (Memgraph's structural edges from the projection, its semantic
+edges from `semantic_edges`).
 
 ## Result / contract types (the verb return shapes)
 
