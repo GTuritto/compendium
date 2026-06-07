@@ -55,7 +55,11 @@ than the CLI (six v0.2 verbs; operator commands stay CLI-only). See ADR-011.
 **Composed answer.** The output of `ask` — a single text answer synthesized by the LLM over
 the top-K pages from `pipeline.query`, with structured citations referencing those pages. The
 counterpart to v0.1's `query`, which returns a ranked page list and lets the caller compose
-their own reading.
+their own reading. The composition itself is a public, database-free function
+`compose_answer(question, result, …)` (`compendium/answer/compose.py`); `ask` is the
+single-path orchestrator that retrieves, persists the `query_traces` + `ask_traces` rows, and
+calls the same composition. There is no test-only retrieval seam — composition tests cross
+`compose_answer`, the same function `ask` composes through.
 
 **Refusal.** A composed-answer response that declines to produce text because retrieval
 coverage falls below the configured threshold (`ask.refuse_below_coverage`, default `0.3`).

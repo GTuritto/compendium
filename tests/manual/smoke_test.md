@@ -447,3 +447,13 @@ still work).
 | arch-lc.1 | One flag runs everything offline | `COMPENDIUM_LLM_STUB=1 uv run python -m compendium curate run` and `... ask "What is psychological safety?"` | both run with no network/cost — answerer/synthesizer/extractor/embedder all stubbed from the one flag |
 | arch-lc.2 | Per-role flag still scoped | `COMPENDIUM_EMBED_STUB=1 uv run python -m compendium reindex all` (synth/answer flags unset) | only the embedder is stubbed; the synthesis-role clients would use real config |
 | arch-lc.3 | Selection in one place | `grep -rln 'os.environ' compendium/answer/llm.py compendium/wiki/synth.py compendium/curate/extract.py compendium/index/embedder.py` | no matches — the four factories no longer read any env flag; the stub-vs-real decision lives only in `compendium/model_clients.py` (`get_model_client` / `use_stub`) |
+
+## Arch — ask composition seam (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. `COMPENDIUM_LLM_STUB=1`. Confirms `ask` is unchanged
+and the test-only `_retrieve` fork is gone (composition is the public `compose_answer`).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-ar.1 | ask unchanged | `COMPENDIUM_LLM_STUB=1 uv run python -m compendium ask "What is psychological safety?"` then an uncovered question | covered answers with citations + footer; uncovered refuses with gap + suggested action; both still write `query_traces` + `ask_traces` |
+| arch-ar.2 | no test-only seam | `grep -rnE '_retrieve[ =:)]' compendium/ tests/` | no matches — composition is the public `compose_answer`, the same function `ask` composes through |
