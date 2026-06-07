@@ -29,6 +29,15 @@ fields, frontmatter shape, vault DB fields, vault subdirectory, and lint rules. 
 `Page` dataclass, which stays a flat data carrier — this records the per-kind *rules*, not a
 subclassing of the *data*.
 
+**Config section reader.** A per-section accessor in `compendium/config_sections.py`
+(`retrieval`, `expansion`, `ask`, `curation`, `extract`, `ingestion`) that is the single
+home for that behavior section's keys and defaults, read over a process-cached
+`config.get_config()` (parsed once; `invalidate_config_cache()` clears it). The former inline
+`_*_config()` extractors delegate here. Scope is the **behavior config** only: storage URLs,
+`vault_path`, and secrets stay on uncached `load_config()` because they read environment the
+test suite monkeypatches. `compendium serve` invalidates per request so it is never pinned to
+stale settings.
+
 **Access surface.** The callable layer of Compendium, introduced in v0.2: two transports
 (MCP over stdio; HTTP REST/JSON on `127.0.0.1`) sharing one internal facade over the existing
 `pipeline.query`, `ingest`, and `ask` functions. The set of verbs is deliberately narrower

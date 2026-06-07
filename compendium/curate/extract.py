@@ -234,15 +234,9 @@ class ExtractReport:
 
 def extract_cfg() -> dict[str, Any]:
     """The ``curation.extract`` config block, with defaults."""
-    from compendium.config import load_config
+    from compendium import config_sections
 
-    c = (load_config().settings.get("curation", {}) or {}).get("extract", {}) or {}
-    return {
-        "enabled": bool(c.get("enabled", True)),
-        "min_confidence": float(c.get("min_confidence", 0.7)),
-        "top_k_neighbours": int(c.get("top_k_neighbours", 10)),
-        "full_sweep_every": int(c.get("full_sweep_every", 24)),
-    }
+    return config_sections.extract()
 
 
 def _now_iso() -> str:

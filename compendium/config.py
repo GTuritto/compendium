@@ -153,3 +153,31 @@ def load_config(
         return _build(resolved)
     except (KeyError, TypeError) as exc:
         raise ConfigError(f"settings file is missing a required key: {exc}") from exc
+
+
+# Process-level cache for the no-arg config (arch-config-cache-seam). The behavior
+# config (settings sections) is stable within a process, so the section readers in
+# compendium/config_sections.py read through get_config() to avoid re-parsing the
+# YAML on every call. The storage-URL / vault_path / secret reads stay on
+# load_config() (uncached) because they read env the test suite monkeypatches.
+_cached: Config | None = None
+
+
+def get_config() -> Config:
+    """The validated no-arg :class:`Config`, parsed once per process.
+
+    Returns the cached instance after the first call. Use this for behavior-config
+    reads; call :func:`invalidate_config_cache` (e.g. in a long-running ``serve``)
+    when the settings file may have changed. ``load_config(...)`` stays the uncached
+    primitive for tests and for callers passing explicit paths.
+    """
+    global _cached
+    if _cached is None:
+        _cached = load_config()
+    return _cached
+
+
+def invalidate_config_cache() -> None:
+    """Clear the :func:`get_config` cache so the next call re-reads and re-validates."""
+    global _cached
+    _cached = None

@@ -20,7 +20,6 @@ from typing import Any
 
 from compendium.answer.cost import estimate_cost
 from compendium.answer.llm import Answerer, Completion, get_answerer
-from compendium.answer.prompts import PROMPT_TEMPLATE_ID
 from compendium.answer.rewrite import rewrite_query
 
 _SOURCE_KINDS = "book|article|paper|note|web"
@@ -70,16 +69,9 @@ class _Composed:
 
 
 def _ask_config() -> dict[str, Any]:
-    from compendium.config import load_config
+    from compendium import config_sections
 
-    settings = load_config().settings
-    ask = settings.get("ask", {}) or {}
-    return {
-        "refuse_below_coverage": float(ask.get("refuse_below_coverage", 0.3)),
-        "prompt_template_id": ask.get("prompt_template_id", PROMPT_TEMPLATE_ID),
-        "rewrite": bool(ask.get("rewrite", True)),
-        "top_k": int(settings.get("retrieval", {}).get("top_k", 7)),
-    }
+    return config_sections.ask()
 
 
 def _citations(result: Any, top_k: int) -> list[Citation]:

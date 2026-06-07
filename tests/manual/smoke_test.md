@@ -422,3 +422,16 @@ COMPENDIUM_SYNTH_STUB=1`. Confirms a `graph rebuild` no longer wipes semantic ed
 | arch-se.3 | LLM edge survives a rebuild | `compendium curate run` (writes `RELATED_TO`/`PREREQUISITE_FOR`); `compendium graph rebuild`; inspect one extracted edge | present after rebuild with `extracted_by="llm"` + confidence/model intact |
 | arch-se.4 | Backfill captures legacy edges | on a graph with pre-fix in-graph-only edges: `compendium graph backfill-edges`; re-run it; `compendium graph rebuild` | first run reports a capture count; the second run reports the same count (idempotent — no duplicates); edges present after rebuild |
 | arch-se.5 | Persistence is the source | after arch-se.1, `psql -c "SELECT edge_type, extracted_by FROM semantic_edges"` | a row exists for the curator edge with `extracted_by='curator'` |
+
+## Arch — Cached config seam (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. `COMPENDIUM_EMBED_STUB=1 COMPENDIUM_SYNTH_STUB=1`.
+Confirms the behavior-config readers resolve the same values, `serve` picks up a settings
+change without restart, and storage-URL env overrides still take effect (uncached).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-cc.1 | Same behavior values | `compendium query "<term>"`; `compendium ask "<q>"`; `compendium curate run` | same ranked pages / refusal threshold / signals as before this fix |
+| arch-cc.2 | serve picks up a settings change | start `compendium serve`; edit a non-secret value in `config/settings.yaml` (e.g. `ask.refuse_below_coverage`); hit `POST /ask` | the new value is in effect without restarting serve |
+| arch-cc.3 | Env override still works (uncached) | `POSTGRES_URL=<other-db> compendium index status` | the other DB is used — storage-URL reads are not served from the behavior-config cache |
+| arch-cc.4 | One home for keys/defaults | `grep -rn '\.settings\.get(' compendium/ \| grep -v config_sections.py` | no matches — `config_sections.py` (via its `_section` helper) is the only reader of the behavior sections; the inline extractors no longer dig the dict |

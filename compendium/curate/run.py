@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from compendium.config import load_config
+from compendium import config_sections
 from compendium.curate import signals as gen
 from compendium.db import repository
 from compendium.db.connection import connection
@@ -27,8 +27,8 @@ class CurateReport:
 
 
 def _curation_cfg() -> tuple[int, float]:
-    c = load_config().settings.get("curation", {})
-    return int(c.get("thin_grounding_min", 2)), float(c.get("low_coverage_threshold", 0.5))
+    c = config_sections.curation()
+    return c["thin_grounding_min"], c["low_coverage_threshold"]
 
 
 def run() -> CurateReport:
