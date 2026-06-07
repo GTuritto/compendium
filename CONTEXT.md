@@ -38,6 +38,15 @@ home for that behavior section's keys and defaults, read over a process-cached
 test suite monkeypatches. `compendium serve` invalidates per request so it is never pinned to
 stale settings.
 
+**Model client seam.** One registry in `compendium/model_clients.py`,
+`get_model_client(role)`, that owns the stub-or-real selection for the four model clients
+(`answerer`, `synthesizer`, `extractor` over `SYNTHESIS_*`; `embedder` over `EMBEDDINGS_*`).
+The four named factories (`get_answerer` / `get_synthesizer` / `get_extractor` /
+`get_embedder`) delegate to it; the protocols and stub classes stay in their own modules. A
+single `COMPENDIUM_LLM_STUB` runs every model seam offline; it is additive — the per-role
+`COMPENDIUM_SYNTH_STUB` / `COMPENDIUM_EMBED_STUB` flags still force their own roles. Builders are
+lazy thunks so the registry imports no client class at load time (no import cycle).
+
 **Access surface.** The callable layer of Compendium, introduced in v0.2: two transports
 (MCP over stdio; HTTP REST/JSON on `127.0.0.1`) sharing one internal facade over the existing
 `pipeline.query`, `ingest`, and `ask` functions. The set of verbs is deliberately narrower
