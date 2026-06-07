@@ -70,7 +70,7 @@ the type is `automatic` (structural: `PART_OF`/`EVIDENCES`/`GROUNDS`), `symmetri
 from it. Every semantic-edge write goes through one provenance-enforcing seam
 (`schema.upsert_semantic_edge`); the generic `upsert_edge` writes structural edges only.
 
-**LLM-extracted edge.** A semantic edge in Memgraph written by the v0.2 autonomous extractor
+**LLM-extracted edge.** A semantic edge written by the v0.2 autonomous extractor
 (`RELATED_TO` or `PREREQUISITE_FOR` only). Distinguished from a curator-added edge by its
 **edge provenance** properties — never confused with curator work, prunable by predicate
 query, weightable in retrieval. See ADR-010.
@@ -80,6 +80,16 @@ query, weightable in retrieval. See ADR-010.
 (0.0–1.0, LLM-assigned), `extracted_at` (ISO-8601), `source_revision_id` (the page revision
 that triggered the extraction), and the existing `weight`. Provenance is what makes
 autonomous extraction reversible by Cypher predicate, and is the data shape behind ADR-010.
+
+**Semantic-edge persistence.** Semantic edges (`RELATED_TO`, `PREREQUISITE_FOR`,
+`SYNTHESIZES`, `CONTRADICTS`) are system-of-record data in PostgreSQL (`semantic_edges`,
+migration 0013), not graph-only. Every write goes through one **dual-write coordinator**
+(`compendium/graph/semantic_edges.py`, `record_semantic_edge`) that delegates
+curator-protection and symmetric canonicalisation to `schema.upsert_semantic_edge` (the
+graph stays their arbiter) and mirrors the resolved edge to the table. `compendium graph
+rebuild` replays the rows after the structural projection, so a rebuild no longer wipes
+curator / `SYNTHESIZES` / LLM edges; `compendium graph backfill-edges` is the one-shot
+capture of edges created before this. The graph is now fully derived (ADR-004/005, ADR-013).
 
 ## Deployment
 

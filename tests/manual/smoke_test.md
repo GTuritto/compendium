@@ -408,3 +408,17 @@ COMPENDIUM_SYNTH_STUB=1`. Confirms the registry-driven slow loop produces the sa
 | arch4.2 | Graph-down skip is kind-derived | stop Memgraph, `compendium curate run` | `skipped` lists exactly `thin_grounding`, `dangling_concept`, `unresolved_contradiction`; the low-coverage signal is still inserted; exit 0 |
 | arch4.3 | Extractor still a separate step | `curate run` with stores up | `extracted_edges` counts are populated by the extraction step, which is absent from the SignalGenerator registry |
 | arch4.4 | Rules in one place | `grep -nE 'graph_kinds|"thin_grounding"' compendium/curate/run.py` | no hardcoded kind-list; kinds + store-requirements live only in `signal_generator.py` / the registry |
+
+## Arch — Semantic-edge persistence + replay (correctness fix, ADR-013)
+
+Prerequisites: stores up; migrated DB (`alembic upgrade head` brings in `0013_semantic_edges`);
+a seeded corpus with at least one concept + source. `COMPENDIUM_EMBED_STUB=1
+COMPENDIUM_SYNTH_STUB=1`. Confirms a `graph rebuild` no longer wipes semantic edges.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-se.1 | Curator edge survives a rebuild | `compendium graph link <a> <b> --type RELATED_TO`; `compendium graph status`; `compendium graph rebuild`; `compendium graph status` | the `RELATED_TO` count is the same after the rebuild as before (was 0 before this fix) |
+| arch-se.2 | SYNTHESIZES survives a rebuild | synth a concept from a signal and promote it (writes `SYNTHESIZES`); `compendium graph rebuild`; inspect | the `SYNTHESIZES` edge is present after the rebuild with `extracted_by="curator"` |
+| arch-se.3 | LLM edge survives a rebuild | `compendium curate run` (writes `RELATED_TO`/`PREREQUISITE_FOR`); `compendium graph rebuild`; inspect one extracted edge | present after rebuild with `extracted_by="llm"` + confidence/model intact |
+| arch-se.4 | Backfill captures legacy edges | on a graph with pre-fix in-graph-only edges: `compendium graph backfill-edges`; re-run it; `compendium graph rebuild` | first run reports a capture count; the second run reports the same count (idempotent — no duplicates); edges present after rebuild |
+| arch-se.5 | Persistence is the source | after arch-se.1, `psql -c "SELECT edge_type, extracted_by FROM semantic_edges"` | a row exists for the curator edge with `extracted_by='curator'` |

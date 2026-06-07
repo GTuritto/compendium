@@ -559,7 +559,7 @@ The extractor runs as a generator inside `compendium/curate/` and is invoked by 
 
 **Including `CONTRADICTS` autonomously** was rejected because it makes the strongest claim (two of your sources disagree), is the most consequential if wrong, and feeds the `unresolved_contradiction` curation generator — a feedback loop the curator should stay in front of. A Shape-B-style "LLM suggests a contradiction, curator approves" is the right path for this edge type, deferred to v0.3+.
 
-**No provenance** was rejected because it would make the decision truly hard to reverse: the only safe undo would be `graph rebuild`, which drops *all* semantic edges including curator-added ones. Provenance turns "hard to reverse" into "reversible by predicate query."
+**No provenance** was rejected because it would make the decision truly hard to reverse: the only safe undo would be `graph rebuild`, which drops *all* semantic edges including curator-added ones. Provenance turns "hard to reverse" into "reversible by predicate query." *(Superseded note, 2026-06-07 / ADR-013: `graph rebuild` no longer drops semantic edges — they are now persisted in PostgreSQL and replayed on rebuild. The provenance argument stands; the rebuild-as-undo hazard is closed.)*
 
 ### ADR-011: Callable access surface — MCP + HTTP (v0.2)
 
@@ -674,6 +674,37 @@ Per-host model strategy is configuration (`SYNTHESIS_*`, `EMBEDDINGS_*`), not co
 **An in-process Python file watcher** (`watchdog` library) for the inbox was rejected in favour of OS-native path-units: the OS keeps watching even when Compendium is restarting, and the watcher's failure model is independent of the access-surface daemon's.
 
 **Multi-host orchestration** (Docker Swarm, K3s, Nomad) was rejected: single-user, single-host scope. The day Compendium becomes multi-host, this ADR gets superseded.
+
+### ADR-013: Semantic edges are system-of-record data in PostgreSQL (post-v0.2 fix)
+
+**Status:** Accepted (post-v0.2 architecture fix, 2026-06-07, PR #52). Closes a correctness defect, not a feature. Reconciles ADR-004 and ADR-005; supersedes the parenthetical observation in ADR-010's "No provenance" alternative that `graph rebuild` "drops *all* semantic edges including curator-added ones" — after this fix it no longer does.
+
+#### Context
+
+Semantic edges (`RELATED_TO`, `PREREQUISITE_FOR`, `SYNTHESIZES`, `CONTRADICTS`) were written only into Memgraph: every writer (curator `graph link`, the `SYNTHESIZES` promote lifecycle, the LLM extractor) funnelled through `schema.upsert_semantic_edge`, which stamped the relationship in the graph and nowhere else. But Memgraph is a *derived* store (ADR-005): `compendium graph rebuild` runs `drop_all` and re-projects only the structural edges (`PART_OF`/`EVIDENCES`/`GROUNDS`) from PostgreSQL plus the vault. So one rebuild — run to recover from corruption, pick up a projection change, or after a Memgraph version bump — silently and permanently destroyed every curator-authored, lifecycle, and extracted edge. The structural edges survived because they were derivable; the semantic edges had no system-of-record home, so they fell outside the only thing rebuild could restore.
+
+#### Decision
+
+Persist semantic edges in PostgreSQL and replay them on rebuild — *do not* teach rebuild to spare in-graph state.
+
+- A `semantic_edges` table (migration `0013`) is the system-of-record home: one row per directed edge (UNIQUE on `(edge_type, from_label, from_id, to_label, to_id)`, mirroring Memgraph's `MERGE`), carrying the ADR-010 provenance bag as typed columns.
+- One **dual-write coordinator** (`compendium/graph/semantic_edges.py`, `record_semantic_edge`) writes the *resolved* edge to both stores. It delegates curator-protection and symmetric canonicalisation to `schema.upsert_semantic_edge` (the graph stays their arbiter) and mirrors only the outcome to PostgreSQL: on a `collision` PostgreSQL is left untouched; otherwise the row is upserted. The three writers route through it; `schema.py` stays pure-graph (the coordinator is the one place the graph layer touches the db layer).
+- `graph rebuild` gains a replay pass: after the structural projection it re-projects every `semantic_edges` row into the freshly dropped graph. Determinism now rests on the PostgreSQL rows (structural + semantic) plus the corpus revision.
+- `compendium graph backfill-edges` (one-shot, idempotent) captures edges created before this capability into the table.
+
+#### Consequences
+
+- A rebuild no longer loses curator / `SYNTHESIZES` / LLM-extracted edges; the invariant is testable through one interface (write → rebuild → assert present with provenance).
+- Memgraph becomes *fully* derived (honours ADR-005), and PostgreSQL remains the single source of truth (honours ADR-004). The graph is never authoritative for anything.
+- The curator-protection and canonicalisation rules are unchanged — the graph still arbitrates them; PostgreSQL only mirrors the resolved edge.
+
+#### Alternatives considered
+
+**Teach rebuild to preserve the semantic edges already in Memgraph** was rejected: it would make Memgraph a second source of truth (violating ADR-004) and make the rebuild depend on graph mutation history rather than the corpus revision (breaking the determinism `rebuild.py` promises). Persisting upstream keeps both ADRs intact.
+
+**A native PostgreSQL enum for `edge_type`** was deferred in favour of `text` validated against the `EdgeType` registry, so the migration stays additive (no enum-value migration); an enum is a later tightening if earned.
+
+**An automatic first-run backfill** (inside the migration) was rejected for an explicit, idempotent CLI verb — observable, and it needs Memgraph reachable, which a migration cannot assume.
 
 ## Part III: Data Contracts and Schemas
 
