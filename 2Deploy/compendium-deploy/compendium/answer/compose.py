@@ -20,7 +20,6 @@ from typing import Any
 
 from compendium.answer.cost import estimate_cost
 from compendium.answer.llm import Answerer, Completion, get_answerer
-from compendium.answer.prompts import PROMPT_TEMPLATE_ID
 from compendium.answer.rewrite import rewrite_query
 
 _SOURCE_KINDS = "book|article|paper|note|web"
@@ -70,16 +69,9 @@ class _Composed:
 
 
 def _ask_config() -> dict[str, Any]:
-    from compendium.config import load_config
+    from compendium import config_sections
 
-    settings = load_config().settings
-    ask = settings.get("ask", {}) or {}
-    return {
-        "refuse_below_coverage": float(ask.get("refuse_below_coverage", 0.3)),
-        "prompt_template_id": ask.get("prompt_template_id", PROMPT_TEMPLATE_ID),
-        "rewrite": bool(ask.get("rewrite", True)),
-        "top_k": int(settings.get("retrieval", {}).get("top_k", 7)),
-    }
+    return config_sections.ask()
 
 
 def _citations(result: Any, top_k: int) -> list[Citation]:
@@ -205,36 +197,52 @@ def _assemble(
     )
 
 
+def compose_answer(
+    question: str,
+    result: Any,
+    *,
+    answerer: Answerer | None = None,
+    on_token: Callable[[str], None] | None = None,
+) -> AskResult:
+    """Compose (or refuse) an answer over an already-retrieved ``RetrievalResult``,
+    without touching the database.
+
+    The composition seam: :func:`ask` runs retrieval and persistence around the
+    same ``_compose``; callers that already hold a result — and the composition
+    tests — use this directly. The returned ``AskResult`` has empty ``trace_id`` /
+    ``ask_trace_id`` because nothing is persisted here.
+    """
+    answerer = answerer or get_answerer()
+    cfg = _ask_config()
+    rewrite_completion = rewrite_query(question, answerer, enabled=cfg["rewrite"])
+    context = _build_context(result, cfg["top_k"])
+    composed = _compose(
+        question, result, context, answerer, on_token, cfg, rewrite_completion
+    )
+    return _assemble(composed, result, trace_id="", ask_trace_id="")
+
+
 def ask(
     question: str,
     *,
     on_token: Callable[[str], None] | None = None,
     answerer: Answerer | None = None,
-    _retrieve: Callable[[str], Any] | None = None,
 ) -> AskResult:
     """Compose an answer over the top-K pages for ``question``.
 
-    Flow: rewrite (Shape D part 2) -> ``pipeline.query`` -> refuse below the
+    Flow: rewrite (Shape D part 2) -> ``pipeline.run`` -> refuse below the
     coverage threshold, else compose -> persist a ``query_traces`` row and an
     ``ask_traces`` row joined to it -> return the structured ``AskResult``.
 
     When ``on_token`` is supplied the answer streams to it while still being
     accumulated in ``AskResult.answer`` (``--format text``); when omitted the
-    answer is buffered (``--format json``). ``_retrieve`` is a test seam: when
-    given, it supplies the ``RetrievalResult`` and the database is not touched.
+    answer is buffered (``--format json``). Callers that already hold a
+    ``RetrievalResult`` and want no persistence use :func:`compose_answer`.
     """
     answerer = answerer or get_answerer()
     cfg = _ask_config()
     rewrite_completion = rewrite_query(question, answerer, enabled=cfg["rewrite"])
     retrieval_query = rewrite_completion.text or question
-
-    if _retrieve is not None:
-        result = _retrieve(retrieval_query)
-        context = _build_context(result, cfg["top_k"])
-        composed = _compose(
-            question, result, context, answerer, on_token, cfg, rewrite_completion
-        )
-        return _assemble(composed, result, trace_id="", ask_trace_id="")
 
     import asyncio
 

@@ -45,6 +45,26 @@ comes up on login/boot and restarts on crash. The other three are
 timer/path-triggered. MCP (`compendium mcp`, stdio) is launched per agent
 session by the MCP client, not as a persistent unit.
 
+### Shared mechanism (`compendium/service_unit/`)
+
+All four services install / uninstall / report status through one seam,
+`compendium/service_unit/`, rather than each reimplementing the launchd /
+systemd lifecycle. A service hands the seam a `UnitDescriptor` (label,
+program args, working dir) plus a `Trigger` — the only axis that differs
+between them:
+
+| Service | Trigger | macOS keys | Linux unit |
+| --- | --- | --- | --- |
+| Curation | `Interval(seconds)` | `StartInterval` | `.timer` (`OnUnitActiveSec`) |
+| Backup | `Calendar(hour, minute)` | `StartCalendarInterval` | `.timer` (`OnCalendar`) |
+| Inbox | `WatchPaths(paths)` | `WatchPaths` | `.path` (`PathChanged`) |
+| Access surface | `AlwaysOn()` | `RunAtLoad` + `KeepAlive` | `.service` (`Restart=always`) |
+
+Two adapters (`launchd.py`, `systemd.py`) render the per-OS units and run the
+`launchctl` / `systemctl` calls through an injectable runner. One
+`ServiceUnitError` and one platform check serve all four. Adding a fifth
+service is a new descriptor, not another copy of the lifecycle.
+
 ## Lifecycle
 
 ```sh
@@ -95,12 +115,24 @@ requirement for an always-on host.
 git pull
 uv sync
 uv run alembic upgrade head
+# One-time, only when upgrading a graph that predates migration 0013 (ADR-013):
+# capture the existing in-graph semantic edges into PostgreSQL BEFORE the first
+# rebuild, or that rebuild replays from an empty table and wipes them.
+uv run python -m compendium graph backfill-edges
 uv run python -m compendium reindex all && uv run python -m compendium graph rebuild
 deploy/compendiumctl restart
 ```
 
 Re-running `deploy/install.sh` is also safe (idempotent) and re-installs the
 units with any new defaults.
+
+> **ADR-013 upgrade note.** Migration 0013 makes PostgreSQL the system of record
+> for semantic edges (curator `graph link`, `SYNTHESIZES`, LLM-extracted), which
+> `graph rebuild` then replays. On a graph created before this build those edges
+> live only in Memgraph, so run `compendium graph backfill-edges` **once** right
+> after `alembic upgrade head` (before any `graph rebuild`) to persist them.
+> `backfill-edges` is idempotent; fresh installs have nothing to back up and can
+> skip it.
 
 ## Uninstall
 

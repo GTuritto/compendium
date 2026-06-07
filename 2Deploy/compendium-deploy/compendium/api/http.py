@@ -29,6 +29,17 @@ def create_app() -> Any:
 
     app = FastAPI(title="Compendium access surface", version="0.2")
 
+    @app.middleware("http")
+    async def _refresh_behavior_config(request: Any, call_next: Any) -> Any:
+        # The serve unit is long-running; drop the cached behavior config at the
+        # start of each request so a config/settings.yaml change is picked up
+        # without a restart (arch-config-cache-seam). Storage-URL/secret reads are
+        # uncached anyway. Re-parse cost is negligible at personal request volume.
+        from compendium.config import invalidate_config_cache
+
+        invalidate_config_cache()
+        return await call_next(request)
+
     @app.post("/query")
     def http_query(payload: dict = Body(...)) -> Any:
         text = (payload or {}).get("text")

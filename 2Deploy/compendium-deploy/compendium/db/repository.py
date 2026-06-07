@@ -1169,3 +1169,93 @@ def ensure_corpus_revision(conn: psycopg.Connection) -> str:
         (revision_id, "auto-created on first page write"),
     )
     return revision_id
+
+
+# --- semantic edges (system-of-record home; arch-semantic-edge-persistence) -
+#
+# Semantic edges are projected into Memgraph but live here so `graph rebuild`
+# can replay them (ADR-004/ADR-005: the graph is fully derived). One row per
+# directed edge, keyed on the same tuple Memgraph MERGEs on. Provenance columns
+# mirror the ADR-010 bag; absent keys are stored NULL. The graph stays the
+# arbiter of curator-protection/canonicalisation -- these functions only mirror
+# the resolved edge (see compendium/graph/semantic_edges.py).
+
+# The provenance keys carried on a semantic edge, in column order.
+_SEMANTIC_EDGE_PROVENANCE = (
+    "extracted_by", "model", "confidence", "extracted_at", "source_revision_id", "weight",
+)
+
+
+def upsert_semantic_edge_row(
+    conn: psycopg.Connection,
+    *,
+    edge_type: str,
+    from_label: str,
+    from_id: str,
+    to_label: str,
+    to_id: str,
+    provenance: dict[str, Any],
+) -> None:
+    """Insert or refresh the row for a directed semantic edge.
+
+    ON CONFLICT on the directed tuple refreshes the provenance in place, so the
+    table holds one row per edge -- the analog of Memgraph's MERGE.
+    """
+    params: dict[str, Any] = {
+        "edge_type": edge_type,
+        "from_label": from_label,
+        "from_id": from_id,
+        "to_label": to_label,
+        "to_id": to_id,
+    }
+    for key in _SEMANTIC_EDGE_PROVENANCE:
+        params[key] = provenance.get(key)
+    conn.execute(
+        """
+        INSERT INTO semantic_edges (
+            edge_type, from_label, from_id, to_label, to_id,
+            extracted_by, model, confidence, extracted_at, source_revision_id, weight
+        )
+        VALUES (
+            %(edge_type)s, %(from_label)s, %(from_id)s, %(to_label)s, %(to_id)s,
+            %(extracted_by)s, %(model)s, %(confidence)s, %(extracted_at)s,
+            %(source_revision_id)s, %(weight)s
+        )
+        ON CONFLICT (edge_type, from_label, from_id, to_label, to_id)
+        DO UPDATE SET
+            extracted_by = EXCLUDED.extracted_by,
+            model = EXCLUDED.model,
+            confidence = EXCLUDED.confidence,
+            extracted_at = EXCLUDED.extracted_at,
+            source_revision_id = EXCLUDED.source_revision_id,
+            weight = EXCLUDED.weight
+        """,
+        params,
+    )
+
+
+def delete_semantic_edge_row(
+    conn: psycopg.Connection,
+    *,
+    edge_type: str,
+    from_label: str,
+    from_id: str,
+    to_label: str,
+    to_id: str,
+) -> None:
+    """Remove the row for a directed semantic edge (idempotent)."""
+    conn.execute(
+        "DELETE FROM semantic_edges "
+        "WHERE edge_type = %s AND from_label = %s AND from_id = %s "
+        "AND to_label = %s AND to_id = %s",
+        (edge_type, from_label, from_id, to_label, to_id),
+    )
+
+
+def all_semantic_edges(conn: psycopg.Connection) -> list[dict[str, Any]]:
+    """Every persisted semantic edge, for the rebuild replay pass."""
+    return conn.execute(
+        "SELECT edge_type, from_label, from_id, to_label, to_id, "
+        "extracted_by, model, confidence, extracted_at, source_revision_id, weight "
+        "FROM semantic_edges ORDER BY edge_type, from_id, to_id"
+    ).fetchall()

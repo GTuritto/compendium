@@ -10,7 +10,6 @@ OpenAI-compatible chat completion. ``compose`` streams when given an
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -156,14 +155,7 @@ class LLMAnswerer:
 
 
 def get_answerer() -> Answerer:
-    """The stub when COMPENDIUM_SYNTH_STUB is set, else the real LLM client."""
-    if os.environ.get("COMPENDIUM_SYNTH_STUB"):
-        return StubAnswerer()
-    from compendium.config import load_config
+    """The stub when COMPENDIUM_SYNTH_STUB / COMPENDIUM_LLM_STUB is set, else the real client."""
+    from compendium.model_clients import get_model_client
 
-    config = load_config()
-    return LLMAnswerer(
-        config.synthesis_endpoint,
-        config.synthesis_model,
-        config.synthesis_api_key,
-    )
+    return get_model_client("answerer")

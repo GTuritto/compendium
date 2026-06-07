@@ -14,16 +14,17 @@ This module is built across Phase 8 sub-phases: 8a adds the Qdrant kNN helper,
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from compendium.graph.edge_type import EXTRACTABLE_EDGES
 from compendium.index.qdrant import PAGES_COLLECTION
 
 PROMPT_TEMPLATE_ID = "extract-v1"
 
-# The two labels the extractor may assign (plus NONE, which is dropped).
-_ACTIONABLE = ("RELATED_TO", "PREREQUISITE_FOR")
+# The labels the extractor may assign (plus NONE, which is dropped) — the
+# extractable set from the EdgeType registry (single source).
+_ACTIONABLE = EXTRACTABLE_EDGES
 _SOURCE_BODY_BUDGET = 800
 
 
@@ -198,13 +199,10 @@ class LLMExtractor:
 
 
 def get_extractor() -> Extractor:
-    """The stub when COMPENDIUM_SYNTH_STUB is set, else the real LLM client."""
-    if os.environ.get("COMPENDIUM_SYNTH_STUB"):
-        return StubExtractor()
-    from compendium.config import load_config
+    """The stub when COMPENDIUM_SYNTH_STUB / COMPENDIUM_LLM_STUB is set, else the real client."""
+    from compendium.model_clients import get_model_client
 
-    config = load_config()
-    return LLMExtractor(config.synthesis_endpoint, config.synthesis_model, config.synthesis_api_key)
+    return get_model_client("extractor")
 
 
 # --- the generator (one slow-loop pass over changed pages) -----------------
@@ -232,15 +230,9 @@ class ExtractReport:
 
 def extract_cfg() -> dict[str, Any]:
     """The ``curation.extract`` config block, with defaults."""
-    from compendium.config import load_config
+    from compendium import config_sections
 
-    c = (load_config().settings.get("curation", {}) or {}).get("extract", {}) or {}
-    return {
-        "enabled": bool(c.get("enabled", True)),
-        "min_confidence": float(c.get("min_confidence", 0.7)),
-        "top_k_neighbours": int(c.get("top_k_neighbours", 10)),
-        "full_sweep_every": int(c.get("full_sweep_every", 24)),
-    }
+    return config_sections.extract()
 
 
 def _now_iso() -> str:
@@ -260,7 +252,7 @@ def from_extracted_edges(conn: Any, driver: Any, qclient: Any, cfg: dict[str, An
     from datetime import datetime
 
     from compendium.db import repository
-    from compendium.graph import schema
+    from compendium.graph import schema, semantic_edges
     from compendium.logging import get_logger
 
     log = get_logger("compendium.curate.extract")
@@ -326,10 +318,11 @@ def from_extracted_edges(conn: Any, driver: Any, qclient: Any, cfg: dict[str, An
                 "weight": lbl.confidence,
             }
             # PREREQUISITE_FOR is directed; "backward" means neighbour -> source.
+            # Route through the cross-store seam so the edge is persisted for replay.
             if lbl.label == "PREREQUISITE_FOR" and lbl.direction == "backward":
-                disp = schema.upsert_extracted_edge(driver, lbl.label, n_label, n_id, s_label, s_id, props)
+                disp = semantic_edges.record_extracted_edge(conn, driver, lbl.label, n_label, n_id, s_label, s_id, props)
             else:
-                disp = schema.upsert_extracted_edge(driver, lbl.label, s_label, s_id, n_label, n_id, props)
+                disp = semantic_edges.record_extracted_edge(conn, driver, lbl.label, s_label, s_id, n_label, n_id, props)
 
             if disp == "written":
                 report.written += 1

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from compendium.answer.compose import AskResult, Citation, ask
+from compendium.answer.compose import AskResult, Citation, ask, compose_answer
 from compendium.answer.llm import Answerer, Completion, get_answerer
 
-__all__ = ["AskResult", "Citation", "ask", "Answerer", "Completion", "get_answerer"]
+__all__ = [
+    "AskResult", "Citation", "ask", "compose_answer",
+    "Answerer", "Completion", "get_answerer",
+]

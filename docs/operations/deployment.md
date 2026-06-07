@@ -115,12 +115,24 @@ requirement for an always-on host.
 git pull
 uv sync
 uv run alembic upgrade head
+# One-time, only when upgrading a graph that predates migration 0013 (ADR-013):
+# capture the existing in-graph semantic edges into PostgreSQL BEFORE the first
+# rebuild, or that rebuild replays from an empty table and wipes them.
+uv run python -m compendium graph backfill-edges
 uv run python -m compendium reindex all && uv run python -m compendium graph rebuild
 deploy/compendiumctl restart
 ```
 
 Re-running `deploy/install.sh` is also safe (idempotent) and re-installs the
 units with any new defaults.
+
+> **ADR-013 upgrade note.** Migration 0013 makes PostgreSQL the system of record
+> for semantic edges (curator `graph link`, `SYNTHESIZES`, LLM-extracted), which
+> `graph rebuild` then replays. On a graph created before this build those edges
+> live only in Memgraph, so run `compendium graph backfill-edges` **once** right
+> after `alembic upgrade head` (before any `graph rebuild`) to persist them.
+> `backfill-edges` is idempotent; fresh installs have nothing to back up and can
+> skip it.
 
 ## Uninstall
 
