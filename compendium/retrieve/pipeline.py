@@ -83,7 +83,9 @@ def _expansion_params() -> dict[str, Any]:
 
 def _embedding_model_name() -> str:
     """The model label recorded in the trace."""
-    if os.environ.get("COMPENDIUM_EMBED_STUB"):
+    from compendium.model_clients import use_stub
+
+    if use_stub("embedder"):
         return "stub"
     return load_config().embeddings_model
 

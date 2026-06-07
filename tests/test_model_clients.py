@@ -93,3 +93,16 @@ def test_umbrella_flag_stubs_every_role(env):
 def test_unknown_role_raises(env):
     with pytest.raises(KeyError):
         mc.get_model_client("reranker")
+
+
+def test_named_factories_delegate_under_umbrella(env):
+    env.setenv("COMPENDIUM_LLM_STUB", "1")
+    from compendium.answer.llm import get_answerer, StubAnswerer
+    from compendium.wiki.synth import get_synthesizer, StubSynthesizer
+    from compendium.curate.extract import get_extractor, StubExtractor
+    from compendium.index.embedder import get_embedder, StubEmbedder
+
+    assert isinstance(get_answerer(), StubAnswerer)
+    assert isinstance(get_synthesizer(), StubSynthesizer)
+    assert isinstance(get_extractor(), StubExtractor)
+    assert isinstance(get_embedder(), StubEmbedder)
