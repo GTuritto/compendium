@@ -435,3 +435,15 @@ change without restart, and storage-URL env overrides still take effect (uncache
 | arch-cc.2 | serve picks up a settings change | start `compendium serve`; edit a non-secret value in `config/settings.yaml` (e.g. `ask.refuse_below_coverage`); hit `POST /ask` | the new value is in effect without restarting serve |
 | arch-cc.3 | Env override still works (uncached) | `POSTGRES_URL=<other-db> compendium index status` | the other DB is used — storage-URL reads are not served from the behavior-config cache |
 | arch-cc.4 | One home for keys/defaults | `grep -rn '\.settings\.get(' compendium/ \| grep -v config_sections.py` | no matches — `config_sections.py` (via its `_section` helper) is the only reader of the behavior sections; the inline extractors no longer dig the dict |
+
+## Arch — Model client seam (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. Confirms the four model factories select through
+one registry and a single `COMPENDIUM_LLM_STUB` runs every model seam offline (per-role flags
+still work).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-lc.1 | One flag runs everything offline | `COMPENDIUM_LLM_STUB=1 uv run python -m compendium curate run` and `... ask "What is psychological safety?"` | both run with no network/cost — answerer/synthesizer/extractor/embedder all stubbed from the one flag |
+| arch-lc.2 | Per-role flag still scoped | `COMPENDIUM_EMBED_STUB=1 uv run python -m compendium reindex all` (synth/answer flags unset) | only the embedder is stubbed; the synthesis-role clients would use real config |
+| arch-lc.3 | Selection in one place | `grep -rln 'os.environ' compendium/answer/llm.py compendium/wiki/synth.py compendium/curate/extract.py compendium/index/embedder.py` | no matches — the four factories no longer read any env flag; the stub-vs-real decision lives only in `compendium/model_clients.py` (`get_model_client` / `use_stub`) |

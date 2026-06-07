@@ -14,7 +14,6 @@ This module is built across Phase 8 sub-phases: 8a adds the Qdrant kNN helper,
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -200,13 +199,10 @@ class LLMExtractor:
 
 
 def get_extractor() -> Extractor:
-    """The stub when COMPENDIUM_SYNTH_STUB is set, else the real LLM client."""
-    if os.environ.get("COMPENDIUM_SYNTH_STUB"):
-        return StubExtractor()
-    from compendium.config import load_config
+    """The stub when COMPENDIUM_SYNTH_STUB / COMPENDIUM_LLM_STUB is set, else the real client."""
+    from compendium.model_clients import get_model_client
 
-    config = load_config()
-    return LLMExtractor(config.synthesis_endpoint, config.synthesis_model, config.synthesis_api_key)
+    return get_model_client("extractor")
 
 
 # --- the generator (one slow-loop pass over changed pages) -----------------
