@@ -94,6 +94,30 @@ _PAGE_LABEL = {"source": "Source", "concept": "Concept", "topic": "Topic"}
 EXTRACTABLE_EDGES = _et.EXTRACTABLE_EDGES
 
 
+def canonical_endpoints(
+    edge_type: str,
+    from_label: str,
+    from_id: str,
+    to_label: str,
+    to_id: str,
+    *,
+    by_llm: bool,
+) -> tuple[str, str, str, str]:
+    """The endpoint orientation a semantic edge is actually written with.
+
+    A symmetric type (``RELATED_TO``) is canonicalised lexicographically by id on
+    the LLM path, so there is one edge per unordered pair regardless of the
+    orientation the extractor supplied. A curator/lifecycle write keeps the
+    caller's orientation, because fast-loop expansion walks curator edges
+    *directed* from the linked page. Shared by :func:`upsert_semantic_edge` and the
+    cross-store coordinator (``graph/semantic_edges.py``) so the persisted
+    PostgreSQL row matches the graph edge exactly.
+    """
+    if _et.is_symmetric(edge_type) and by_llm and from_id > to_id:
+        return to_label, to_id, from_label, from_id
+    return from_label, from_id, to_label, to_id
+
+
 def page_node_ref(kind: str, page_id: str, source_id: str | None) -> tuple[str, str]:
     """The (graph label, node id) for a wiki page.
 
@@ -140,15 +164,13 @@ def upsert_semantic_edge(
 
     by_llm = provenance.get("extracted_by") == "llm"
 
-    # Canonicalise symmetric edges on the LLM path only: the extractor dedupes
-    # its own writes by orientation. A curator/lifecycle write keeps the caller's
-    # orientation, because fast-loop expansion (browse.walk_semantic) walks edges
-    # *directed* from a seed — flipping a curator edge would make it unreachable
-    # from the page the curator linked. The collision check below looks in both
-    # directions, so a curator edge in either orientation is still protected.
+    # Canonicalise symmetric edges on the LLM path only (see canonical_endpoints).
+    # The collision check below looks in both directions, so a curator edge in
+    # either orientation is still protected.
     symmetric = _et.is_symmetric(edge_type)
-    if symmetric and by_llm and from_id > to_id:
-        from_label, from_id, to_label, to_id = to_label, to_id, from_label, from_id
+    from_label, from_id, to_label, to_id = canonical_endpoints(
+        edge_type, from_label, from_id, to_label, to_id, by_llm=by_llm
+    )
 
     with driver.session() as session:
         forward = session.run(
