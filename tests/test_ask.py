@@ -18,7 +18,7 @@ from alembic import command
 from alembic.config import Config
 from psycopg.rows import dict_row
 
-from compendium.answer import ask
+from compendium.answer import ask, compose_answer
 from compendium.answer.cost import estimate_cost
 from compendium.answer.llm import Completion, StubAnswerer
 from compendium.answer.rewrite import rewrite_query
@@ -71,32 +71,28 @@ def _result(coverage: float, pages: list[PageResult], gaps=None) -> RetrievalRes
 
 def test_covered_question_answers_with_citations_and_streams():
     answerer = _FakeAnswerer()
-    seen_query: dict[str, str] = {}
     streamed: list[str] = []
 
-    def retrieve(query_text: str) -> RetrievalResult:
-        seen_query["q"] = query_text
-        return _result(0.82, [_page("psych-safety", "Psychological Safety"), _page("trust", "Trust")])
-
-    result = ask(
-        "What is psych safety?", on_token=streamed.append,
-        answerer=answerer, _retrieve=retrieve,
+    result = compose_answer(
+        "What is psych safety?",
+        _result(0.82, [_page("psych-safety", "Psychological Safety"), _page("trust", "Trust")]),
+        on_token=streamed.append, answerer=answerer,
     )
 
     assert result.refused is False
     assert result.answer == "Psychological safety is a shared team belief [1]."
     assert streamed == [result.answer]  # streamed via on_token
-    assert seen_query["q"] == "REWRITTEN:What is psych safety?"  # rewrite drove retrieval
     assert [c.trace_rank for c in result.citations] == [1, 2]
     assert result.citations[0].ref == "[1]"
     assert result.citations[0].slug == "psych-safety"
     assert result.citations[0].title == "Psychological Safety"
+    assert result.trace_id == "" and result.ask_trace_id == ""  # compose_answer never persists
     assert answerer.composed is not None
 
 
 def test_uncovered_question_refuses_without_composing():
     answerer = _FakeAnswerer()
-    result = ask("something obscure", answerer=answerer, _retrieve=lambda q: _result(0.1, []))
+    result = compose_answer("something obscure", _result(0.1, []), answerer=answerer)
 
     assert result.refused is True
     assert result.answer is None
@@ -108,9 +104,8 @@ def test_uncovered_question_refuses_without_composing():
 
 
 def test_refusal_with_pages_suggests_synth():
-    result = ask(
-        "thin topic", answerer=_FakeAnswerer(),
-        _retrieve=lambda q: _result(0.2, [_page("x", "X Concept")]),
+    result = compose_answer(
+        "thin topic", _result(0.2, [_page("x", "X Concept")]), answerer=_FakeAnswerer()
     )
     assert result.refused is True
     assert result.suggested_actions == ['compendium synth concept "X Concept"']
@@ -280,6 +275,31 @@ def test_ask_end_to_end_covered_persists_joined_traces(
     assert joined["model"] == "stub"
     assert joined["query_text"] == "what is psychological safety"
     assert str(joined["query_trace_id"]) == result.trace_id
+
+
+@pytest.mark.integration
+def test_ask_retrieves_with_the_rewritten_query(
+    test_db_url: str, monkeypatch, tmp_path
+) -> None:
+    # The rewrite drives retrieval: ask passes the rewritten text to pipeline.run.
+    # (Composition itself is tested DB-free via compose_answer above.)
+    monkeypatch.setenv("POSTGRES_URL", test_db_url)
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path / "vault"))
+    (tmp_path / "vault").mkdir()
+
+    from compendium.retrieve import pipeline
+
+    pages = [PageResult(entity_id="A", title="Psychological Safety", slug="psych-safety",
+                        kind="concept", status="canonical", score=1.0)]
+    seen: dict[str, str] = {}
+
+    async def fake_run(query_text, *, corpus_revision=None, **kw):
+        seen["q"] = query_text
+        return _canned_result(0.8, pages, corpus_revision)
+
+    monkeypatch.setattr(pipeline, "run", fake_run)
+    ask("What is psych safety?", answerer=_FakeAnswerer())
+    assert seen["q"] == "REWRITTEN:What is psych safety?"  # rewrite drove retrieval
 
 
 @pytest.mark.integration
