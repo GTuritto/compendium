@@ -21,7 +21,7 @@ from typing import Any
 import psycopg
 
 from compendium.db import repository
-from compendium.graph import projection, schema
+from compendium.graph import projection, semantic_edges
 from compendium.graph.client import graph_connection, graph_reachable
 from compendium.wiki.page import parse_markdown
 
@@ -74,8 +74,14 @@ def address_on_promote(
                 with graph_connection() as driver:
                     if graph_reachable(driver):
                         for source_id in source_ids:
-                            schema.upsert_edge(
-                                driver, "SYNTHESIZES",
+                            # SYNTHESIZES is lifecycle-owned; route through the
+                            # cross-store seam with curator-class provenance so an
+                            # LLM extraction can never overwrite it. The conn is the
+                            # promote transaction's, so the semantic_edges row
+                            # commits atomically with the signal-status flip.
+                            semantic_edges.record_semantic_edge(
+                                conn, driver, "SYNTHESIZES",
                                 "Concept", str(page["id"]), "Source", source_id,
+                                provenance={"extracted_by": "curator"},
                             )
     return str(signal["id"])

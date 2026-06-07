@@ -49,8 +49,15 @@ and set `BIND_HOST` to the server's Tailscale IP instead.
 ./compendiumctl logs serve        # tail the access surface
 ./compendiumctl stop              # stop (keeps data)
 ./compendiumctl start             # start again
-./compendiumctl update            # rebuild app image + restart serve
+./compendiumctl update            # rebuild app image + restart serve (runs alembic upgrade head)
 ```
+
+> **Upgrade note (ADR-013).** `update` applies migration 0013, which makes
+> PostgreSQL the system of record for semantic graph edges. If you have an older
+> graph and you ever run a manual `./compendiumctl cli graph rebuild`, first run
+> `./compendiumctl cli graph backfill-edges` **once** to persist the existing
+> in-graph edges — otherwise that rebuild replays from an empty table and drops
+> them. Fresh installs can skip it. `update` itself does not rebuild the graph.
 
 ## Load data
 

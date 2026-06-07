@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from compendium import config_sections
 from compendium.config import load_config
 from compendium.index.embedder import Embedder, get_embedder
 from compendium.retrieve import search
@@ -70,29 +71,21 @@ class RetrievalResult:
 
 
 def _retrieval_params() -> tuple[int, float, int]:
-    """(rrf_k, page_coverage_threshold, top_k) from config, with defaults."""
-    retrieval = load_config().settings.get("retrieval", {})
-    rrf_k = int(retrieval.get("rrf_k", 60))
-    threshold = float(retrieval.get("page_coverage_threshold", 0.5))
-    top_k = int(retrieval.get("top_k", 7))
-    return rrf_k, threshold, top_k
+    """(rrf_k, page_coverage_threshold, top_k) from the retrieval section reader."""
+    r = config_sections.retrieval()
+    return r["rrf_k"], r["page_coverage_threshold"], r["top_k"]
 
 
 def _expansion_params() -> dict[str, Any]:
-    """Graph-expansion config (ADR-009 fast loop), with defaults."""
-    cfg = load_config().settings.get("graph_expansion", {})
-    return {
-        "enabled": bool(cfg.get("enabled", True)),
-        "seed_k": int(cfg.get("seed_k", 3)),
-        "max_hops": int(cfg.get("max_hops", 2)),
-        "decay": float(cfg.get("decay", 0.5)),
-        "weight": float(cfg.get("weight", 0.3)),
-    }
+    """Graph-expansion config (ADR-009 fast loop) from the section reader."""
+    return config_sections.expansion()
 
 
 def _embedding_model_name() -> str:
     """The model label recorded in the trace."""
-    if os.environ.get("COMPENDIUM_EMBED_STUB"):
+    from compendium.model_clients import use_stub
+
+    if use_stub("embedder"):
         return "stub"
     return load_config().embeddings_model
 

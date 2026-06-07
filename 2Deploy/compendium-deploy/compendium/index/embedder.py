@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import math
-import os
 import random
 from typing import Protocol
 
-from compendium.config import load_config
 
 # BGE-M3 dimension; the Qdrant collections are created at this size.
 EMBED_DIM = 1024
@@ -62,12 +60,7 @@ class OpenAIEmbedder:
 
 
 def get_embedder() -> Embedder:
-    """The stub when COMPENDIUM_EMBED_STUB is set, else the real endpoint."""
-    if os.environ.get("COMPENDIUM_EMBED_STUB"):
-        return StubEmbedder()
-    config = load_config()
-    return OpenAIEmbedder(
-        config.embeddings_endpoint,
-        config.embeddings_model,
-        config.embeddings_api_key,
-    )
+    """The stub when COMPENDIUM_EMBED_STUB / COMPENDIUM_LLM_STUB is set, else the real endpoint."""
+    from compendium.model_clients import get_model_client
+
+    return get_model_client("embedder")

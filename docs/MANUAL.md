@@ -438,7 +438,14 @@ for the same, generated live.
 | --- | --- | --- |
 | `graph rebuild` | — | `--format` |
 | `graph status` | — | `--format` |
+| `graph backfill-edges` | — | `--format` |
 | `graph link <from_slug> <to_slug>` | two page slugs | `--type {RELATED_TO,PREREQUISITE_FOR,SYNTHESIZES,CONTRADICTS}` (**required**) |
+
+`graph backfill-edges` is a one-shot, idempotent capture of the semantic edges
+currently in Memgraph into the PostgreSQL `semantic_edges` table (ADR-013). Run it
+once when upgrading a graph created before migration 0013, before the next
+`graph rebuild` — afterwards every semantic-edge write persists automatically and
+rebuilds replay from PostgreSQL.
 
 ### Inspection
 

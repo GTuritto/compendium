@@ -13,10 +13,20 @@ from typing import Any
 import psycopg
 from neo4j import Driver
 
+from compendium.curate.signal_generator import GenerationContext, Signal, SignalGenerator
 from compendium.db import repository
 from compendium.graph import analysis
 
-Signal = tuple[str, int, dict[str, Any]]
+__all__ = [
+    "GenerationContext",
+    "REGISTRY",
+    "Signal",
+    "SignalGenerator",
+    "from_contradictions",
+    "from_dangling",
+    "from_low_coverage",
+    "from_thin_grounding",
+]
 
 
 def from_low_coverage(conn: psycopg.Connection, threshold: float) -> list[Signal]:
@@ -34,32 +44,58 @@ def from_low_coverage(conn: psycopg.Connection, threshold: float) -> list[Signal
         e["median_coverage"] = round(sorted(cov)[len(cov) // 2], 3) if cov else 0.0
         # Lower coverage and more repeats -> higher priority.
         priority = len(e["query_trace_ids"]) * 10 + int((1 - e["median_coverage"]) * 10)
-        signals.append(("low_coverage_query", priority, e))
+        signals.append(Signal("low_coverage_query", priority, e))
     return signals
 
 
 def from_thin_grounding(driver: Driver, min_grounds: int) -> list[Signal]:
     return [
-        ("thin_grounding", 5 + (min_grounds - r["grounds_count"]),
-         {"page_id": r["page_id"], "title": r["title"],
-          "grounds_count": r["grounds_count"], "expected_threshold": min_grounds})
+        Signal("thin_grounding", 5 + (min_grounds - r["grounds_count"]),
+               {"page_id": r["page_id"], "title": r["title"],
+                "grounds_count": r["grounds_count"], "expected_threshold": min_grounds})
         for r in analysis.thin_grounding_concepts(driver, min_grounds)
     ]
 
 
 def from_dangling(driver: Driver) -> list[Signal]:
     return [
-        ("dangling_concept", 3, {"page_id": r["page_id"], "title": r["title"],
-                                 "candidate_topic_ids": []})
+        Signal("dangling_concept", 3, {"page_id": r["page_id"], "title": r["title"],
+                                       "candidate_topic_ids": []})
         for r in analysis.dangling_concepts(driver)
     ]
 
 
 def from_contradictions(driver: Driver) -> list[Signal]:
     return [
-        ("unresolved_contradiction", 8,
-         {"page_a": r["page_a"], "page_b": r["page_b"],
-          "edge_id": f"{r['page_a']}->{r['page_b']}",
-          "title_a": r["title_a"], "title_b": r["title_b"]})
+        Signal("unresolved_contradiction", 8,
+               {"page_a": r["page_a"], "page_b": r["page_b"],
+                "edge_id": f"{r['page_a']}->{r['page_b']}",
+                "title_a": r["title_a"], "title_b": r["title_b"]})
         for r in analysis.unresolved_contradictions(driver)
     ]
+
+
+# --- registry: the single home for the slow loop's signal generators -------
+# Each entry declares its kinds + required stores; the runner iterates this and
+# derives the skipped-kinds list from `kinds` (no hardcoded literal). The graph
+# generators receive a non-None `ctx.driver` because the runner only calls them
+# when "graph" is reachable. The extractor (ADR-010) is intentionally absent.
+
+REGISTRY: tuple[SignalGenerator, ...] = (
+    SignalGenerator(
+        "low_coverage", ("low_coverage_query",), ("postgres",),
+        lambda ctx: from_low_coverage(ctx.conn, ctx.low_coverage_threshold),
+    ),
+    SignalGenerator(
+        "thin_grounding", ("thin_grounding",), ("graph",),
+        lambda ctx: from_thin_grounding(ctx.driver, ctx.thin_grounding_min),
+    ),
+    SignalGenerator(
+        "dangling", ("dangling_concept",), ("graph",),
+        lambda ctx: from_dangling(ctx.driver),
+    ),
+    SignalGenerator(
+        "contradictions", ("unresolved_contradiction",), ("graph",),
+        lambda ctx: from_contradictions(ctx.driver),
+    ),
+)

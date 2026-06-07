@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from compendium.config import load_config
+from compendium import config_sections
 from compendium.curate import signals as gen
 from compendium.db import repository
 from compendium.db.connection import connection
@@ -27,8 +27,8 @@ class CurateReport:
 
 
 def _curation_cfg() -> tuple[int, float]:
-    c = load_config().settings.get("curation", {})
-    return int(c.get("thin_grounding_min", 2)), float(c.get("low_coverage_threshold", 0.5))
+    c = config_sections.curation()
+    return c["thin_grounding_min"], c["low_coverage_threshold"]
 
 
 def run() -> CurateReport:
@@ -37,29 +37,37 @@ def run() -> CurateReport:
 
     with connection() as conn:
         run_id = repository.open_analysis_run(conn)
-        candidates: list[gen.Signal] = list(gen.from_low_coverage(conn, low_cov))
+        candidates: list[gen.Signal] = []
         skipped: list[str] = []
 
-        # Graph-backed generators: skip gracefully if Memgraph is unreachable.
         from compendium.curate import extract
         from compendium.graph.client import graph_connection, graph_reachable
 
-        graph_kinds = ["thin_grounding", "dangling_concept", "unresolved_contradiction"]
         extracted: dict[str, int] = {}
         with graph_connection() as driver:
-            try:
-                if graph_reachable(driver):
-                    candidates += gen.from_thin_grounding(driver, thin_min)
-                    candidates += gen.from_dangling(driver)
-                    candidates += gen.from_contradictions(driver)
-                else:
-                    skipped = list(graph_kinds)
-            except Exception:  # a graph query failed; keep the Postgres signals
-                skipped = list(graph_kinds)
+            graph_up = graph_reachable(driver)
+            ctx = gen.GenerationContext(
+                conn=conn, driver=driver,
+                thin_grounding_min=thin_min, low_coverage_threshold=low_cov,
+            )
+            reachable = {"postgres"} | ({"graph"} if graph_up else set())
 
-            # Autonomous edge extraction (ADR-010): needs Memgraph + Qdrant.
+            # Iterate the registry: skip a generator (recording its kinds) when a
+            # required store is unreachable or its query raises. The skipped-kinds
+            # list derives from each generator's `kinds` — no hardcoded literal.
+            for g in gen.REGISTRY:
+                if not set(g.requires) <= reachable:
+                    skipped.extend(g.kinds)
+                    continue
+                try:
+                    candidates += g.generate(ctx)
+                except Exception:  # this generator's query failed; keep the rest
+                    skipped.extend(g.kinds)
+
+            # Autonomous edge extraction (ADR-010): a separate step, not a signal
+            # generator. Needs Memgraph + Qdrant.
             ecfg = extract.extract_cfg()
-            if ecfg["enabled"] and graph_reachable(driver):
+            if ecfg["enabled"] and graph_up:
                 from compendium.index.clients import qdrant_client, qdrant_reachable
 
                 qc = qdrant_client()

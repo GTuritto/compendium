@@ -24,9 +24,7 @@ from compendium.wiki.page import (
     content_hash,
     parse_markdown,
 )
-
-ERROR = "error"
-WARNING = "warning"
+from compendium.wiki.page_kind import ERROR, PAGE_KIND_REGISTRY, WARNING, LintContext
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -93,11 +91,9 @@ def lint_page(page: Page) -> list[LintIssue]:
         add("content-hash-matches", ERROR,
             "content_hash does not match the recomputed body hash")
 
-    if page.kind == "source":
-        for fieldname in ("source_id", "source_kind", "inspection_status"):
-            if not getattr(page, fieldname):
-                add("kind-specific-fields", ERROR,
-                    f"source page missing '{fieldname}'")
+    kind = PAGE_KIND_REGISTRY.get(page.kind)
+    if kind is not None:
+        kind.lint_page(page, add)
 
     if page.aliases:
         lowered = [a.lower() for a in page.aliases]
@@ -120,61 +116,33 @@ def lint_vault(
     for page in pages:
         issues.extend(lint_page(page))
 
-    topic_ids = {p.id for p in pages if p.kind == "topic" and p.id}
-    by_id = {p.id: p for p in pages if p.id}
-    alias_owners: dict[str, set[str]] = defaultdict(set)
+    # Cross-page rules: build the shared context once, then each page's kind
+    # runs its own resolution rule (concept topic-ids + alias accumulation,
+    # topic parent + cycle, source source-id) through the registry.
+    ctx = LintContext(
+        topic_ids={p.id for p in pages if p.kind == "topic" and p.id},
+        by_id={p.id: p for p in pages if p.id},
+        known_source_ids=known_source_ids,
+        alias_owners=defaultdict(set),
+    )
 
     for page in pages:
         ref = page.slug or page.title
-        if page.kind == "concept":
-            for topic_id in page.topic_ids:
-                if topic_id not in topic_ids:
-                    issues.append(LintIssue(
-                        "topic-ids-resolve", ERROR,
-                        f"topic_id '{topic_id}' does not resolve to a topic page",
-                        ref))
-            for alias in page.aliases:
-                alias_owners[alias.lower()].add(ref)
-        elif page.kind == "topic" and page.parent_topic_id:
-            if page.parent_topic_id not in topic_ids:
-                issues.append(LintIssue(
-                    "parent-topic-resolves", ERROR,
-                    f"parent_topic_id '{page.parent_topic_id}' does not resolve",
-                    ref))
-        elif (
-            page.kind == "source"
-            and known_source_ids is not None
-            and page.source_id
-            and page.source_id not in known_source_ids
-        ):
-            issues.append(LintIssue(
-                "source-id-resolves", ERROR,
-                f"source_id '{page.source_id}' has no row in sources", ref))
 
-    for page in pages:
-        if page.kind == "topic":
-            issues.extend(_cycle_check(page, by_id))
+        def add(rule: str, severity: str, message: str, _ref: str = ref) -> None:
+            issues.append(LintIssue(rule, severity, message, _ref))
 
-    for alias, owners in alias_owners.items():
+        kind = PAGE_KIND_REGISTRY.get(page.kind)
+        if kind is not None:
+            kind.lint_vault(page, ctx, add)
+
+    for alias, owners in ctx.alias_owners.items():
         if len(owners) > 1:
             issues.append(LintIssue(
                 "alias-uniqueness", WARNING,
                 f"alias '{alias}' is used by multiple concepts: {sorted(owners)}"))
 
     return issues
-
-
-def _cycle_check(topic: Page, by_id: dict[str, Page]) -> list[LintIssue]:
-    seen: set[str] = set()
-    current: Page | None = topic
-    while current is not None and current.parent_topic_id:
-        if current.id in seen:
-            return [LintIssue(
-                "no-cycle-in-topic-tree", ERROR,
-                "cycle in the topic parent chain", topic.slug or topic.title)]
-        seen.add(current.id)
-        current = by_id.get(current.parent_topic_id)
-    return []
 
 
 def load_vault_pages(vault_path: str) -> tuple[list[Page], list[LintIssue]]:

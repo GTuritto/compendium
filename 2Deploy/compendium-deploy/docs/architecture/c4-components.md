@@ -19,12 +19,12 @@ C4Component
     Component(cli, "CLI", "argparse", "Parses commands, calls a module, prints the rendered result")
     Component(tui, "TUI", "Textual", "Keyboard ops console; screens over a DataScreen load helper + data provider")
     Component(render, "Presentation", "stdlib", "Result objects → text/json; scalar formatters shared by CLI + TUI")
-    Component(config, "Configuration", "pyyaml, dotenv", "Loads and validates settings and secrets")
+    Component(config, "Configuration", "pyyaml, dotenv", "Cached config accessor + per-section readers; secrets via dotenv")
     Component(ingest, "Ingestion", "pymupdf, ebooklib, trafilatura", "Adapters, inspection, chunking, pipeline")
     Component(wiki, "Wiki generation", "openai SDK", "Source pages, concept/topic synthesis, lint, vault writer")
     Component(index, "Index sync", "opensearch-py, qdrant-client", "StoreProjector per store; drains the sync queue")
     Component(retrieve, "Retrieval", "httpx, asyncio", "Page-first hybrid query pipeline with chunk fallback")
-    Component(graph, "Graph", "neo4j Bolt driver", "Structural index: typed nodes and edges")
+    Component(graph, "Graph", "neo4j Bolt driver", "Structural index + semantic-edge persistence and rebuild replay")
     Component(curate, "Curation", "—", "Signal lifecycle, slow-loop signals, synth-from-signal")
     Component(trace, "Telemetry", "difflib", "Query traces, revision diffs, replay, promotions")
     Component(db, "Database access", "psycopg 3", "Raw-SQL repository over PostgreSQL")
@@ -60,7 +60,7 @@ C4Component
   Rel(retrieve, graph, "Graph expansion")
   Rel(retrieve, db, "Writes query traces")
   Rel(graph, memgraph, "Reads and writes", "Bolt")
-  Rel(graph, db, "Reads pages and chunks")
+  Rel(graph, db, "Reads pages/chunks; persists semantic edges")
   Rel(curate, graph, "Reads expansion signals")
   Rel(curate, wiki, "Synthesizes from a signal")
   Rel(curate, db, "Reads/writes curation signals")
@@ -90,6 +90,23 @@ C4Component
   (`open → in_progress → addressed`) and the promote/address ordering. Within
   `graph`, `graph_connection()` is the Bolt-driver lifecycle, the analog of
   `db.connection`.
+- **Post-v0.2 deepening seams (architecture review #3, PRs #52–#55).**
+  - *Semantic-edge persistence* (`graph/semantic_edges.py`, ADR-013): every
+    semantic edge is written through one dual-write coordinator to a PostgreSQL
+    `semantic_edges` table **and** Memgraph, and `graph rebuild` replays the rows —
+    so the graph is fully derived and a rebuild no longer wipes curator /
+    `SYNTHESIZES` / LLM edges. `graph/schema.py` stays pure-graph; the coordinator
+    is the one place the graph layer touches `db`.
+  - *Cached config seam* (`config_sections.py` + `config.get_config()`): the
+    behavior config is parsed once and read through per-section readers; storage
+    URLs / `vault_path` / secrets stay on uncached `load_config()`. `serve`
+    invalidates per request.
+  - *Model-client seam* (`model_clients.py`): one `get_model_client(role)` registry
+    owns stub-vs-real selection for the four model seams (answerer, synthesizer,
+    extractor, embedder); a single `COMPENDIUM_LLM_STUB` runs them all offline.
+  - *Ask composition seam* (`answer/compose.py`): composition is the public,
+    DB-free `compose_answer(question, result, …)`; `ask` is the single-path
+    orchestrator (no test-only `_retrieve` fork).
 - **Every component is implemented** and maps to a sub-package under
   `compendium/`: `cli` (+ `cli/render.py`), `tui`, `config`, `ingest`, `wiki`,
   `index`, `retrieve`, `graph`, `curate`, `trace`, `db`. `graph` speaks Bolt to

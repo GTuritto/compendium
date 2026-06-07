@@ -8,12 +8,10 @@ or an injectable stub used by tests and offline verification.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Protocol
 
 import psycopg
 
-from compendium.config import load_config
 from compendium.db import repository
 from compendium.wiki.page import Page
 from compendium.wiki.slug import slugify
@@ -81,15 +79,10 @@ class LLMSynthesizer:
 
 
 def get_synthesizer() -> Synthesizer:
-    """The stub when COMPENDIUM_SYNTH_STUB is set, else the real LLM client."""
-    if os.environ.get("COMPENDIUM_SYNTH_STUB"):
-        return StubSynthesizer()
-    config = load_config()
-    return LLMSynthesizer(
-        config.synthesis_endpoint,
-        config.synthesis_model,
-        config.synthesis_api_key,
-    )
+    """The stub when COMPENDIUM_SYNTH_STUB / COMPENDIUM_LLM_STUB is set, else the real client."""
+    from compendium.model_clients import get_model_client
+
+    return get_model_client("synthesizer")
 
 
 def synthesize_concept(

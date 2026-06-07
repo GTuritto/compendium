@@ -13,7 +13,11 @@ from typing import Any
 
 import yaml
 
-PAGE_KINDS = ("concept", "topic", "source")
+from compendium.wiki import page_kind as _pk
+
+# Per-kind rules (required fields, frontmatter shape, DB fields, subdir, lint)
+# live in compendium/wiki/page_kind.py; these names derive from that registry.
+PAGE_KINDS = _pk.PAGE_KIND_NAMES
 PAGE_STATUSES = ("draft", "canonical", "deprecated")
 GENERATORS = ("human", "synth", "repair")
 
@@ -31,12 +35,8 @@ REQUIRED_ALL = (
     "corpus_revision",
 )
 
-# Additional fields required per kind.
-REQUIRED_BY_KIND: dict[str, tuple[str, ...]] = {
-    "concept": ("topic_ids",),
-    "topic": ("parent_topic_id",),
-    "source": ("source_id", "source_kind", "source_metadata", "inspection_status"),
-}
+# Additional fields required per kind (derived from the PageKind registry).
+REQUIRED_BY_KIND: dict[str, tuple[str, ...]] = _pk.REQUIRED_BY_KIND
 
 
 def content_hash(body: str) -> str:
@@ -99,16 +99,9 @@ class Page:
             "generator": self.generator,
             "corpus_revision": self.corpus_revision,
         }
-        if self.kind == "concept":
-            data["topic_ids"] = list(self.topic_ids)
-            data["aliases"] = list(self.aliases)
-        elif self.kind == "topic":
-            data["parent_topic_id"] = self.parent_topic_id
-        elif self.kind == "source":
-            data["source_id"] = self.source_id
-            data["source_kind"] = self.source_kind
-            data["source_metadata"] = self.source_metadata or {}
-            data["inspection_status"] = self.inspection_status
+        kind = _pk.PAGE_KIND_REGISTRY.get(self.kind)
+        if kind is not None:
+            data.update(kind.frontmatter_fields(self))
         return data
 
     def to_markdown(self) -> str:
