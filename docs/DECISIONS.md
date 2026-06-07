@@ -24,7 +24,7 @@ or deferred.
 
 ---
 
-## 2. Architecture Decision Records (ADR-001 … ADR-012)
+## 2. Architecture Decision Records (ADR-001 … ADR-013)
 
 Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 
@@ -42,6 +42,7 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 | 010 | **Autonomous LLM extraction of `RELATED_TO` / `PREREQUISITE_FOR` only**, with provenance. | Densify the graph where the LLM is trustworthy; keep the strongest claims human-gated; provenance makes it reversible. (v0.2 Phase 8) |
 | 011 | **Callable access surface: MCP (stdio) + HTTP (`127.0.0.1`), no auth, six verbs.** | Colocated agents need to call in without CLI spawn; localhost-only means there is no exposure to authenticate against yet. (v0.2 Phase 7) |
 | 012 | **Always-on personal service** via launchd/systemd on the curator's hardware. | v0.2 needs Compendium to stay up (daemon, watcher, access surface); a personal-host service reverses "no daemon" only for that case. (v0.2 Phase 3) |
+| 013 | **Semantic edges are persisted in PostgreSQL (`semantic_edges`) and replayed on `graph rebuild`**, written through one dual-write coordinator. | Closes a data-loss defect: semantic edges lived only in Memgraph, so a rebuild wiped them. Reconciles ADR-004/005 — the graph becomes fully derived. (post-v0.2 fix, PR #52) |
 
 ---
 

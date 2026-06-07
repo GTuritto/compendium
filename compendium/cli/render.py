@@ -186,6 +186,12 @@ def graph(report: Any, action: str, fmt: Format = "text") -> str:
     return "\n".join(lines)
 
 
+def graph_backfill(count: int, fmt: Format = "text") -> str:
+    if fmt == "json":
+        return to_json({"captured": count})
+    return f"graph backfill-edges: captured {count} semantic edge(s) into PostgreSQL"
+
+
 def promote(res: Any, fmt: Format = "text") -> str:
     if fmt == "json":
         return to_json(res)

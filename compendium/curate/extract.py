@@ -262,7 +262,7 @@ def from_extracted_edges(conn: Any, driver: Any, qclient: Any, cfg: dict[str, An
     from datetime import datetime
 
     from compendium.db import repository
-    from compendium.graph import schema
+    from compendium.graph import schema, semantic_edges
     from compendium.logging import get_logger
 
     log = get_logger("compendium.curate.extract")
@@ -328,10 +328,11 @@ def from_extracted_edges(conn: Any, driver: Any, qclient: Any, cfg: dict[str, An
                 "weight": lbl.confidence,
             }
             # PREREQUISITE_FOR is directed; "backward" means neighbour -> source.
+            # Route through the cross-store seam so the edge is persisted for replay.
             if lbl.label == "PREREQUISITE_FOR" and lbl.direction == "backward":
-                disp = schema.upsert_extracted_edge(driver, lbl.label, n_label, n_id, s_label, s_id, props)
+                disp = semantic_edges.record_extracted_edge(conn, driver, lbl.label, n_label, n_id, s_label, s_id, props)
             else:
-                disp = schema.upsert_extracted_edge(driver, lbl.label, s_label, s_id, n_label, n_id, props)
+                disp = semantic_edges.record_extracted_edge(conn, driver, lbl.label, s_label, s_id, n_label, n_id, props)
 
             if disp == "written":
                 report.written += 1

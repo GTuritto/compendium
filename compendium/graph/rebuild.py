@@ -1,9 +1,12 @@
 """Deterministic full rebuild of the Memgraph structural index.
 
-Drops the graph, recreates the indexes, and repopulates every node and every
-automatic edge from PostgreSQL plus the vault (ADR-005: the graph is derived and
-rebuildable). Two passes — all nodes, then projection builds the edges — so the
-result is order-free. Determinism rests on the PostgreSQL rows and the vault
+Drops the graph, recreates the indexes, and repopulates every node, every
+automatic edge, and every semantic edge from PostgreSQL plus the vault (ADR-005:
+the graph is derived and rebuildable). Structural pass first (nodes + the
+automatic PART_OF/EVIDENCES/GROUNDS edges from projection), then the semantic
+edges are replayed from their ``semantic_edges`` home — so curator, SYNTHESIZES,
+and LLM-extracted edges survive a rebuild instead of being wiped. Order-free;
+determinism rests on the PostgreSQL rows (structural + semantic) and the vault
 grounding sections being fixed for a corpus revision.
 """
 
@@ -15,7 +18,7 @@ from typing import Any
 from compendium.config import load_config
 from compendium.db import repository
 from compendium.db.connection import connection
-from compendium.graph import projection, schema
+from compendium.graph import projection, schema, semantic_edges
 from compendium.graph.client import graph_connection
 
 
@@ -45,6 +48,10 @@ def rebuild() -> GraphReport:
                 projection.project_page(
                     driver, conn, str(page_id), config.vault_path
                 )
+            # Replay the semantic edges from their PostgreSQL home (ADR-010
+            # provenance) so the rebuild no longer wipes curator / SYNTHESIZES /
+            # LLM-extracted edges. Structural projection first, then this pass.
+            semantic_edges.replay_into_graph(conn, driver)
         return _report(driver)
 
 
