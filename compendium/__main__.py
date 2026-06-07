@@ -344,6 +344,29 @@ def _graph(action: str, fmt: str) -> int:
     return 0
 
 
+def _graph_backfill(fmt: str) -> int:
+    log = get_logger("compendium.graph")
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    from compendium.graph.client import graph_connection, graph_reachable
+
+    with graph_connection() as driver:
+        reachable = graph_reachable(driver)
+    if not reachable:
+        print("memgraph: unreachable", file=sys.stderr)
+        return 1
+
+    from compendium.graph.semantic_edges import backfill_edges
+
+    count = backfill_edges()
+    log.info("graph backfill-edges", captured=count)
+    print(render.graph_backfill(count, fmt))
+    return 0
+
+
 def _trace(action: str, trace_id: str | None, persist: bool, fmt: str) -> int:
     try:
         load_config()
@@ -710,6 +733,11 @@ def main(argv: list[str] | None = None) -> int:
     graph_sub = graph_parser.add_subparsers(dest="graph_action", required=True)
     graph_sub.add_parser("rebuild", help="drop and repopulate from PostgreSQL + vault", parents=[fmt])
     graph_sub.add_parser("status", help="node/edge counts", parents=[fmt])
+    graph_sub.add_parser(
+        "backfill-edges",
+        help="capture current in-graph semantic edges into PostgreSQL (one-shot, idempotent)",
+        parents=[fmt],
+    )
     graph_link = graph_sub.add_parser("link", help="add a curator semantic edge")
     graph_link.add_argument("from_slug")
     graph_link.add_argument("to_slug")
@@ -909,6 +937,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "graph":
         if args.graph_action == "link":
             return _graph_link(args.from_slug, args.to_slug, args.edge_type)
+        if args.graph_action == "backfill-edges":
+            return _graph_backfill(fmt_arg)
         return _graph(args.graph_action, fmt_arg)
     if args.command == "query":
         return _query(args.text, args.top_k, fmt_arg)
