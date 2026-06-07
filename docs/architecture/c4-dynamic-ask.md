@@ -12,7 +12,7 @@ C4Dynamic
   ContainerDb(postgres, "PostgreSQL", "PG 16", "query_traces + ask_traces")
 
   Container_Boundary(app, "Compendium application") {
-    Component(ask, "ask composer", "compendium/answer", "Rewrite, refuse-or-compose, trace")
+    Component(ask, "ask orchestrator", "compendium/answer", "Single-path: rewrite, retrieve, persist, then compose_answer")
     Component(retrieve, "Retrieval", "pipeline.query", "Page-first retrieval (see query flow)")
   }
 
@@ -53,3 +53,9 @@ C4Dynamic
 8. The structured result (`{answer, refused, citations[], coverage_score,
    trace_id, ask_trace_id, gap, suggested_actions}`) is returned — identical over
    CLI `--format json`, HTTP, and MCP.
+
+**Seam note (post-v0.2 fix, PR #55).** Steps 5–6 — the refuse-or-compose over a
+`RetrievalResult` — are the public, database-free `compose_answer(question,
+result, …)`. `ask` is the single-path orchestrator that wraps it with retrieval
+and the trace persistence (steps 3–4, 7); there is no test-only `_retrieve` fork.
+The flow above is unchanged; this only names where composition lives.
