@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
+from compendium import config_sections
 from compendium.config import load_config
 from compendium.db import repository
 from compendium.db.connection import connection
@@ -20,13 +21,6 @@ from compendium.ingest.chunking import chunk_sections
 from compendium.ingest.hashing import hash_bytes
 from compendium.ingest.inspection import inspect
 from compendium.wiki.source_page import generate_source_page
-
-_DEFAULTS = {
-    "max_source_bytes": 200 * 1024 * 1024,
-    "min_text_tokens": 1000,
-    "target_tokens": 512,
-    "overlap_tokens": 64,
-}
 
 
 @dataclass
@@ -45,20 +39,11 @@ def _is_url(path: str) -> bool:
 
 
 def _settings() -> dict[str, object]:
-    config = load_config()
-    ingestion = config.settings.get("ingestion", {})
-    chunk = ingestion.get("chunk", {})
-    return {
-        "max_source_bytes": ingestion.get(
-            "max_source_bytes", _DEFAULTS["max_source_bytes"]
-        ),
-        "min_text_tokens": ingestion.get(
-            "min_text_tokens", _DEFAULTS["min_text_tokens"]
-        ),
-        "target_tokens": chunk.get("target_tokens", _DEFAULTS["target_tokens"]),
-        "overlap_tokens": chunk.get("overlap_tokens", _DEFAULTS["overlap_tokens"]),
-        "vault_path": config.vault_path,
-    }
+    # Behavior config via the section reader (cached); vault_path stays on
+    # load_config() because it is env-sensitive (tests monkeypatch VAULT_PATH).
+    settings: dict[str, object] = dict(config_sections.ingestion())
+    settings["vault_path"] = load_config().vault_path
+    return settings
 
 
 def ingest(path: str, *, kind: str, mine: bool = False) -> list[IngestResult]:
