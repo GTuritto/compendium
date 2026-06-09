@@ -12,7 +12,10 @@ C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
 | — | [Dynamic: ingestion flow](c4-dynamic-ingestion.md) | Developers |
 | — | [Dynamic: query flow](c4-dynamic-query.md) | Developers |
 | — | [Dynamic: ask flow](c4-dynamic-ask.md) — composed answers (v0.2) | Developers |
+| Flow | [Flow diagram](flow-diagram.md) — end-to-end write + read data flow | Everyone / Developers |
+| UML | [Sequence diagrams](uml-sequence.md) — ingest / query / ask call sequences | Developers |
 | UML | [Data model](uml-data-model.md) — persisted entities + result/contract types | Developers |
+| — | [Agents](agents.md) — colocated agents using Compendium as memory (ADR-011) | Developers / Integrators |
 
 These diagrams describe the **as-built v0.2 architecture** plus the post-v0.2 architecture
 fixes: all v0.1 phases (0–10), all v0.2 phases (1–8), the deployment tooling, and the

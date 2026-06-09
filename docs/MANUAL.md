@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="compendium_knowitall_book_graph.svg" alt="Compendium logo" width="320">
+</p>
+
 # Compendium — Instruction Manual
 
 How to install Compendium, use it day to day, and connect other systems (your
