@@ -1,6 +1,6 @@
 Compendium deployment bundle
-Built from compendium v0.1.0
-Source commit: 0e1f167
+Built from compendium v0.2.3
+Source commit: 6d9194f
 
 Install: copy this folder to the server and run ./install.sh
 See DEPLOY.md for full instructions.

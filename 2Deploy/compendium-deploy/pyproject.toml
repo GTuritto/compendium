@@ -1,6 +1,6 @@
 [project]
 name = "compendium"
-version = "0.1.0"
+version = "0.2.3"
 description = "Personal knowledge synthesis system: ingest sources, synthesize a canonical Markdown wiki, retrieve page-first."
 readme = "README.md"
 requires-python = ">=3.12"

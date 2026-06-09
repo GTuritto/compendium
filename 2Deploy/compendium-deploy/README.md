@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/compendium_knowitall_book_graph.svg" alt="Compendium logo" width="320">
+</p>
+
 # Compendium
 
 A personal knowledge synthesis system for one user, running locally. Compendium ingests sources (books, papers, articles, notes), synthesizes them into a canonical Markdown wiki of concept, topic, and source pages, and answers natural-language queries by retrieving from that wiki rather than from raw chunks.
