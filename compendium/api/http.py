@@ -27,7 +27,7 @@ def create_app() -> Any:
 
     from compendium.api import facade, to_payload
 
-    app = FastAPI(title="Compendium access surface", version="0.2")
+    app = FastAPI(title="Compendium access surface", version="0.2.3")
 
     @app.middleware("http")
     async def _refresh_behavior_config(request: Any, call_next: Any) -> Any:
