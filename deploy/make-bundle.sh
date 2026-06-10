@@ -37,6 +37,9 @@ cp "$ROOT/deploy/Dockerfile" "$STAGE/"
 mkdir -p "$STAGE/deploy"
 cp "$ROOT/deploy/entrypoint.sh" "$STAGE/deploy/"
 cp "$ROOT/deploy/bundle/docker-compose.yml" "$STAGE/"
+# Stores-only compose (publishes localhost ports) for the host-native install
+# mode; the dev compose is exactly that.
+cp "$ROOT/docker-compose.yml" "$STAGE/docker-compose.stores.yml"
 cp "$ROOT/deploy/.env.lan.example" "$STAGE/.env.example"
 
 echo "==> Copying install + lifecycle scripts"
@@ -68,6 +71,13 @@ if command -v zip >/dev/null 2>&1; then
 else
   echo "[warn] 'zip' not found; folder produced, no archive."
 fi
+
+echo "==> Placing the interactive installer beside the zip"
+# The two distribution artifacts: install.sh (this) + compendium-deploy.zip.
+# Operators download both, then run ./install.sh.
+cp "$ROOT/deploy/installer.sh" "$OUT/install.sh"
+chmod +x "$OUT/install.sh"
+echo "Installer: $OUT/install.sh"
 
 echo "Folder: $STAGE"
 echo "Done."

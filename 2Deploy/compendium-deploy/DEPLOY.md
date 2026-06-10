@@ -9,24 +9,52 @@ control.
 
 ## Requirements (on the server)
 
-- Docker Engine + Docker Compose v2 (`docker compose version` works)
+- Docker Engine + Docker Compose v2 (`docker compose version` works) — used for
+  the four backing stores in both install modes
+- `unzip` (to extract the bundle)
+- For the **host-native** mode: `uv` (the installer offers to install it)
 - ~4 GB RAM free (OpenSearch + Memgraph + Qdrant + Postgres)
 - Outbound internet only if you use OpenRouter for synthesis/embeddings
 
-## Quick start
+## Quick start (interactive installer — recommended)
 
-```sh
-# 1. Copy this folder to the server, then from inside it:
-./install.sh
-# First run creates .env from the template and stops. Edit .env:
-#   BIND_HOST=192.168.35.70          # this server's LAN IP
-#   OPENROUTER_API_KEY=...           # only for ingest / `ask`
-#   EMBEDDINGS_API_KEY=...           # only for ingest / dense retrieval
-./install.sh
-# Second run builds the image and brings the stack up.
+The distribution is **two files** that sit side by side:
+
+```text
+install.sh                 <- the interactive installer
+compendium-deploy.zip      <- the payload bundle
 ```
 
-The access surface is then at `http://<BIND_HOST>:8787`.
+Download both into the same directory, then:
+
+```sh
+chmod +x install.sh
+./install.sh
+```
+
+The installer walks you through everything: it unzips the bundle into an install
+directory, asks **how to run Compendium**, provisions the four backing stores
+with Docker, and **prompts for configuration** (synthesis/embeddings endpoints
+and API keys, bind address, vault, backup, and inbox paths) to generate a `.env`
+— then loads dependencies, applies migrations, builds the derived indexes, and
+starts the services. No hand-editing of `.env` required.
+
+You will be asked to pick one of two modes:
+
+- **Host-native (uv)** — runs the app directly on the host with `uv`, and
+  installs the four always-on launchd / systemd services (backup, curation
+  schedule, inbox watcher, access surface). Best on macOS (the primary host).
+  Stores run via `docker-compose.stores.yml` on published localhost ports.
+- **Docker app image** — builds the app into a container and runs the full stack
+  (stores + `serve`) with `docker compose`. Best for a headless LAN server.
+
+The access surface is then at `http://<bind-host>:8787`.
+
+### Manual / already-extracted (Docker mode only)
+
+If you extract the zip yourself and prefer the older two-step flow, the bundle
+still ships an in-folder `install.sh` for the Docker-image path: edit `.env` from
+`.env.example`, then run `./install.sh` from inside the extracted folder.
 
 ## Lock it down (do this)
 

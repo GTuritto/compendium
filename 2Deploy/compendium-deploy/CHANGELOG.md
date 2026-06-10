@@ -1,0 +1,92 @@
+# Changelog
+
+All notable changes to Compendium are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims at
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The canonical version is the root [`VERSION`](VERSION) file; `compendium.__version__`
+reads it. **Versioning policy during the v0.3 build:** the package stays on the
+`0.2.x` line and bumps the patch by one on each completed v0.3 phase; the minor
+bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
+[docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md).
+
+## [Unreleased]
+
+The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
+record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase
+ships under the `0.2.x` line:
+
+- **Planned — `0.2.4` (v0.3 Phase 1, ADR-014):** autonomous `CONTRADICTS` as
+  curator-approved suggestions. A slow-loop generator proposes `CONTRADICTS`
+  candidates into the curation queue (`contradiction_candidate` signals); a new
+  `curate resolve --approve | --drop` action writes the curator-owned edge on
+  approval. The LLM never writes a `CONTRADICTS` edge directly.
+- **Planned — `0.2.5` (v0.3 Phase 2, ADR-015):** a loopback Streamlit web UI
+  (`compendium web`) for ask / search / browse / curate, reusing the access-surface
+  facade and the TUI data paths. No new retrieval or answer logic.
+
+## [0.2.3] - 2026-06-09
+
+The `0.2.x` line opens. This consolidates everything built after v0.1 — the eight
+v0.2 phases and the post-v0.2 architecture work — under one version (the package
+had remained at `0.1.0` through v0.2 development). Versions `0.2.0`–`0.2.2` were
+not separately released.
+
+### Added
+
+- **v0.2 Phase 1 — Real-model validation** (PR #30): `live` pytest tier,
+  `EMBEDDINGS_API_KEY`, the OpenRouter embeddings pivot, `docs/operations/real-models.md`.
+- **v0.2 Phase 2 — Backup / restore** (PR #32): `compendium backup` / `restore`
+  (pg_dump custom + vault tar, optional off-host rsync), scheduled daily unit.
+- **v0.2 Phase 3 — Scheduled curation daemon** (PR #33, **ADR-012**):
+  `compendium schedule install/uninstall/status` over launchd / systemd.
+- **v0.2 Phase 4 — Ingestion automation (inbox)** (PR #34): `compendium inbox`
+  path-watcher with `processed/` / `failed/` routing.
+- **v0.2 Phase 5 — Retrieval tuning** (PR #35): query normalization + alias
+  expansion, OpenSearch synonym filter, Qdrant HNSW params, golden baseline.
+- **v0.2 Phase 6 — Composed answers (`ask`)** (PR #36): `compendium ask` with
+  page-anchored citations, refusal mode, LLM query rewrite, `ask_traces`
+  (migration `0012`).
+- **v0.2 Phase 7 — Access surface** (PR #38, **ADR-011**): `compendium serve`
+  (FastAPI, loopback) + `compendium mcp` (stdio) over one shared facade; six verbs.
+- **v0.2 Phase 8 — Autonomous semantic-edge extraction** (PR #40, **ADR-010**):
+  LLM-extracted `RELATED_TO` / `PREREQUISITE_FOR` edges into Memgraph with
+  provenance; curator edges never overwritten.
+- **Deployment tooling:** `deploy/install.sh`, `deploy/compendiumctl`, the
+  always-on `compendium serve` service unit, and the self-contained `2Deploy/`
+  bundle (`deploy/make-bundle.sh`).
+- **Architecture docs:** flow diagram, UML sequence diagrams, and the
+  colocated-agents view; the project logo in the README and manual.
+
+### Changed
+
+- **Post-v0.2 architecture deepening:** strategy/value registries
+  (`graph/edge_type.py`, `wiki/page_kind.py`, `curate/signal_generator.py`, PRs
+  #49–#51); the cached-config seam (`config.get_config()` + `config_sections.py`,
+  PR #53); the model-client seam (`model_clients.py` + `COMPENDIUM_LLM_STUB`, PR
+  #54); the ask-composition seam (`compose_answer`, PR #55). All
+  behaviour-preserving.
+- The service-unit lifecycles consolidated behind one `service_unit/` seam
+  (launchd + systemd adapters).
+
+### Fixed
+
+- **Semantic-edge persistence** (PR #52, **ADR-013**): `graph rebuild` no longer
+  drops semantic edges — they are persisted in PostgreSQL (`semantic_edges`,
+  migration `0013`) and replayed so Memgraph is fully derived.
+
+## [0.1.0] - v0.1 feature-complete
+
+All eleven v0.1 phases (0–10) merged to `main`: project skeleton, the PostgreSQL
+operational backbone (11 ordered migrations), the ingestion pipeline,
+`source` / `concept` / `topic` wiki generation, the OpenSearch + Qdrant derived
+indexes, page-first retrieval (`compendium query`, RRF fusion, chunk fallback,
+query traces), the Memgraph structural index (`compendium graph rebuild`),
+traces + revisions (`trace` / `page diff` / `promotions`), the Textual ops
+console (`compendium tui`), the knowledge-graph curation loop
+(`compendium curate`), and the golden dataset + CI. Build plan:
+[docs/COMPENDIUM_BUILD.md](docs/COMPENDIUM_BUILD.md).
+
+[Unreleased]: https://github.com/GTuritto/compendium/compare/main...HEAD
+[0.2.3]: https://github.com/GTuritto/compendium/releases/tag/v0.2.3
+[0.1.0]: https://github.com/GTuritto/compendium/releases/tag/v0.1.0

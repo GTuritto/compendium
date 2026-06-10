@@ -1,0 +1,67 @@
+# Dev-only: local backing stores for Compendium development.
+# Not a production or production-like deployment. Memgraph (Phase 6) is
+# appended here later.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: compendium
+      POSTGRES_USER: compendium
+      POSTGRES_PASSWORD: compendium
+    ports:
+      - "5432:5432"
+    volumes:
+      - compendium-pgdata:/var/lib/postgresql/data
+
+  # OpenSearch: lexical (BM25) index. Single-node, security disabled — local
+  # single-user dev only, matching the Postgres dev posture.
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Required by the image bootstrap even when security is disabled.
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Compendium_dev_0
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - compendium-osdata:/usr/share/opensearch/data
+
+  # Qdrant: dense vector index. Host ports are remapped off Qdrant's 6333/6334
+  # defaults to 6533/6534 so Compendium coexists with other local Qdrant
+  # instances (the container still listens on 6333/6334 internally).
+  qdrant:
+    # Pinned to the 1.18 line to match the qdrant-client version and avoid the
+    # client/server compatibility warning.
+    image: qdrant/qdrant:v1.18.0
+    ports:
+      - "6533:6333"
+      - "6534:6334"
+    volumes:
+      - compendium-qdrantdata:/qdrant/storage
+
+  # Memgraph: typed structural index (ADR-006). Lean image (DB + Bolt only; no
+  # Lab UI or MAGE). Host ports remapped off Memgraph's 7687/7444 defaults to
+  # 7688/7445 so Compendium coexists with other local Memgraph instances (the
+  # container still listens on 7687/7444 internally).
+  memgraph:
+    image: memgraph/memgraph:2.18.1
+    command: ["--log-level=WARNING"]
+    ports:
+      - "7688:7687"
+      - "7445:7444"
+    volumes:
+      - compendium-memgraphdata:/var/lib/memgraph
+
+volumes:
+  compendium-pgdata:
+  compendium-osdata:
+  compendium-qdrantdata:
+  compendium-memgraphdata:
