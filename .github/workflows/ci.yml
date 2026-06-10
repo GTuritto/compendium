@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 7 * * *"   # nightly (07:00 UTC) on the default branch
+  workflow_dispatch:
+
+# Shared env: stub embedder/synth (hermetic, no model endpoint), and the
+# backing-store URLs pointing at the service containers on their standard ports.
+env:
+  POSTGRES_URL: postgresql://compendium:compendium@localhost:5432/compendium
+  OPENSEARCH_URL: http://localhost:9200
+  QDRANT_URL: http://localhost:6333
+  MEMGRAPH_URL: bolt://localhost:7687
+  VAULT_PATH: ./vault
+  COMPENDIUM_EMBED_STUB: "1"
+  COMPENDIUM_SYNTH_STUB: "1"
+  # Stub mode never calls these, but config resolution requires them present.
+  SYNTHESIS_ENDPOINT: http://localhost:0/unused
+  SYNTHESIS_MODEL: stub
+  OPENROUTER_API_KEY: ""
+  EMBEDDINGS_ENDPOINT: http://localhost:0/unused
+  EMBED_MODEL: stub
+
+jobs:
+  test:
+    name: test (fast tier)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: compendium
+          POSTGRES_USER: compendium
+          POSTGRES_PASSWORD: compendium
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U compendium"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      opensearch:
+        image: opensearchproject/opensearch:2.18.0
+        env:
+          discovery.type: single-node
+          plugins.security.disabled: "true"
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: Compendium_dev_0
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -sf http://localhost:9200/_cluster/health || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 20
+      qdrant:
+        image: qdrant/qdrant:v1.18.0
+        ports: ["6333:6333"]
+      memgraph:
+        image: memgraph/memgraph:2.18.1
+        ports: ["7687:7687"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync
+      - name: Wait for stores
+        run: |
+          for i in $(seq 1 30); do curl -sf http://localhost:9200/_cluster/health && break || sleep 2; done
+          for i in $(seq 1 30); do curl -sf http://localhost:6333/collections && break || sleep 2; done
+      - name: Run fast tier (unit + integration + pipeline + graph + golden smoke)
+        run: uv run pytest -q -m "not golden" -p no:cacheprovider
+
+  nightly:
+    name: nightly (full golden + regression)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: compendium
+          POSTGRES_USER: compendium
+          POSTGRES_PASSWORD: compendium
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U compendium"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      opensearch:
+        image: opensearchproject/opensearch:2.18.0
+        env:
+          discovery.type: single-node
+          plugins.security.disabled: "true"
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: Compendium_dev_0
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -sf http://localhost:9200/_cluster/health || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 20
+      qdrant:
+        image: qdrant/qdrant:v1.18.0
+        ports: ["6333:6333"]
+      memgraph:
+        image: memgraph/memgraph:2.18.1
+        ports: ["7687:7687"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync
+      - name: Wait for stores
+        run: |
+          for i in $(seq 1 30); do curl -sf http://localhost:9200/_cluster/health && break || sleep 2; done
+          for i in $(seq 1 30); do curl -sf http://localhost:6333/collections && break || sleep 2; done
+      - name: Run full suite + golden
+        run: uv run pytest -q -p no:cacheprovider
