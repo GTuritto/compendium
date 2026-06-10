@@ -25,9 +25,10 @@ def create_app() -> Any:
     from fastapi import Body, FastAPI, HTTPException, Query
     from fastapi.responses import StreamingResponse
 
+    from compendium import __version__
     from compendium.api import facade, to_payload
 
-    app = FastAPI(title="Compendium access surface", version="0.2.3")
+    app = FastAPI(title="Compendium access surface", version=__version__)
 
     @app.middleware("http")
     async def _refresh_behavior_config(request: Any, call_next: Any) -> Any:
