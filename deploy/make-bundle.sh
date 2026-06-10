@@ -25,6 +25,10 @@ copy "$ROOT/compendium" "$STAGE/"
 copy "$ROOT/migrations" "$STAGE/"
 copy "$ROOT/config" "$STAGE/"
 cp "$ROOT/alembic.ini" "$ROOT/pyproject.toml" "$ROOT/uv.lock" "$ROOT/README.md" "$STAGE/"
+# VERSION is the canonical version source (compendium.__version__ reads it at the
+# bundle root); CHANGELOG.md ships alongside it.
+cp "$ROOT/VERSION" "$STAGE/"
+[ -f "$ROOT/CHANGELOG.md" ] && cp "$ROOT/CHANGELOG.md" "$STAGE/"
 
 echo "==> Copying container + orchestration"
 cp "$ROOT/deploy/Dockerfile" "$STAGE/"
@@ -50,7 +54,7 @@ mkdir -p "$STAGE/docs"
 echo "==> Writing bundle manifest"
 {
   echo "Compendium deployment bundle"
-  echo "Built from compendium v$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml" | head -1)"
+  echo "Built from compendium v$(cat "$ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')"
   echo "Source commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo
   echo "Install: copy this folder to the server and run ./install.sh"
