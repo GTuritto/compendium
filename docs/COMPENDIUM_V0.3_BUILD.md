@@ -35,12 +35,12 @@ when the entire v0.3 build plan is complete** — both phases merged.
 
 The canonical version is the root [`VERSION`](../VERSION) file;
 `compendium.__version__` reads it at import and the FastAPI access-surface
-`version` derives from `__version__`, so a bump is **two edits**: the `VERSION`
-file (source of truth) and the `pyproject.toml` mirror (inert declared metadata —
-the package runs in place via `pythonpath`, never installed). The phase's final
-commit makes both edits, adds a `CHANGELOG.md` entry, and regenerates the
-`2Deploy/` bundle (which ships `VERSION` + `CHANGELOG.md` and stamps the version
-into `MANIFEST.txt`).
+`version` derives from `__version__`. Cut a version with the root release script
+— [`./release.sh <version>`](../release.sh) — which updates `VERSION` + the
+`pyproject.toml` mirror, refreshes `uv.lock`, inserts a dated `CHANGELOG.md`
+section stub, and rebuilds the `2Deploy/` distribution (`./deploy/make-bundle.sh`)
+in one command. For example, the phase's final commit runs
+`./release.sh 0.2.4 --commit` (Phase 1).
 
 ## v0.3 thesis
 
