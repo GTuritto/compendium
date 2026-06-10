@@ -37,9 +37,11 @@ dist/
 .claude/*
 !.claude/skills/
 
-# GitHub tooling (Copilot prompts, skills mirror) — not tracked;
-# canonical skills are kept under .claude/skills/
-.github/
+# GitHub tooling: ignore the Copilot prompts and the skills mirror (canonical
+# skills live under .claude/skills/), but DO track the Actions workflows so a
+# fresh clone from the remote gets CI.
+.github/*
+!.github/workflows/
 
 # Understand-Anything plugin scratch (generated scan/batch cache)
 .understand-anything/
