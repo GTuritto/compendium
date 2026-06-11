@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from compendium import config_sections
 from compendium.config import load_config
 from compendium.index.embedder import Embedder, get_embedder
+from compendium.profiling import timed
 from compendium.retrieve import search
 from compendium.retrieve.clients import async_opensearch_client, async_qdrant_client
 from compendium.retrieve.coverage import coverage_score
@@ -153,17 +153,15 @@ async def run(
     latencies: dict[str, float] = {}
     try:
         # Embed once; reuse the vector for the dense searches and the trace.
-        t = time.perf_counter()
-        query_vector = embedder.embed([query_text])[0]
-        latencies["embed"] = (time.perf_counter() - t) * 1000
+        with timed("embed", sink=latencies):
+            query_vector = embedder.embed([query_text])[0]
 
         # Fan out to the two pages indexes in parallel.
-        t = time.perf_counter()
-        os_pages, qd_pages = await asyncio.gather(
-            search.opensearch_pages(os_client, query_text, CANDIDATE_POOL_SIZE),
-            search.qdrant_pages(qd_client, query_vector, CANDIDATE_POOL_SIZE),
-        )
-        latencies["pages_fanout"] = (time.perf_counter() - t) * 1000
+        with timed("pages_fanout", sink=latencies):
+            os_pages, qd_pages = await asyncio.gather(
+                search.opensearch_pages(os_client, query_text, CANDIDATE_POOL_SIZE),
+                search.qdrant_pages(qd_client, query_vector, CANDIDATE_POOL_SIZE),
+            )
 
         fused_pages = reciprocal_rank_fusion(
             {"opensearch": os_pages, "qdrant": qd_pages}, rrf_k=rrf_k
@@ -180,12 +178,11 @@ async def run(
             from compendium.retrieve import expansion
 
             seed_scores = {f.entity_id: f.score for f in fused_pages[: exp["seed_k"]]}
-            t = time.perf_counter()
-            outcome = await asyncio.to_thread(
-                expansion.expand, seed_scores,
-                max_hops=exp["max_hops"], decay=exp["decay"], weight=exp["weight"],
-            )
-            latencies["expansion"] = (time.perf_counter() - t) * 1000
+            with timed("expansion", sink=latencies):
+                outcome = await asyncio.to_thread(
+                    expansion.expand, seed_scores,
+                    max_hops=exp["max_hops"], decay=exp["decay"], weight=exp["weight"],
+                )
             if outcome.reached:
                 present = {p.entity_id for p in pages}
                 extra = [
@@ -208,12 +205,11 @@ async def run(
         fused_chunks: list[FusedHit] = []
 
         if fallback:
-            t = time.perf_counter()
-            os_chunks, qd_chunks = await asyncio.gather(
-                search.opensearch_chunks(os_client, query_text, CANDIDATE_POOL_SIZE),
-                search.qdrant_chunks(qd_client, query_vector, CANDIDATE_POOL_SIZE),
-            )
-            latencies["chunks_fanout"] = (time.perf_counter() - t) * 1000
+            with timed("chunks_fanout", sink=latencies):
+                os_chunks, qd_chunks = await asyncio.gather(
+                    search.opensearch_chunks(os_client, query_text, CANDIDATE_POOL_SIZE),
+                    search.qdrant_chunks(qd_client, query_vector, CANDIDATE_POOL_SIZE),
+                )
             fused_chunks = reciprocal_rank_fusion(
                 {"opensearch": os_chunks, "qdrant": qd_chunks}, rrf_k=rrf_k
             )

@@ -28,6 +28,7 @@ from compendium.index.clients import (
     qdrant_client,
     qdrant_reachable,
 )
+from compendium.profiling import timed
 from compendium.index.embedder import Embedder, get_embedder
 
 # The index kinds that belong to each reindex target.
@@ -99,7 +100,8 @@ def _drain(
     rows = repository.claim_pending_sync_rows(conn, index_kinds=index_kinds)
     for row in rows:
         try:
-            outcome = _write_one(conn, stores, row)
+            with timed("index.write", index_kind=row["index_kind"]):
+                outcome = _write_one(conn, stores, row)
         except Exception as exc:  # external write or load failed
             conn.rollback()
             repository.mark_sync_failed(conn, row["id"], repr(exc))

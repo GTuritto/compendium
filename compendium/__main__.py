@@ -10,6 +10,7 @@ rendered payload to stdout. Read commands accept ``--format text|json``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from compendium.backup import BackupError, RestoreError, run_backup, run_restore
@@ -678,6 +679,10 @@ def _tui() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
+    parser.add_argument(
+        "--profile", metavar="OUT.prof", default=None,
+        help="profile this invocation with cProfile and write stats to OUT.prof",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     # Shared --format flag for commands whose output is data to read or pipe.
@@ -922,6 +927,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     fmt_arg = getattr(args, "format", "text")
 
+    if args.profile:
+        # Span logging should fire during a profiled run too.
+        os.environ.setdefault("COMPENDIUM_PROFILE", "1")
+        from compendium.profiling import cpu_profile
+
+        with cpu_profile(args.profile):
+            return _dispatch(args, fmt_arg)
+    return _dispatch(args, fmt_arg)
+
+
+def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
     if args.command == "ingest":
         return _ingest(args.path, args.kind, args.mine, fmt_arg)
     if args.command == "lint":

@@ -20,6 +20,7 @@ from compendium.ingest.adapters.dispatch import mime_type_for, parse_source
 from compendium.ingest.chunking import chunk_sections
 from compendium.ingest.hashing import hash_bytes
 from compendium.ingest.inspection import inspect
+from compendium.profiling import timed
 from compendium.wiki.source_page import generate_source_page
 
 
@@ -92,7 +93,8 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
         prior_id = repository.get_source_id_by_document_path(conn, path)
 
         try:
-            parsed = parse_source(path)
+            with timed("ingest.parse", path=path):
+                parsed = parse_source(path)
         except (ParseError, UnsupportedFormatError) as exc:
             source_id = _store(
                 conn, path, kind=kind, title=_fallback_title(path),
@@ -102,11 +104,12 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, str(exc))
 
-        result = inspect(
-            parsed, raw_bytes,
-            max_source_bytes=cfg["max_source_bytes"],
-            min_text_tokens=cfg["min_text_tokens"],
-        )
+        with timed("ingest.inspect", path=path):
+            result = inspect(
+                parsed, raw_bytes,
+                max_source_bytes=cfg["max_source_bytes"],
+                min_text_tokens=cfg["min_text_tokens"],
+            )
         title = str(parsed.metadata.get("title") or _fallback_title(path))
         if parsed.metadata.get("author"):
             metadata["author_detected"] = parsed.metadata["author"]
@@ -120,17 +123,19 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, result.notes)
 
-        chunks = chunk_sections(
-            parsed.sections,
-            target_tokens=cfg["target_tokens"],
-            overlap_tokens=cfg["overlap_tokens"],
-        )
-        source_id = _store(
-            conn, path, kind=kind, title=title, content_hash=content_hash,
-            mime=mime, byte_size=len(raw_bytes), metadata=metadata,
-            inspection_status=result.status, inspection_notes=result.notes,
-            chunks=chunks, prior_id=prior_id,
-        )
+        with timed("ingest.chunk", path=path):
+            chunks = chunk_sections(
+                parsed.sections,
+                target_tokens=cfg["target_tokens"],
+                overlap_tokens=cfg["overlap_tokens"],
+            )
+        with timed("ingest.store", path=path, chunks=len(chunks)):
+            source_id = _store(
+                conn, path, kind=kind, title=title, content_hash=content_hash,
+                mime=mime, byte_size=len(raw_bytes), metadata=metadata,
+                inspection_status=result.status, inspection_notes=result.notes,
+                chunks=chunks, prior_id=prior_id,
+            )
         if chunks:
             generate_source_page(conn, source_id, vault_path=str(cfg["vault_path"]))
         status = "updated" if prior_id is not None else "ingested"
