@@ -10,6 +10,7 @@ rendered payload to stdout. Read commands accept ``--format text|json``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from compendium.backup import BackupError, RestoreError, run_backup, run_restore
@@ -676,8 +677,44 @@ def _tui() -> int:
     return run()
 
 
+def _profile_stats(days: int, by: str | None, fmt: str) -> int:
+    from compendium.profile_stats import gather
+
+    report = gather(days=days, by=by)
+    print(render.profile_stats(report, fmt))
+    return 0
+
+
+def _stack(action: str) -> int:
+    """Drive the whole stack via deploy/compendiumctl (its single home).
+
+    The script owns the lifecycle: docker compose for the stores, a nudge to
+    the serve unit on start. These verbs are thin adapters so the operator
+    can stay inside the ``compendium`` CLI.
+    """
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "deploy" / "compendiumctl"
+    if not script.is_file():
+        print(f"deploy/compendiumctl not found at {script}", file=sys.stderr)
+        return 1
+    return subprocess.run([str(script), action]).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
+    parser.add_argument(
+        "--profile", action="store_true",
+        help="profile this invocation with cProfile: writes a .prof artifact to "
+             "~/.compendium/profiles (COMPENDIUM_PROFILE_DIR overrides) and "
+             "prints a top-25 cumulative summary",
+    )
+    parser.add_argument(
+        "--timings", action="store_true",
+        help="enable timed-span logging for this invocation (same as "
+             "COMPENDIUM_PROFILE=1 in the environment or .env)",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     # Shared --format flag for commands whose output is data to read or pipe.
@@ -919,9 +956,51 @@ def main(argv: list[str] | None = None) -> int:
     curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
     curate_synth.add_argument("signal_id", help="curation signal id")
 
+    subparsers.add_parser(
+        "start",
+        help="start the backing stores and nudge the serve unit (deploy/compendiumctl start)",
+    )
+    subparsers.add_parser(
+        "stop",
+        help="stop the backing stores; installed services stay and idle (deploy/compendiumctl stop)",
+    )
+    subparsers.add_parser(
+        "restart", help="stop then start the whole stack (deploy/compendiumctl restart)"
+    )
+
+    profile_parser = subparsers.add_parser(
+        "profile", help="local profiler: on-demand performance stats"
+    )
+    profile_sub = profile_parser.add_subparsers(dest="profile_action", required=True)
+    profile_stats_parser = profile_sub.add_parser(
+        "stats",
+        help="aggregate latency / throughput / token / failure stats from persisted traces (read-only)",
+        parents=[fmt],
+    )
+    profile_stats_parser.add_argument(
+        "--days", type=int, default=30, help="window in days (default: 30)"
+    )
+    profile_stats_parser.add_argument(
+        "--by", choices=["corpus-revision", "embedding-model"], default=None,
+        help="add a retrieval breakdown grouped by this dimension",
+    )
+
     args = parser.parse_args(argv)
     fmt_arg = getattr(args, "format", "text")
 
+    if args.timings:
+        os.environ["COMPENDIUM_PROFILE"] = "1"
+    if args.profile:
+        # Span logging should fire during a profiled run too.
+        os.environ.setdefault("COMPENDIUM_PROFILE", "1")
+        from compendium.profiling import cpu_profile
+
+        with cpu_profile(args.command or "compendium"):
+            return _dispatch(args, fmt_arg)
+    return _dispatch(args, fmt_arg)
+
+
+def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
     if args.command == "ingest":
         return _ingest(args.path, args.kind, args.mine, fmt_arg)
     if args.command == "lint":
@@ -980,6 +1059,10 @@ def main(argv: list[str] | None = None) -> int:
             getattr(args, "path", None),
             fmt_arg,
         )
+    if args.command == "profile":
+        return _profile_stats(args.days, args.by, fmt_arg)
+    if args.command in ("start", "stop", "restart"):
+        return _stack(args.command)
     return _startup()
 
 

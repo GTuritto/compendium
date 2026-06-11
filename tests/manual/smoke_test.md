@@ -16,6 +16,14 @@ walk from Phase 0 onward should still pass on every later phase.
 
 Scenarios are numbered `N.M` — phase `N`, scenario `M`.
 
+**CI automation:** the CI-runnable layers of this playbook are scripted in
+[`deploy/ci-smoke.sh`](../../deploy/ci-smoke.sh) and run as the `smoke` job in
+`.github/workflows/ci.yml` on every `main` push and `v*` tag; the distribution
+bundle is built only when that gate is green. Host-bound scenarios
+(launchd/systemd unit installs, the interactive TUI walk, the live real-model
+tier, the restore round-trip) remain manual — this playbook stays the source of
+truth for the full walk.
+
 ## Phase 0 — Project skeleton
 
 | # | Scenario | Steps | Expected |

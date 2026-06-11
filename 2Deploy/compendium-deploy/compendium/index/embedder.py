@@ -55,7 +55,10 @@ class OpenAIEmbedder:
         self._model = model
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        response = self._client.embeddings.create(model=self._model, input=texts)
+        from compendium.profiling import timed
+
+        with timed("embedder.embed", model=self._model, batch=len(texts)):
+            response = self._client.embeddings.create(model=self._model, input=texts)
         return [item.embedding for item in response.data]
 
 

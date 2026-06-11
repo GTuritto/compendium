@@ -175,6 +175,43 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   the application's stack-discipline surface.
 - **Posture stays localhost / single-user / no-auth.** The serve unit binds
   `127.0.0.1`; MCP is per-session stdio. Network exposure + auth are v0.3.
+- **`compendium start|stop|restart` are thin CLI adapters over `compendiumctl`**
+  (post-v0.2, PR #63). *Why:* the operator should be able to drive the stack from
+  the one CLI, but the lifecycle logic keeps a single home in the script — the
+  verbs only delegate and propagate exit codes.
+
+### The local profiler (post-v0.2, PR #63, 2026-06-11)
+
+Three opt-in halves, all standard-library, recorded here rather than as an ADR
+because the change is posture-neutral (no new store, no new daemon, no surface
+exposure) and ADR-014/ADR-015 are reserved by the v0.3 plan.
+
+- **Performance stats are read-only aggregation over what already persists.**
+  `compendium profile stats` runs plain SELECTs over `query_traces.latencies_ms`,
+  `ask_traces`, `graph_analysis_runs`, `v_sync_lag`, and `sources` — no new
+  table, no new write path. *Why:* the operational record (ADR-004, "every query
+  writes a trace") already carries the performance data; a profiler should read
+  it, not duplicate it.
+- **One approved write: ingest stage durations** land in
+  `sources.metadata["stage_ms"]` (parse / inspect / chunk) at the store write
+  that already happens. *Why:* ingest durations were the one gap the record did
+  not cover; a JSONB key in an existing write is the minimal durable capture.
+  The store stage itself cannot be in the row it writes and stays log-only.
+- **Activation is explicit, never always-on:** `COMPENDIUM_PROFILE=1` in `.env`
+  / the environment (also how the launchd/systemd units opt in), the one-shot
+  `--timings` flag, the `--profile` CPU flag, or SIGUSR1/SIGUSR2 to the serve
+  daemon for the tracemalloc memory half. The flag is read per call, which is
+  load-bearing: modules import before `main()` sets it.
+- **A profiler failure never breaks the profiled operation** — every profiler
+  step is fenced and logged; the command's outcome and exit code are untouched.
+- **Artifacts stay local:** `.prof` and `mem-*.txt` files in
+  `~/.compendium/profiles` (`COMPENDIUM_PROFILE_DIR` overrides).
+- **Rejected: a Grafana/Prometheus observability stack** (and any containerized
+  profiler). *Why:* exporters and an always-on dashboard contradict local-first
+  and stack discipline for a single-user workload whose data is already
+  SQL-queryable; a profiler in a container cannot ptrace the host process the
+  units actually run. If visualization ever earns its place, the cheap path is
+  one Grafana container reading PostgreSQL directly — a v0.3+ argument.
 
 ---
 
@@ -200,5 +237,5 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   `openspec/changes/<phase>/{proposal,design}.md` and `Plans/<phase>.md`.
 - **Operational "how":** `docs/operations/*.md` (real-models, backup-restore,
   schedule, inbox, retrieval-tuning, ask, access-surface, edge-extraction,
-  deployment).
+  deployment, profiling).
 - **What was verified:** `tests/manual/test-runs/*.md` (captured smoke walks).

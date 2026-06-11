@@ -378,6 +378,17 @@ units installed by `deploy/install.sh`; they persist across reboots. See
 [`operations/deployment.md`](operations/deployment.md) for the full runbook and
 the per-service docs in [`operations/`](operations/).
 
+`compendium start` / `stop` / `restart` are the same lifecycle as CLI verbs —
+thin adapters that delegate to `deploy/compendiumctl` and propagate its exit
+code, so you never have to leave the `compendium` command.
+
+**Profile it:** the local profiler is opt-in and standard-library only —
+`compendium profile stats` aggregates latency / throughput / token / failure
+stats from what PostgreSQL already records; the global `--timings` flag logs
+per-stage spans for one run; `--profile` writes a cProfile artifact; SIGUSR1 /
+SIGUSR2 to the serve daemon arm/report a tracemalloc memory diff. See
+[`operations/profiling.md`](operations/profiling.md).
+
 **Update:**
 
 ```sh
@@ -411,7 +422,12 @@ lists the only accepted values; `default` is what you get if you omit it. Run
 for the same, generated live.
 
 **Global:** any *read* command also accepts `--format {text,json}` (default
-`text`). Running `compendium` with no command loads/validates config and exits.
+`text`). Two global flags precede the command: `--timings` (enable timed-span
+logging for this invocation; same as `COMPENDIUM_PROFILE=1`) and `--profile`
+(wrap the invocation in cProfile: a `.prof` artifact in `~/.compendium/profiles`
+— `COMPENDIUM_PROFILE_DIR` overrides — plus an inline top-25 summary; a profiler
+failure never breaks the command). Running `compendium` with no command
+loads/validates config and exits.
 
 ### Content
 
@@ -498,14 +514,24 @@ rebuilds replay from PostgreSQL.
 | `curate list` | — | `--format` |
 | `curate synth <signal_id>` | curation signal id | — |
 
+### Stack and profiler
+
+| Command | Positional | Options |
+| --- | --- | --- |
+| `start` | — (stores up + nudge serve; delegates to `deploy/compendiumctl`) | — |
+| `stop` | — (stores down; installed units remain) | — |
+| `restart` | — (stop, then start) | — |
+| `profile stats` | — (read-only performance stats from persisted traces) | `--days <int>` (default `30`); `--by {corpus-revision,embedding-model}`; `--format` |
+
 > **Behaviour knobs live in `config/settings.yaml`,** not as CLI flags — e.g.
 > `retrieval.top_k`, `ask.refuse_below_coverage`, `curation.extract.min_confidence`,
 > `curation.extract.top_k_neighbours`. Edit them there; the CLI reads them.
 
 ## Reference
 
-- Operational docs: [`operations/`](operations/) — backup-restore, schedule,
-  inbox, retrieval-tuning, ask, access-surface, edge-extraction, deployment.
+- Operational docs: [`operations/`](operations/) — real-models, backup-restore,
+  schedule, inbox, retrieval-tuning, ask, access-surface, edge-extraction,
+  deployment, profiling.
 - Design + ADRs: [`Compendium.md`](Compendium.md). Decisions + rationale:
   [`DECISIONS.md`](DECISIONS.md).
 - Every CLI verb: `uv run python -m compendium --help` (and `<verb> --help`).

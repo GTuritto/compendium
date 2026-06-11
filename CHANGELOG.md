@@ -12,6 +12,25 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ## [Unreleased]
 
+### Added (merged to `main`, ships with the next cut)
+
+- **Local profiler** (PR #63, 2026-06-11): `compendium profile stats` (read-only
+  aggregation over `query_traces` / `ask_traces` / `graph_analysis_runs` /
+  `v_sync_lag` / `sources`), timed spans via `COMPENDIUM_PROFILE` in `.env` or the
+  one-shot `--timings` flag, a global `--profile` cProfile flag (artifacts in
+  `~/.compendium/profiles`, inline top-25 summary, never breaks the profiled
+  command), ingest stage durations persisted to `sources.metadata["stage_ms"]`,
+  and a tracemalloc memory half in the serve daemon (SIGUSR1 arms / SIGUSR2
+  reports). Standard library only; no new stores; no ADR (posture-neutral).
+- **Stack lifecycle verbs** (PR #63): `compendium start|stop|restart` as thin
+  adapters over `deploy/compendiumctl`.
+- **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
+  — the full suite incl. golden plus a scripted end-to-end walk with the
+  profilers on) runs on every `main` push and `v*` tag; the `distribution` job
+  builds `deploy/make-bundle.sh` only when smoke is green, uploading the bundle
+  as a workflow artifact and publishing a GitHub Release on tags. The committed
+  `2Deploy/` bundle is refreshed from current `main`.
+
 The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
 record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase
 ships under the `0.2.x` line:

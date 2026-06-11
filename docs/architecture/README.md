@@ -28,7 +28,10 @@ The v0.2 surfaces are folded in: composed answers (`compendium ask`, [ask flow](
 the MCP + HTTP access surface (`compendium serve` / `mcp`, ADR-011 — in the
 [context](c4-context.md) and [container](c4-containers.md) views), the always-on
 launchd/systemd services (ADR-012 — in the [deployment](c4-deployment.md) view), and the
-LLM-extracted semantic edges (ADR-010 — noted on the graph store). The decision rationale is in
+LLM-extracted semantic edges (ADR-010 — noted on the graph store). The post-v0.2
+local profiler (PR #63) is folded into the component view and the seams table below; it is
+opt-in and read-only over the operational record, so the context, container, and dynamic
+views are unchanged by it. The decision rationale is in
 [../DECISIONS.md](../DECISIONS.md); the operator runbooks in [../operations/](../operations/).
 
 ## Reviews
@@ -73,6 +76,8 @@ PRs #52–#55. Each is one named seam, folded into the Level-3 component view an
 | **Cached config** | one cached parse + per-section readers (URLs/secrets stay uncached) | `config.get_config()`, `config_sections.py` |
 | **Model client** | one `get_model_client(role)` registry + a `COMPENDIUM_LLM_STUB` offline switch | `model_clients.py` |
 | **Ask composition** | DB-free `compose_answer`; `ask` is the single-path orchestrator | `answer/compose.py` |
+| **Local profiler** | opt-in timed spans + cProfile + tracemalloc memory arm/report; never breaks the profiled operation | `profiling.py` |
+| **Profile stats** | read-only SQL aggregation of the operational record (`profile stats`) | `profile_stats.py` + repository readers |
 
 The semantic-edge persistence fix is the only correctness change (it closed a `graph rebuild`
 data-loss bug); the rest are behaviour-preserving deepenings. Plan of record:
