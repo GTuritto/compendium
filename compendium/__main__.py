@@ -685,6 +685,23 @@ def _profile_stats(days: int, by: str | None, fmt: str) -> int:
     return 0
 
 
+def _stack(action: str) -> int:
+    """Drive the whole stack via deploy/compendiumctl (its single home).
+
+    The script owns the lifecycle: docker compose for the stores, a nudge to
+    the serve unit on start. These verbs are thin adapters so the operator
+    can stay inside the ``compendium`` CLI.
+    """
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "deploy" / "compendiumctl"
+    if not script.is_file():
+        print(f"deploy/compendiumctl not found at {script}", file=sys.stderr)
+        return 1
+    return subprocess.run([str(script), action]).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     parser.add_argument(
@@ -939,6 +956,18 @@ def main(argv: list[str] | None = None) -> int:
     curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
     curate_synth.add_argument("signal_id", help="curation signal id")
 
+    subparsers.add_parser(
+        "start",
+        help="start the backing stores and nudge the serve unit (deploy/compendiumctl start)",
+    )
+    subparsers.add_parser(
+        "stop",
+        help="stop the backing stores; installed services stay and idle (deploy/compendiumctl stop)",
+    )
+    subparsers.add_parser(
+        "restart", help="stop then start the whole stack (deploy/compendiumctl restart)"
+    )
+
     profile_parser = subparsers.add_parser(
         "profile", help="local profiler: on-demand performance stats"
     )
@@ -1032,6 +1061,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
         )
     if args.command == "profile":
         return _profile_stats(args.days, args.by, fmt_arg)
+    if args.command in ("start", "stop", "restart"):
+        return _stack(args.command)
     return _startup()
 
 
