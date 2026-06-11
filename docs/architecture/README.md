@@ -88,6 +88,7 @@ PRs #52–#55. Each is one named seam, folded into the Level-3 component view an
 | **Profile stats** | read-only SQL aggregation of the operational record (`profile stats`) | `profile_stats.py` + repository readers |
 | **Chat envelope** | one OpenAI-client construction site + one chat-completion call (buffered/streaming, uniform token accounting) behind the model-client registry | `model_clients.py` (`make_openai_client`, `chat`) |
 | **Unit activity probe** | all scheduler-CLI probing (lifecycle + activity) behind the injectable Runner; status readers are pure parsers over `Probe.stdout` | `service_unit` (`probe`, `probe_activity`) |
+| **Index-document shape** | one row per field (both store values); builders/constants/searchable subsets derived; mapping test-pinned; typed hit accessors | `index/documents.py`, `retrieve/search.py` (`DisplayFields`) |
 
 The semantic-edge persistence fix is the only correctness change (it closed a `graph rebuild`
 data-loss bug); the rest are behaviour-preserving deepenings. Plan of record:

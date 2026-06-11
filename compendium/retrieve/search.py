@@ -17,6 +17,7 @@ from typing import Any
 from opensearchpy import AsyncOpenSearch
 from qdrant_client import AsyncQdrantClient
 
+from compendium.index.documents import CHUNK_SEARCHABLE_FIELDS, PAGE_SEARCHABLE_FIELDS
 from compendium.index.opensearch import CHUNKS_INDEX, PAGES_INDEX
 from compendium.index.qdrant import (
     CHUNKS_COLLECTION,
@@ -24,13 +25,54 @@ from compendium.index.qdrant import (
     SEARCH_PARAMS as _QDRANT_SEARCH_PARAMS,
 )
 
-# Fields the page multi_match searches, with a title boost.
-_PAGE_FIELDS = ["title^2", "aliases", "body"]
-_CHUNK_FIELDS = ["source_title", "body"]
+# The lexical multi_match fields derive from the one shape declaration
+# (arch-index-document-shape); the title boost stays a retrieval concern.
+_PAGE_FIELDS = [f"{f}^2" if f == "title" else f for f in PAGE_SEARCHABLE_FIELDS]
+_CHUNK_FIELDS = list(CHUNK_SEARCHABLE_FIELDS)
+
+
+class DisplayFields:
+    """Typed accessors over a hit's raw payload/document fields.
+
+    Shared by :class:`Hit` and the fusion layer's ``FusedHit`` so retrieval
+    never pattern-matches store dicts by string key. ``preview`` owns the
+    per-store body-vs-body_preview difference (OpenSearch documents carry the
+    full ``body``; Qdrant payloads carry ``body_preview``).
+    """
+
+    fields: dict[str, Any]
+
+    @property
+    def title(self) -> str:
+        return self.fields.get("title", "")
+
+    @property
+    def slug(self) -> str:
+        return self.fields.get("slug", "")
+
+    @property
+    def kind(self) -> str:
+        return self.fields.get("kind", "")
+
+    @property
+    def status(self) -> str:
+        return self.fields.get("status", "")
+
+    @property
+    def source_title(self) -> str | None:
+        return self.fields.get("source_title")
+
+    @property
+    def position(self) -> int | None:
+        return self.fields.get("position")
+
+    @property
+    def preview(self) -> str:
+        return self.fields.get("body") or self.fields.get("body_preview") or ""
 
 
 @dataclass
-class Hit:
+class Hit(DisplayFields):
     """One retrieved entity: its id, the store's raw score, and display fields."""
 
     entity_id: str
