@@ -46,6 +46,14 @@ views are unchanged by it. The decision rationale is in
   ADR-013) + three deepenings (cached config, model-client seam, ask composition), all merged
   (PRs #52–#55). Plan: [../../Plans/arch-review-3-plan.md](../../Plans/arch-review-3-plan.md).
   See the post-v0.2 seams table below.
+- [review-2026-06-11.md](review-2026-06-11.md) — fourth pass (post-profiler, post-pipeline):
+  four open candidates (chat-completion envelope, probe()-routed status readers, typed
+  index-document shape, facade input coercion) and eight recorded no-seam verdicts; the new
+  PR #63–#68 surface assessed clean. Visuals:
+  [architecture-review-2026-06-11.html](architecture-review-2026-06-11.html) /
+  [-2.html](architecture-review-2026-06-11-2.html). Roadmap:
+  [../../Plans/arch-review-4-plan.md](../../Plans/arch-review-4-plan.md) — **planned,
+  not started**.
 
 ## Architecture seams (from the review-#2 refactors)
 
