@@ -677,6 +677,14 @@ def _tui() -> int:
     return run()
 
 
+def _profile_stats(days: int, by: str | None, fmt: str) -> int:
+    from compendium.profile_stats import gather
+
+    report = gather(days=days, by=by)
+    print(render.profile_stats(report, fmt))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     parser.add_argument(
@@ -931,6 +939,23 @@ def main(argv: list[str] | None = None) -> int:
     curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
     curate_synth.add_argument("signal_id", help="curation signal id")
 
+    profile_parser = subparsers.add_parser(
+        "profile", help="local profiler: on-demand performance stats"
+    )
+    profile_sub = profile_parser.add_subparsers(dest="profile_action", required=True)
+    profile_stats_parser = profile_sub.add_parser(
+        "stats",
+        help="aggregate latency / throughput / token / failure stats from persisted traces (read-only)",
+        parents=[fmt],
+    )
+    profile_stats_parser.add_argument(
+        "--days", type=int, default=30, help="window in days (default: 30)"
+    )
+    profile_stats_parser.add_argument(
+        "--by", choices=["corpus-revision", "embedding-model"], default=None,
+        help="add a retrieval breakdown grouped by this dimension",
+    )
+
     args = parser.parse_args(argv)
     fmt_arg = getattr(args, "format", "text")
 
@@ -1005,6 +1030,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
             getattr(args, "path", None),
             fmt_arg,
         )
+    if args.command == "profile":
+        return _profile_stats(args.days, args.by, fmt_arg)
     return _startup()
 
 
