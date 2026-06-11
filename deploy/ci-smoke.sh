@@ -39,6 +39,11 @@ pass() { printf '  \033[32mpass\033[0m %s\n' "$STEP"; }
 fail() { printf '  \033[31mFAIL\033[0m %s: %s\n' "$STEP" "$*"; FAIL=1; }
 need() { STEP="$1"; shift; if "$@"; then pass; else fail "assertion failed"; fi; }
 
+# --- layer 0: migrate the ambient database (the suite's integration tests
+# that target the dev DB assume it is migrated, like a dev checkout) ----------
+say "layer 0: migrate the ambient database"
+uv run alembic upgrade head >/dev/null
+
 # --- layer 1: the full test suite (incl. golden) ---------------------------
 say "layer 1: full pytest suite (incl. golden tier), profilers on"
 uv run pytest -q -p no:cacheprovider

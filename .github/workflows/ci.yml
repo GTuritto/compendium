@@ -69,6 +69,11 @@ jobs:
         run: |
           for i in $(seq 1 30); do curl -sf http://localhost:9200/_cluster/health && break || sleep 2; done
           for i in $(seq 1 30); do curl -sf http://localhost:6333/collections && break || sleep 2; done
+      - name: Migrate the ambient database
+        # The integration tests that target the dev database (inbox, schedule)
+        # assume it is migrated, exactly like a dev checkout. Reachable-but-empty
+        # is the one state they cannot handle.
+        run: uv run alembic upgrade head
       - name: Run fast tier (unit + integration + pipeline + graph + golden smoke)
         run: uv run pytest -q -m "not golden" -p no:cacheprovider
 
@@ -116,6 +121,11 @@ jobs:
         run: |
           for i in $(seq 1 30); do curl -sf http://localhost:9200/_cluster/health && break || sleep 2; done
           for i in $(seq 1 30); do curl -sf http://localhost:6333/collections && break || sleep 2; done
+      - name: Migrate the ambient database
+        # The integration tests that target the dev database (inbox, schedule)
+        # assume it is migrated, exactly like a dev checkout. Reachable-but-empty
+        # is the one state they cannot handle.
+        run: uv run alembic upgrade head
       - name: Run full suite + golden
         run: uv run pytest -q -p no:cacheprovider
 
@@ -172,6 +182,11 @@ jobs:
         run: |
           for i in $(seq 1 30); do curl -sf http://localhost:9200/_cluster/health && break || sleep 2; done
           for i in $(seq 1 30); do curl -sf http://localhost:6333/collections && break || sleep 2; done
+      - name: Migrate the ambient database
+        # The integration tests that target the dev database (inbox, schedule)
+        # assume it is migrated, exactly like a dev checkout. Reachable-but-empty
+        # is the one state they cannot handle.
+        run: uv run alembic upgrade head
       - name: Prepare vault
         run: mkdir -p vault/concepts vault/topics vault/sources
       - name: Run the smoke gate
