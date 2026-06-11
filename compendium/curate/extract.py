@@ -175,27 +175,31 @@ class StubExtractor:
 
 
 class LLMExtractor:
-    """The real labeller: one OpenAI-compatible chat call per source page."""
+    """The real labeller: prompt assembly + parsing over the chat envelope."""
 
     def __init__(self, endpoint: str, model: str, api_key: str) -> None:
-        from openai import OpenAI
+        from compendium.model_clients import make_openai_client
 
-        self._client = OpenAI(base_url=endpoint, api_key=api_key or "not-needed")
+        self._client = make_openai_client(endpoint, api_key)
         self.model = model
 
     def label(
         self, source_title: str, source_body: str, neighbours: list[Neighbour]
     ) -> list[Label]:
+        from compendium.logging import get_logger
+        from compendium.model_clients import chat
+
         if not neighbours:
             return []
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": _EXTRACT_SYSTEM},
-                {"role": "user", "content": _extract_user(source_title, source_body, neighbours)},
-            ],
+        completion = chat(
+            self._client, self.model, _EXTRACT_SYSTEM,
+            _extract_user(source_title, source_body, neighbours),
         )
-        return _parse_labels(response.choices[0].message.content or "", neighbours)
+        get_logger(__name__).info(
+            "llm_usage", role="extractor", model=self.model,
+            input_tokens=completion.input_tokens, output_tokens=completion.output_tokens,
+        )
+        return _parse_labels(completion.text, neighbours)
 
 
 def get_extractor() -> Extractor:

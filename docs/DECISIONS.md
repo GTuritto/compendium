@@ -180,6 +180,17 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   the one CLI, but the lifecycle logic keeps a single home in the script — the
   verbs only delegate and propagate exit codes.
 
+### Review-#4 fix 1 — the chat envelope (arch/chat-envelope)
+
+- **One envelope behind the model-client registry**: `chat() → Completion` +
+  `make_openai_client` in `model_clients.py` absorb the five copied
+  create-then-parse blocks and three client constructions; protocols, stubs,
+  and prompts unchanged. *Why:* locality for the mechanical call machinery
+  (the streaming + usage path is tested once); the synthesizer/extractor stop
+  discarding token usage (logged as `llm_usage`; persisting them is a separate
+  schema decision). Fallback-only normalization: the no-usage heuristic now
+  approximates from the actual user message.
+
 ### The local profiler (post-v0.2, PR #63, 2026-06-11)
 
 Three opt-in halves, all standard-library, recorded here rather than as an ADR

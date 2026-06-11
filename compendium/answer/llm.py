@@ -11,8 +11,12 @@ OpenAI-compatible chat completion. ``compose`` streams when given an
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
+
+# Completion and the token heuristic live with the chat envelope
+# (arch-chat-envelope); re-exported here so existing importers
+# (answer/__init__.py, answer/compose.py) are unchanged.
+from compendium.model_clients import Completion, _approx_tokens, chat, make_openai_client
 
 from compendium.answer.prompts import (
     COMPOSE_SYSTEM,
@@ -21,19 +25,7 @@ from compendium.answer.prompts import (
     rewrite_user,
 )
 
-
-@dataclass
-class Completion:
-    """One LLM call's text plus its token accounting."""
-
-    text: str
-    input_tokens: int
-    output_tokens: int
-
-
-def _approx_tokens(text: str) -> int:
-    """A tokenizer-free heuristic used when the response carries no usage."""
-    return max(1, len(text) // 4) if text else 0
+__all__ = ["Answerer", "Completion", "LLMAnswerer", "StubAnswerer", "get_answerer"]
 
 
 class Answerer(Protocol):
@@ -82,30 +74,17 @@ class StubAnswerer:
 
 
 class LLMAnswerer:
-    """The real answerer: OpenAI-compatible chat completions."""
+    """The real answerer: prompt assembly + result shaping over the chat envelope."""
 
     def __init__(self, endpoint: str, model: str, api_key: str) -> None:
-        from openai import OpenAI
-
-        self._client = OpenAI(base_url=endpoint, api_key=api_key or "not-needed")
+        self._client = make_openai_client(endpoint, api_key)
         self.model = model
         self.endpoint = endpoint
 
     def rewrite(self, question: str) -> Completion:
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": REWRITE_SYSTEM},
-                {"role": "user", "content": rewrite_user(question)},
-            ],
-        )
-        text = (response.choices[0].message.content or "").strip()
-        usage = response.usage
-        return Completion(
-            text or question,
-            usage.prompt_tokens if usage else _approx_tokens(question),
-            usage.completion_tokens if usage else _approx_tokens(text),
-        )
+        completion = chat(self._client, self.model, REWRITE_SYSTEM, rewrite_user(question))
+        text = completion.text.strip()
+        return Completion(text or question, completion.input_tokens, completion.output_tokens)
 
     def compose(
         self,
@@ -114,43 +93,12 @@ class LLMAnswerer:
         *,
         on_token: Callable[[str], None] | None = None,
     ) -> Completion:
-        messages = [
-            {"role": "system", "content": COMPOSE_SYSTEM},
-            {"role": "user", "content": compose_user(question, context)},
-        ]
-        if on_token is None:
-            response = self._client.chat.completions.create(
-                model=self.model, messages=messages
-            )
-            text = response.choices[0].message.content or ""
-            usage = response.usage
-            return Completion(
-                text,
-                usage.prompt_tokens if usage else _approx_tokens(question + context),
-                usage.completion_tokens if usage else _approx_tokens(text),
-            )
-
-        stream = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
-        parts: list[str] = []
-        usage = None
-        for chunk in stream:
-            if chunk.choices:
-                delta = chunk.choices[0].delta.content or ""
-                if delta:
-                    parts.append(delta)
-                    on_token(delta)
-            if getattr(chunk, "usage", None):
-                usage = chunk.usage
-        text = "".join(parts)
-        return Completion(
-            text,
-            usage.prompt_tokens if usage else _approx_tokens(question + context),
-            usage.completion_tokens if usage else _approx_tokens(text),
+        return chat(
+            self._client,
+            self.model,
+            COMPOSE_SYSTEM,
+            compose_user(question, context),
+            on_token=on_token,
         )
 
 

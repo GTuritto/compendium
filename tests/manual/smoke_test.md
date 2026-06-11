@@ -482,3 +482,15 @@ queries). All artifacts land in `~/.compendium/profiles` unless
 | prof.6 | Ingest stage durations | ingest any fixture, then prof.5 again | the ingest table gains `ingest.parse` / `ingest.inspect` / `ingest.chunk` rows (from `sources.metadata["stage_ms"]`) |
 | prof.7 | Memory arm/report | `uv run python -m compendium serve` in one shell; from another: `kill -USR1 <pid>`, run a few `/query` requests, `kill -USR2 <pid>` | daemon undisturbed; `mem-<ts>.txt` appears in the artifacts dir with traced size, RSS, and top growth sites |
 | prof.8 | Stack verbs | `uv run python -m compendium stop` then `… start` then `… restart` | each delegates to `deploy/compendiumctl` (same output as calling it directly); exit codes propagate |
+
+## Arch — chat envelope (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. Confirms the three real LLM clients
+share one construction site + one call envelope, with output unchanged.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-ce.1 | Stub walk unchanged | `COMPENDIUM_LLM_STUB=1 uv run python -m compendium ask "What is psychological safety?"`, `… synth concept "<term>"`, `… curate run` | identical output to pre-fix: ask citations + footer, synth page written, curate report |
+| arch-ce.2 | One construction site | `grep -rn "OpenAI(" compendium/` | exactly two matches: `model_clients.py` (the envelope) and `index/embedder.py` (embeddings, out of scope) |
+| arch-ce.3 | Envelope speaks real OpenRouter | `uv run pytest -m live` (stubs unset, keys in `.env`) | 2 passed — the live tier exercises the real path through `chat()` |
+| arch-ce.4 | Usage now logged for synth/extract | `COMPENDIUM_PROFILE=1` real `synth concept "<term>"` (or inspect stderr of a real `curate run`) | one `llm_usage` event with role/model/input_tokens/output_tokens |

@@ -24,6 +24,10 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
   reports). Standard library only; no new stores; no ADR (posture-neutral).
 - **Stack lifecycle verbs** (PR #63): `compendium start|stop|restart` as thin
   adapters over `deploy/compendiumctl`.
+- **Arch (review #4, fix 1) — chat envelope**: one `chat() → Completion`
+  envelope + one OpenAI-client construction site in `model_clients.py`; the
+  answerer/synthesizer/extractor shrink to prompt assembly, and synth/extract
+  token usage is now logged. Behaviour-preserving.
 - **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
   — the full suite incl. golden plus a scripted end-to-end walk with the
   profilers on) runs on every `main` push and `v*` tag; the `distribution` job
