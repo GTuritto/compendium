@@ -303,3 +303,118 @@ def test_reindex_from_empty_restores_state(index_env):
     union = before | after
     jaccard = len(before & after) / len(union) if union else 1.0
     assert jaccard >= 0.6
+
+
+# --- arch-index-document-shape: the contract, frozen -------------------------
+
+
+def test_page_wire_format_is_frozen():
+    """The exact dicts sent to the stores — byte-for-byte the pre-shape output."""
+    body = "# T\n\nB."
+    doc = documents.page_document(_page_row(), body=body, topic_ids=[_TOPIC])
+    assert doc == {
+        "id": _UUID,
+        "kind": "concept",
+        "title": "Psychological Safety",
+        "slug": "psychological-safety",
+        "status": "canonical",
+        "corpus_revision": "rev-x",
+        "topic_ids": [_TOPIC],
+        "parent_topic_id": None,
+        "source_id": None,
+        "source_kind": None,
+        "inspection_status": None,
+        "aliases": ["psych safety"],
+        "body": body,
+        "created_at": _NOW.isoformat(),
+        "updated_at": _NOW.isoformat(),
+    }
+    payload = documents.page_payload(_page_row(), topic_ids=[_TOPIC])
+    assert payload == {
+        "id": _UUID,
+        "kind": "concept",
+        "title": "Psychological Safety",
+        "slug": "psychological-safety",
+        "status": "canonical",
+        "corpus_revision": "rev-x",
+        "topic_ids": [_TOPIC],
+        "parent_topic_id": None,
+        "source_id": None,
+        "source_kind": None,
+        "created_at": int(_NOW.timestamp() * 1000),
+        "updated_at": int(_NOW.timestamp() * 1000),
+    }
+
+
+def test_chunk_wire_format_is_frozen():
+    chunk = {
+        "id": _UUID,
+        "source_id": _SRC,
+        "source_kind": "note",
+        "source_title": "S",
+        "position": 1,
+        "parent_section": None,
+        "body": "  Teams   learn  well.  ",
+        "token_count": 4,
+        "created_at": _NOW,
+    }
+    assert documents.chunk_document(chunk) == {
+        "id": _UUID,
+        "source_id": _SRC,
+        "source_kind": "note",
+        "source_title": "S",
+        "position": 1,
+        "parent_section": None,
+        "body": "  Teams   learn  well.  ",
+        "token_count": 4,
+        "created_at": _NOW.isoformat(),
+    }
+    assert documents.chunk_payload(chunk) == {
+        "id": _UUID,
+        "source_id": _SRC,
+        "source_kind": "note",
+        "position": 1,
+        "parent_section": None,
+        "body_preview": "Teams learn well.",
+        "token_count": 4,
+        "created_at": int(_NOW.timestamp() * 1000),
+    }
+
+
+def test_builders_agree_with_the_field_constants():
+    body = "b"
+    assert tuple(documents.page_document(_page_row(), body=body, topic_ids=[])) == documents.PAGE_DOCUMENT_FIELDS
+    assert tuple(documents.page_payload(_page_row(), topic_ids=[])) == documents.PAGE_PAYLOAD_FIELDS
+    chunk = {
+        "id": _UUID, "source_id": _SRC, "position": 0, "body": "x",
+        "created_at": _NOW,
+    }
+    assert tuple(documents.chunk_document(chunk)) == documents.CHUNK_DOCUMENT_FIELDS
+    assert tuple(documents.chunk_payload(chunk)) == documents.CHUNK_PAYLOAD_FIELDS
+
+
+def test_opensearch_mappings_agree_with_the_shape():
+    """A renamed shape field (or mapping property) fails here, not silently."""
+    from compendium.index import opensearch
+
+    pages_props = opensearch._pages_body()["mappings"]["properties"]
+    chunks_props = opensearch._chunks_body()["mappings"]["properties"]
+    assert set(pages_props) == set(documents.PAGE_DOCUMENT_FIELDS)
+    assert set(chunks_props) == set(documents.CHUNK_DOCUMENT_FIELDS)
+
+
+def test_searchable_subsets_are_shape_members():
+    assert set(documents.PAGE_SEARCHABLE_FIELDS) <= set(documents.PAGE_DOCUMENT_FIELDS)
+    assert set(documents.CHUNK_SEARCHABLE_FIELDS) <= set(documents.CHUNK_DOCUMENT_FIELDS)
+
+
+def test_display_fields_preview_owns_the_store_difference():
+    from compendium.retrieve.fusion import FusedHit
+    from compendium.retrieve.search import Hit
+
+    os_hit = Hit(entity_id="e", score=1.0, fields={"body": "full body"})
+    qd_hit = Hit(entity_id="e", score=1.0, fields={"body_preview": "short"})
+    assert os_hit.preview == "full body"
+    assert qd_hit.preview == "short"
+    fused = FusedHit(entity_id="e", score=1.0, fields={"title": "T", "slug": "t"})
+    assert (fused.title, fused.slug, fused.kind) == ("T", "t", "")
