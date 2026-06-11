@@ -79,6 +79,28 @@ The same lifecycle is available as CLI verbs — `compendium start`, `compendium
 stop`, `compendium restart` — thin adapters that delegate to
 `deploy/compendiumctl` and propagate its exit code (PR #63).
 
+## CI pipeline (smoke-gated distribution)
+
+`.github/workflows/ci.yml` carries four jobs. `test` (fast tier) runs on every
+push/PR and `nightly` runs the golden suite on schedule, as before. On every
+push to `main` (and on `v*` tags), the **`smoke`** job runs the CI smoke gate —
+`deploy/ci-smoke.sh`, which executes every CI-runnable layer of
+[`tests/manual/smoke_test.md`](../../tests/manual/smoke_test.md): the full
+pytest suite including the golden tier, then a scripted end-to-end walk with the
+profilers on (ingest → wiki → indexes → retrieval → graph → traces → curation →
+ask → profile stats → the HTTP access surface with the SIGUSR memory profiler →
+inbox processing → a backup pair). Only when that gate is green does the
+**`distribution`** job run `deploy/make-bundle.sh` and upload
+`compendium-deploy.zip` + `install.sh` as a workflow artifact; pushing a `v*`
+tag additionally publishes them as a GitHub Release. Excluded from the CI gate
+(host-bound or manual, per the playbook): launchd/systemd unit installs, the
+interactive TUI walk (its headless Pilot suite runs in the pytest layer), the
+live real-model tier, and the destructive restore round-trip.
+
+The script also runs locally against the dev stack: `bash deploy/ci-smoke.sh`
+(it ingests the test fixtures into whatever `POSTGRES_URL` points at, like the
+manual playbook).
+
 Once installed, the units persist across reboots and run on their own; the only
 thing that may need a manual `start` after a reboot is the docker stores (unless
 Docker Desktop is set to launch at login).

@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from compendium.retrieve.search import Hit
+from compendium.retrieve.search import DisplayFields, Hit
 
 
 @dataclass
-class FusedHit:
+class FusedHit(DisplayFields):
     """A fused candidate: entity id, summed RRF score, contributing ranks, fields."""
 
     entity_id: str

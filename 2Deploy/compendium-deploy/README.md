@@ -18,16 +18,66 @@ v0.1 is feature-complete. All eleven phases (0–10) are merged: project skeleto
 
 v0.2 is feature-complete (all eight phases merged). **Phase 1 — Real-model validation** is merged (PR #30, 2026-05-30): the `live` pytest tier exercises real OpenRouter / BGE-M3 calls on demand, a per-host model strategy lives at [`docs/operations/real-models.md`](docs/operations/real-models.md), and the embedder seam now accepts an `EMBEDDINGS_API_KEY`. **Phase 2 — Backup / restore** ships `compendium backup` / `compendium restore` for PostgreSQL + vault snapshots, optional off-host rsync to `BACKUP_RSYNC_DEST`, and a scheduled daily-at-02:00 unit via `compendium backup install`. See [`docs/operations/backup-restore.md`](docs/operations/backup-restore.md). **Phase 3 — Scheduled curation daemon** (ships ADR-012) adds `compendium schedule install [--every 1h]` to fire `compendium curate run` on a per-OS user-level timer (launchd / systemd) with `schedule status` / `schedule uninstall` companions. See [`docs/operations/schedule.md`](docs/operations/schedule.md). **Phase 4 — Ingestion automation (inbox)** ships `compendium inbox install [--path ~/Compendium/inbox]` — files dropped under `inbox/<kind>/` auto-ingest with that kind and route to `inbox/processed/<YYYY-MM-DD>/` on success or `inbox/failed/<YYYY-MM-DD>/` (with a `.error` sidecar) on parse failure. See [`docs/operations/inbox.md`](docs/operations/inbox.md). **Phase 5 — Retrieval tuning** adds rule-based query normalization (lowercase + stop-words + alias expansion) in the `query` hot path, an OpenSearch `compendium_text` analyzer with an inline synonym filter sourced from page aliases, Qdrant HNSW parameters threaded through search, and a captured per-query metric baseline at `tests/golden/baseline.json`. See [`docs/operations/retrieval-tuning.md`](docs/operations/retrieval-tuning.md). **Phase 6 — Composed answers (`ask`)** adds `compendium ask "<question>"`: an LLM-composed answer over the top-K pages with structured page-anchored citations, a refusal mode below `ask.refuse_below_coverage` (default 0.3), an LLM query rewrite (Shape D part 2), streaming text output, and its own `ask_traces` row joined to `query_traces`. See [`docs/operations/ask.md`](docs/operations/ask.md). **Phase 7 — Access surface (MCP + HTTP)** (ships ADR-011) makes Compendium callable by colocated agents: `compendium serve` runs a FastAPI server on `127.0.0.1` (no auth) and `compendium mcp` runs an MCP stdio server, both over one shared facade exposing six verbs (`query`, `ask`, `ingest`, `page_get`, `page_list`, `index_status`); access-surface `ingest` accepts raw bytes and auto-runs `index sync`, and `ask` streams. See [`docs/operations/access-surface.md`](docs/operations/access-surface.md). **Phase 8 — Autonomous semantic-edge extraction** (ships ADR-010) adds a slow-loop generator that, per changed page, pulls Qdrant neighbours and asks the LLM (one call per page) to label pairs, writing `RELATED_TO`/`PREREQUISITE_FOR` edges into Memgraph with provenance (`extracted_by`, `confidence`, `weight`) above a confidence threshold; curator edges are never overwritten and the fast-loop expansion densifies without curator effort. See [`docs/operations/edge-extraction.md`](docs/operations/edge-extraction.md). The v0.2 plan is in [`docs/COMPENDIUM_V0.2_BUILD.md`](docs/COMPENDIUM_V0.2_BUILD.md).
 
-**Deploying on a personal host:** `deploy/install.sh` is a one-shot deployer (prereqs → `uv sync` → docker stores → migrations → reindex → install the four launchd/systemd services), and `deploy/compendiumctl {start|stop|status|restart|logs}` drives the running stack (`compendium start|stop|restart` are thin CLI adapters over it). The access surface now has its own always-on unit (`compendium serve install`), closing the ADR-012 access-surface-daemon gap. See [`docs/operations/deployment.md`](docs/operations/deployment.md). A post-v0.2 **local profiler** (PR #63) adds opt-in, stdlib-only performance / CPU / memory debugging: `compendium profile stats` aggregates read-only over the persisted traces, the global `--timings` / `--profile` flags instrument one invocation, and SIGUSR1/SIGUSR2 arm/report a tracemalloc diff in the serve daemon. See [`docs/operations/profiling.md`](docs/operations/profiling.md).
+**Deploying on a personal host:** `deploy/install.sh` is a one-shot deployer (prereqs → `uv sync` → docker stores → migrations → reindex → install the four launchd/systemd services), and `deploy/compendiumctl {start|stop|status|restart|logs}` drives the running stack (`compendium start|stop|restart` are thin CLI adapters over it). The access surface now has its own always-on unit (`compendium serve install`), closing the ADR-012 access-surface-daemon gap. See [`docs/operations/deployment.md`](docs/operations/deployment.md) and the install section below. The distribution is built by a smoke-gated CI pipeline: on every `main` push the `smoke` job runs the full suite plus a scripted end-to-end walk (`deploy/ci-smoke.sh`), and only when it is green does the `distribution` job build and upload the bundle — a `v*` tag publishes it as a GitHub Release. A post-v0.2 **local profiler** (PR #63) adds opt-in, stdlib-only performance / CPU / memory debugging: `compendium profile stats` aggregates read-only over the persisted traces, the global `--timings` / `--profile` flags instrument one invocation, and SIGUSR1/SIGUSR2 arm/report a tracemalloc diff in the serve daemon. See [`docs/operations/profiling.md`](docs/operations/profiling.md).
 
-## Requirements
+## Install from the distribution
+
+The distribution is **two files that sit side by side**:
+
+```text
+install.sh                 the interactive installer
+compendium-deploy.zip      the payload bundle (app, migrations, config, compose files)
+```
+
+Get them from any of:
+
+1. **A GitHub Release** — published automatically for every `v*` tag, after the
+   CI smoke gate passes (recommended for installs).
+2. **A CI workflow artifact** — every push to `main` uploads
+   `compendium-deploy-<version>-<sha>` from the `distribution` job (gated on the
+   same smoke pass).
+3. **The repo itself** — the committed [`2Deploy/`](2Deploy/) folder, refreshed
+   from `main`; or rebuild it locally with `deploy/make-bundle.sh`.
+
+**Requirements on the target machine:** Docker Engine + Compose v2, `unzip`,
+about 4 GB of free RAM for the four backing stores, and — for the host-native
+mode — `uv` (the installer offers to install it). Outbound internet only if you
+use OpenRouter for synthesis/embeddings.
+
+**Install:**
+
+```sh
+chmod +x install.sh
+./install.sh
+```
+
+The installer is interactive and does everything: unzips the bundle into an
+install directory, asks how to run Compendium — **host-native (uv)**, which also
+installs the four always-on launchd/systemd services (backup, curation schedule,
+inbox watcher, access surface), or **Docker app image** for a headless LAN
+server — provisions the backing stores with Docker, prompts for the
+configuration (endpoints, API keys, paths, bind address) to generate `.env`,
+applies migrations, builds the derived indexes, and starts the services. The
+access surface is then at `http://127.0.0.1:8787`.
+
+Afterwards, drive the stack with `compendium start | stop | restart` (or
+`deploy/compendiumctl`). Full instructions, the lock-it-down checklist, and the
+update path are in the bundle's own `DEPLOY.md` and in
+[`docs/operations/deployment.md`](docs/operations/deployment.md). The posture is
+single-user, localhost/LAN, no auth, no TLS (ADR-011/012) — your host firewall
+is the access control.
+
+Installing from a git checkout instead? `deploy/install.sh` is the equivalent
+one-shot deployer for the working tree.
+
+## Requirements (development)
 
 - macOS or Linux
 - [uv](https://docs.astral.sh/uv/) — Python package manager
 - Python 3.12 (uv installs it if missing)
 - Docker — runs the local PostgreSQL instance
 
-## Setup
+## Setup (development)
 
 ```sh
 git clone <repo> compendium && cd compendium

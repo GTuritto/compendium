@@ -46,6 +46,14 @@ views are unchanged by it. The decision rationale is in
   ADR-013) + three deepenings (cached config, model-client seam, ask composition), all merged
   (PRs #52–#55). Plan: [../../Plans/arch-review-3-plan.md](../../Plans/arch-review-3-plan.md).
   See the post-v0.2 seams table below.
+- [review-2026-06-11.md](review-2026-06-11.md) — fourth pass (post-profiler, post-pipeline):
+  four open candidates (chat-completion envelope, probe()-routed status readers, typed
+  index-document shape, facade input coercion) and eight recorded no-seam verdicts; the new
+  PR #63–#68 surface assessed clean. Visuals:
+  [architecture-review-2026-06-11.html](architecture-review-2026-06-11.html) /
+  [-2.html](architecture-review-2026-06-11-2.html). Roadmap:
+  [../../Plans/arch-review-4-plan.md](../../Plans/arch-review-4-plan.md) — **planned,
+  not started**.
 
 ## Architecture seams (from the review-#2 refactors)
 
@@ -78,6 +86,10 @@ PRs #52–#55. Each is one named seam, folded into the Level-3 component view an
 | **Ask composition** | DB-free `compose_answer`; `ask` is the single-path orchestrator | `answer/compose.py` |
 | **Local profiler** | opt-in timed spans + cProfile + tracemalloc memory arm/report; never breaks the profiled operation | `profiling.py` |
 | **Profile stats** | read-only SQL aggregation of the operational record (`profile stats`) | `profile_stats.py` + repository readers |
+| **Chat envelope** | one OpenAI-client construction site + one chat-completion call (buffered/streaming, uniform token accounting) behind the model-client registry | `model_clients.py` (`make_openai_client`, `chat`) |
+| **Unit activity probe** | all scheduler-CLI probing (lifecycle + activity) behind the injectable Runner; status readers are pure parsers over `Probe.stdout` | `service_unit` (`probe`, `probe_activity`) |
+| **Index-document shape** | one row per field (both store values); builders/constants/searchable subsets derived; mapping test-pinned; typed hit accessors | `index/documents.py`, `retrieve/search.py` (`DisplayFields`) |
+| **Facade verb contract** | input coercion (base64/either-or) + the one not-found decision live in the facade; transports are pure transport | `api/facade.py` |
 
 The semantic-edge persistence fix is the only correctness change (it closed a `graph rebuild`
 data-loss bug); the rest are behaviour-preserving deepenings. Plan of record:

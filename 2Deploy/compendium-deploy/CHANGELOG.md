@@ -24,6 +24,26 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
   reports). Standard library only; no new stores; no ADR (posture-neutral).
 - **Stack lifecycle verbs** (PR #63): `compendium start|stop|restart` as thin
   adapters over `deploy/compendiumctl`.
+- **Arch (review #4, fix 1) — chat envelope**: one `chat() → Completion`
+  envelope + one OpenAI-client construction site in `model_clients.py`; the
+  answerer/synthesizer/extractor shrink to prompt assembly, and synth/extract
+  token usage is now logged. Behaviour-preserving.
+- **Arch (review #4, fix 2) — status probe routing**: the schedule/serve
+  status readers consume `service_unit.probe_activity`; scheduler-CLI probing
+  lives once behind the injectable Runner. Behaviour-preserving.
+- **Arch (review #4, fix 3) — index-document shape**: the page/chunk index
+  field contract declared once in `documents.py` (wire bytes frozen,
+  mapping test-pinned); retrieval reads hits through typed `DisplayFields`
+  accessors. Behaviour-preserving.
+- **Arch (review #4, fix 4) — facade coercion**: ingest input coercion and
+  the page_get not-found convention live once in the access-surface facade;
+  the HTTP/MCP transports are pure transport. Behaviour-preserving.
+- **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
+  — the full suite incl. golden plus a scripted end-to-end walk with the
+  profilers on) runs on every `main` push and `v*` tag; the `distribution` job
+  builds `deploy/make-bundle.sh` only when smoke is green, uploading the bundle
+  as a workflow artifact and publishing a GitHub Release on tags. The committed
+  `2Deploy/` bundle is refreshed from current `main`.
 
 The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
 record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase

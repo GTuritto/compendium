@@ -47,6 +47,7 @@ __all__ = [
     "loaded",
     "platform",
     "probe",
+    "probe_activity",
     "uninstall",
 ]
 
@@ -89,6 +90,23 @@ def probe(descriptor: UnitDescriptor, *, runner: Runner = DEFAULT_RUNNER) -> Pro
         return launchd.probe(descriptor, runner=runner)
     if sys.platform.startswith("linux"):
         return systemd.probe(descriptor, runner=runner)
+    from pathlib import Path
+
+    return Probe(loaded=False, unit_path=Path("unknown"), returncode=-1)
+
+
+def probe_activity(descriptor: UnitDescriptor, *, runner: Runner = DEFAULT_RUNNER) -> Probe:
+    """Scheduler-activity output (state / last / next fire) for a status reader.
+
+    macOS reuses ``launchctl print`` (one command carries lifecycle and
+    activity); Linux runs ``systemctl --user status`` plus ``list-timers``
+    for triggered units. Readers parse ``Probe.stdout``; they never run the
+    scheduler CLI themselves.
+    """
+    if sys.platform == "darwin":
+        return launchd.probe(descriptor, runner=runner)
+    if sys.platform.startswith("linux"):
+        return systemd.probe_activity(descriptor, runner=runner)
     from pathlib import Path
 
     return Probe(loaded=False, unit_path=Path("unknown"), returncode=-1)
