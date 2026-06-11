@@ -116,3 +116,86 @@ def get_model_client(role: str) -> Any:
     """
     r = REGISTRY[role]
     return r.make_stub() if use_stub(role) else r.make_real()
+
+
+# --- the chat-completion envelope (arch-chat-envelope) ----------------------
+#
+# What every *real* chat-role client shares once the registry has selected it:
+# one construction site for the OpenAI-compatible client and one mechanical
+# call envelope with uniform token accounting. Prompt assembly and result
+# shaping stay in each client class; stubs never cross this seam.
+
+
+@dataclass(frozen=True)
+class Completion:
+    """One LLM call's text plus its token accounting."""
+
+    text: str
+    input_tokens: int
+    output_tokens: int
+
+
+def _approx_tokens(text: str) -> int:
+    """A tokenizer-free heuristic used when the response carries no usage."""
+    return max(1, len(text) // 4) if text else 0
+
+
+def make_openai_client(endpoint: str, api_key: str) -> Any:
+    """The one place an OpenAI-compatible chat client is constructed."""
+    from openai import OpenAI
+
+    return OpenAI(base_url=endpoint, api_key=api_key or "not-needed")
+
+
+def chat(
+    client: Any,
+    model: str,
+    system: str,
+    user: str,
+    *,
+    on_token: Callable[[str], None] | None = None,
+) -> Completion:
+    """One chat completion over a ``[system, user]`` prompt.
+
+    Buffers when ``on_token`` is None; streams otherwise, forwarding each
+    delta and capturing the usage block from the final chunk
+    (``include_usage``). Token counts come from the response's usage block
+    when present, else the char/4 heuristic over the user message (input)
+    and the returned text (output).
+    """
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    if on_token is None:
+        response = client.chat.completions.create(model=model, messages=messages)
+        text = response.choices[0].message.content or ""
+        usage = response.usage
+        return Completion(
+            text,
+            usage.prompt_tokens if usage else _approx_tokens(user),
+            usage.completion_tokens if usage else _approx_tokens(text),
+        )
+
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+    parts: list[str] = []
+    usage = None
+    for chunk in stream:
+        if chunk.choices:
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                parts.append(delta)
+                on_token(delta)
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+    text = "".join(parts)
+    return Completion(
+        text,
+        usage.prompt_tokens if usage else _approx_tokens(user),
+        usage.completion_tokens if usage else _approx_tokens(text),
+    )
