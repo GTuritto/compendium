@@ -249,6 +249,18 @@ def test_schedule_install_kick_uninstall(tmp_path) -> None:
     elif sys.platform.startswith("linux"):
         if shutil.which("systemctl") is None:
             pytest.skip("systemctl not on PATH")
+        # A reachable binary is not enough: kicking a user unit needs a running
+        # user-level systemd manager (absent on CI runners and bare SSH
+        # sessions, where `--user` cannot connect to the bus).
+        probe = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            capture_output=True, text=True, check=False,
+        )
+        state = (probe.stdout or "").strip()
+        if probe.returncode != 0 and state not in ("running", "degraded"):
+            pytest.skip(
+                f"no user-level systemd manager: {state or probe.stderr.strip()}"
+            )
     else:
         pytest.skip(f"unsupported platform for integration test: {sys.platform}")
 
