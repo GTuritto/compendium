@@ -200,6 +200,17 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   the test surface — readers become pure parsers over recorded CLI output,
   testable on CI runners; scheduler quirks get one home.
 
+### Review-#4 fix 3 — the index-document shape (arch/index-document-shape)
+
+- **One declaration per field; wire bytes frozen.** Each page/chunk index
+  field appears on one row carrying its OpenSearch and Qdrant values; builders,
+  field constants, and searchable subsets derive from it; the mappings are
+  test-pinned to the constants; retrieval reads hits through typed accessors
+  (`preview` owns body-vs-body_preview). *Why:* the writer/reader contract was
+  invisible string literals four files apart — a rename silently degraded
+  retrieval; now it fails a test at construction. Hits stay dicts at the wire
+  (accessors, not re-hydration); no reindex was needed.
+
 ### The local profiler (post-v0.2, PR #63, 2026-06-11)
 
 Three opt-in halves, all standard-library, recorded here rather than as an ADR

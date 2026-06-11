@@ -31,6 +31,10 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 - **Arch (review #4, fix 2) — status probe routing**: the schedule/serve
   status readers consume `service_unit.probe_activity`; scheduler-CLI probing
   lives once behind the injectable Runner. Behaviour-preserving.
+- **Arch (review #4, fix 3) — index-document shape**: the page/chunk index
+  field contract declared once in `documents.py` (wire bytes frozen,
+  mapping test-pinned); retrieval reads hits through typed `DisplayFields`
+  accessors. Behaviour-preserving.
 - **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
   — the full suite incl. golden plus a scripted end-to-end walk with the
   profilers on) runs on every `main` push and `v*` tag; the `distribution` job

@@ -506,3 +506,14 @@ readers consume the service_unit probe seam with unchanged output.
 | arch-spr.2 | Serve status unchanged | `compendium serve install` → `serve status` → `uninstall` | loaded/state/host/port/unit line as before |
 | arch-spr.3 | Readers own no scheduler CLI | `grep -n "subprocess\|sys.platform" compendium/schedule/status.py compendium/api/service.py` | no matches — probing lives in `service_unit.probe_activity` |
 | arch-spr.4 | Absent unit | `schedule status` with nothing installed | `state="absent"`, exit 1 |
+
+## Arch — index-document shape (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. Confirms the one-declaration shape
+changes no wire bytes and no rankings.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-ids.1 | Rankings unchanged | `reindex all`, then the standard covered query | identical coverage and top page to the pre-fix capture; golden tier identical |
+| arch-ids.2 | Writer/mapping/reader pinned | `uv run pytest tests/test_indexes.py -q` | wire-freeze, constants-agreement, mapping-agreement, and preview-accessor tests all pass |
+| arch-ids.3 | No raw field reads | `grep -n "f.get(" compendium/retrieve/pipeline.py` | no matches — retrieval reads hits through DisplayFields |
