@@ -51,15 +51,18 @@ class StubSynthesizer:
 
 
 class LLMSynthesizer:
-    """The real synthesizer: an OpenAI-compatible chat completion."""
+    """The real synthesizer: prompt assembly over the chat envelope."""
 
     def __init__(self, endpoint: str, model: str, api_key: str) -> None:
-        from openai import OpenAI
+        from compendium.model_clients import make_openai_client
 
-        self._client = OpenAI(base_url=endpoint, api_key=api_key or "not-needed")
+        self._client = make_openai_client(endpoint, api_key)
         self._model = model
 
     def synthesize(self, name: str, chunks: list[dict[str, Any]]) -> str:
+        from compendium.logging import get_logger
+        from compendium.model_clients import chat
+
         context = "\n\n".join(
             f"[{c['source_title']}] {c['body']}" for c in chunks
         )
@@ -68,14 +71,12 @@ class LLMSynthesizer:
             "corpus excerpts below say about it. Start with an H1 title.\n\n"
             f"Excerpts:\n\n{context}"
         )
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
+        completion = chat(self._client, self._model, _SYSTEM_PROMPT, prompt)
+        get_logger(__name__).info(
+            "llm_usage", role="synthesizer", model=self._model,
+            input_tokens=completion.input_tokens, output_tokens=completion.output_tokens,
         )
-        return response.choices[0].message.content or ""
+        return completion.text
 
 
 def get_synthesizer() -> Synthesizer:
