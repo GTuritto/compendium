@@ -243,6 +243,13 @@ def test_schedule_install_kick_uninstall(tmp_path) -> None:
         uninstall_schedule,
     )
 
+    # Host-bound: a fired unit does not inherit this process's environment —
+    # it reads the repo .env (absent on CI runners), so the kicked curate run
+    # cannot see the stores there. The CI smoke gate excludes unit installs by
+    # design; the manual playbook (v0.2-3.4) covers the kick on a real host.
+    if os.environ.get("CI"):
+        pytest.skip("unit kick is host-bound; fired units lack the CI job env")
+
     if sys.platform == "darwin":
         if shutil.which("launchctl") is None:
             pytest.skip("launchctl not on PATH")
