@@ -16,13 +16,19 @@ COMPENDIUM_PROFILE=1 uv run compendium query "spaced repetition"
 # stderr: {"stage": "embed", "duration_ms": 412.3, "event": "profile", ...}
 ```
 
-**CPU profiles** — the global `--profile OUT.prof` flag wraps the dispatched
-command in stdlib `cProfile` and dumps stats for `pstats` or snakeviz. It also
-sets `COMPENDIUM_PROFILE=1` for the run, so spans fire alongside:
+The global `--timings` flag enables span logging for one invocation without
+touching the environment: `uv run compendium --timings query "..."`.
+
+**CPU profiles** — the global `--profile` flag wraps the dispatched command in
+stdlib `cProfile`, writes `<command>-<timestamp>.prof` into
+`~/.compendium/profiles` (override with `COMPENDIUM_PROFILE_DIR`), and prints
+the artifact path plus a top-25 cumulative summary to stderr. It also sets
+`COMPENDIUM_PROFILE=1` for the run, so spans fire alongside. A profiler
+failure never breaks the profiled command:
 
 ```
-uv run compendium --profile q.prof query "spaced repetition"
-uv run python -m pstats q.prof   # then: sort cumtime / stats 20
+uv run compendium --profile query "spaced repetition"
+uv run python -m pstats ~/.compendium/profiles/query-*.prof   # sort cumtime / stats 25
 ```
 
 ## Instrumented stages

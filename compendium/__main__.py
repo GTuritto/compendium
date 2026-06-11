@@ -680,8 +680,15 @@ def _tui() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="compendium")
     parser.add_argument(
-        "--profile", metavar="OUT.prof", default=None,
-        help="profile this invocation with cProfile and write stats to OUT.prof",
+        "--profile", action="store_true",
+        help="profile this invocation with cProfile: writes a .prof artifact to "
+             "~/.compendium/profiles (COMPENDIUM_PROFILE_DIR overrides) and "
+             "prints a top-25 cumulative summary",
+    )
+    parser.add_argument(
+        "--timings", action="store_true",
+        help="enable timed-span logging for this invocation (same as "
+             "COMPENDIUM_PROFILE=1 in the environment or .env)",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -927,12 +934,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     fmt_arg = getattr(args, "format", "text")
 
+    if args.timings:
+        os.environ["COMPENDIUM_PROFILE"] = "1"
     if args.profile:
         # Span logging should fire during a profiled run too.
         os.environ.setdefault("COMPENDIUM_PROFILE", "1")
         from compendium.profiling import cpu_profile
 
-        with cpu_profile(args.profile):
+        with cpu_profile(args.command or "compendium"):
             return _dispatch(args, fmt_arg)
     return _dispatch(args, fmt_arg)
 

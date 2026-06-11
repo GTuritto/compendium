@@ -59,10 +59,68 @@ def test_timed_without_sink_is_silent_noop(monkeypatch):
         pass  # nothing to assert beyond "does not raise"
 
 
-def test_cpu_profile_writes_loadable_stats(tmp_path):
-    out = tmp_path / "run.prof"
-    with profiling.cpu_profile(str(out)):
+def test_profile_dir_default_and_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path / "artifacts"))
+    d = profiling.profile_dir()
+    assert d == tmp_path / "artifacts"
+    assert d.is_dir()
+    monkeypatch.delenv("COMPENDIUM_PROFILE_DIR")
+    assert profiling.profile_dir().name == "profiles"
+
+
+def test_cpu_profile_writes_loadable_artifact(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+    with profiling.cpu_profile("query"):
         sum(range(1000))
-    assert out.is_file()
-    stats = pstats.Stats(str(out))
+    artifacts = list(tmp_path.glob("query-*.prof"))
+    assert len(artifacts) == 1
+    stats = pstats.Stats(str(artifacts[0]))
     assert stats.total_calls > 0
+    err = capsys.readouterr().err
+    assert "cpu profile written" in err
+    assert "cumulative" in err  # the inline top-25 summary
+
+
+def test_cpu_profile_slugs_multiword_commands(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+    with profiling.cpu_profile("graph rebuild"):
+        pass
+    assert list(tmp_path.glob("graph-rebuild-*.prof"))
+
+
+def test_cpu_profile_dump_failure_never_breaks_operation(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+
+    def boom(self, command):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(profiling, "_write_cpu_profile", boom)
+    result = None
+    with profiling.cpu_profile("query"):
+        result = 42
+    assert result == 42  # the operation's outcome is untouched
+    assert not list(tmp_path.glob("*.prof"))
+
+
+def test_cpu_profile_enable_failure_never_breaks_operation(monkeypatch, tmp_path):
+    import cProfile
+
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+
+    def boom(self):
+        raise RuntimeError("another profiler is active")
+
+    monkeypatch.setattr(cProfile.Profile, "enable", boom)
+    result = None
+    with profiling.cpu_profile("query"):
+        result = 42
+    assert result == 42
+
+
+def test_cpu_profile_block_exception_passes_through(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+    with pytest.raises(ValueError, match="boom"):
+        with profiling.cpu_profile("query"):
+            raise ValueError("boom")
+    # The artifact is still written for the failed run.
+    assert list(tmp_path.glob("query-*.prof"))
