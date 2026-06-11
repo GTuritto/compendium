@@ -197,3 +197,56 @@ def test_facade_ingest_bytes_autosyncs_and_is_queryable(seeded):
     # The new source is retrievable without a manual reindex.
     hits = facade.query("deliberate practice feedback performance")
     assert hits.pages
+
+
+# --- arch-facade-ingest-coercion: the facade owns the input contract --------
+
+
+def test_facade_ingest_rejects_missing_input():
+    import pytest as _pytest
+
+    from compendium.api import facade
+
+    with _pytest.raises(ValueError, match="ingest requires 'path' or 'content_base64'"):
+        facade.ingest(kind="note")
+
+
+def test_facade_ingest_rejects_invalid_base64():
+    import pytest as _pytest
+
+    from compendium.api import facade
+
+    with _pytest.raises(ValueError, match="invalid content_base64"):
+        facade.ingest(kind="note", content_base64="@@not-base64@@")
+
+
+def test_facade_ingest_decodes_base64(monkeypatch):
+    """The b64 path round-trips into the bytes path; no transport decodes."""
+    import base64 as b64
+
+    from compendium.api import facade
+
+    seen = {}
+
+    def fake_ingest(path, *, kind, mine=False):
+        seen["bytes"] = open(path, "rb").read()
+        seen["kind"] = kind
+
+        class R:  # one IngestResult-shaped object
+            status = "ingested"
+
+        return [R()]
+
+    monkeypatch.setattr("compendium.ingest.pipeline.ingest", fake_ingest)
+    monkeypatch.setattr("compendium.index.sync.sync_pending", lambda: None)
+    facade.ingest(kind="note", filename="x.md", content_base64=b64.b64encode(b"# Hi").decode())
+    assert seen == {"bytes": b"# Hi", "kind": "note"}
+
+
+def test_transports_contain_no_coercion():
+    from pathlib import Path
+
+    for transport in ("compendium/api/http.py", "compendium/api/mcp.py"):
+        text = (Path(__file__).resolve().parents[1] / transport).read_text()
+        assert "b64decode" not in text, transport
+        assert "import base64" not in text, transport
