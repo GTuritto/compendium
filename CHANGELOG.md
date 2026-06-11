@@ -35,6 +35,9 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
   field contract declared once in `documents.py` (wire bytes frozen,
   mapping test-pinned); retrieval reads hits through typed `DisplayFields`
   accessors. Behaviour-preserving.
+- **Arch (review #4, fix 4) — facade coercion**: ingest input coercion and
+  the page_get not-found convention live once in the access-surface facade;
+  the HTTP/MCP transports are pure transport. Behaviour-preserving.
 - **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
   — the full suite incl. golden plus a scripted end-to-end walk with the
   profilers on) runs on every `main` push and `v*` tag; the `distribution` job

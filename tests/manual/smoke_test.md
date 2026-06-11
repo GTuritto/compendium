@@ -517,3 +517,13 @@ changes no wire bytes and no rankings.
 | arch-ids.1 | Rankings unchanged | `reindex all`, then the standard covered query | identical coverage and top page to the pre-fix capture; golden tier identical |
 | arch-ids.2 | Writer/mapping/reader pinned | `uv run pytest tests/test_indexes.py -q` | wire-freeze, constants-agreement, mapping-agreement, and preview-accessor tests all pass |
 | arch-ids.3 | No raw field reads | `grep -n "f.get(" compendium/retrieve/pipeline.py` | no matches — retrieval reads hits through DisplayFields |
+
+## Arch — facade coercion (behaviour-preserving)
+
+Prerequisites: stores up; seeded corpus. Confirms ingest coercion + the
+not-found convention live once in the facade, with the surface unchanged.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-fc.1 | Surface unchanged | run the v0.2-7 walk (or `deploy/ci-smoke.sh` layer 3) | byte-identical responses: b64 ingest auto-syncs, missing input → 400 with "ingest requires 'path' or 'content_base64'", unknown page → HTTP 404 / MCP null |
+| arch-fc.2 | Transports coercion-free | `grep -n "b64decode\|import base64" compendium/api/http.py compendium/api/mcp.py` | no matches |
