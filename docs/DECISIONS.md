@@ -211,6 +211,15 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   retrieval; now it fails a test at construction. Hits stay dicts at the wire
   (accessors, not re-hydration); no reindex was needed.
 
+### Review-#4 fix 4 — facade-owned ingest coercion (arch/facade-ingest-coercion)
+
+- **The facade owns the whole verb contract.** `facade.ingest` accepts
+  `content_base64` + `filename`, decodes and validates with one typed error;
+  `page_get -> None` is the documented not-found decision (404/null are
+  per-transport renderings). *Why:* error modes are part of the interface —
+  one facade test now covers both transports, and the third transport on the
+  v0.3 roadmap (MCP-SSE / LAN HTTP) inherits the contract for free.
+
 ### The local profiler (post-v0.2, PR #63, 2026-06-11)
 
 Three opt-in halves, all standard-library, recorded here rather than as an ADR

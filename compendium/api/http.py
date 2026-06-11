@@ -15,7 +15,6 @@ bind a non-loopback interface but doing so is unsafe until then.
 
 from __future__ import annotations
 
-import base64
 import json
 from typing import Any
 
@@ -71,27 +70,16 @@ def create_app() -> Any:
         kind = payload.get("kind")
         if not kind:
             raise HTTPException(status_code=400, detail="missing 'kind'")
-        path = payload.get("path")
-        content_b64 = payload.get("content_base64")
-        if content_b64 is not None:
-            try:
-                content = base64.b64decode(content_b64)
-            except (ValueError, TypeError) as exc:
-                raise HTTPException(
-                    status_code=400, detail=f"invalid content_base64: {exc}"
-                ) from exc
+        try:
             result = facade.ingest(
-                content=content,
+                path=payload.get("path"),
+                content_base64=payload.get("content_base64"),
                 filename=payload.get("filename"),
                 kind=kind,
                 mine=bool(payload.get("mine", False)),
             )
-        elif path is not None:
-            result = facade.ingest(path=path, kind=kind, mine=bool(payload.get("mine", False)))
-        else:
-            raise HTTPException(
-                status_code=400, detail="ingest requires 'path' or 'content_base64'"
-            )
+        except ValueError as exc:  # the facade's one coercion error -> 400
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return to_payload(result)
 
     @app.get("/page_get")

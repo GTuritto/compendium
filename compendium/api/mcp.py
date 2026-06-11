@@ -15,7 +15,6 @@ annotations as real objects (not strings) lets ``Context | None`` resolve in the
 scope where ``Context`` is imported.
 """
 
-import base64
 import json
 from typing import Any
 
@@ -78,17 +77,16 @@ def build_server() -> Any:
         mine: bool = False,
     ) -> str:
         def _do() -> str:
-            if content_base64 is not None:
-                result = facade.ingest(
-                    content=base64.b64decode(content_base64),
-                    filename=filename,
-                    kind=kind,
-                    mine=mine,
-                )
-            elif path is not None:
-                result = facade.ingest(path=path, kind=kind, mine=mine)
-            else:
-                raise ValueError("ingest requires 'path' or 'content_base64'")
+            # Coercion and validation live in the facade
+            # (arch-facade-ingest-coercion); its ValueError propagates to the
+            # MCP client unchanged.
+            result = facade.ingest(
+                path=path,
+                content_base64=content_base64,
+                filename=filename,
+                kind=kind,
+                mine=mine,
+            )
             return _json(result)
 
         return await anyio.to_thread.run_sync(_do)

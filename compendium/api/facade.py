@@ -16,6 +16,7 @@ and write documents; everything else stays CLI-only (ADR-011).
 
 from __future__ import annotations
 
+import base64
 import os
 import tempfile
 from collections.abc import Callable
@@ -50,21 +51,31 @@ def ingest(
     *,
     path: str | None = None,
     content: bytes | None = None,
+    content_base64: str | None = None,
     filename: str | None = None,
     kind: str,
     mine: bool = False,
 ) -> Any:
-    """Ingest one source from a file path or raw bytes, then auto-run index sync.
+    """Ingest one source from a path, raw bytes, or base64 bytes; auto-run sync.
 
     A deliberate departure from the CLI's two-step (ADR-011): agents expect
     "I added it; query finds it", so this runs ``index sync`` for the affected
-    stores before returning. Raw ``content`` is written to a temp file derived
-    from ``filename`` (the ingestion core stays path-based) and removed after.
-    Returns the single ``IngestResult`` (or the list when a path expands to
-    several sources).
+    stores before returning. The facade owns the surface's input coercion
+    (arch-facade-ingest-coercion): ``content_base64`` is decoded here, and a
+    missing or invalid input raises ``ValueError`` with one message the
+    transports render natively (HTTP 400; MCP propagates). Raw ``content`` is
+    written to a temp file derived from ``filename`` (the ingestion core stays
+    path-based) and removed after. Returns the single ``IngestResult`` (or the
+    list when a path expands to several sources).
     """
     from compendium.index.sync import sync_pending
     from compendium.ingest.pipeline import ingest as _ingest
+
+    if content_base64 is not None:
+        try:
+            content = base64.b64decode(content_base64)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"invalid content_base64: {exc}") from exc
 
     if content is not None:
         tmpdir = tempfile.mkdtemp(prefix="compendium-ingest-")
@@ -85,7 +96,7 @@ def ingest(
     elif path is not None:
         results = _ingest(path, kind=kind, mine=mine)
     else:
-        raise ValueError("ingest requires either 'path' or 'content'")
+        raise ValueError("ingest requires 'path' or 'content_base64'")
 
     # Auto-sync so the new source is immediately retrievable by the next query.
     sync_pending()
@@ -96,7 +107,12 @@ def ingest(
 
 
 def page_get(kind: str, slug: str) -> dict[str, Any] | None:
-    """Frontmatter + body Markdown for one page, or None when it does not exist."""
+    """Frontmatter + body Markdown for one page, or ``None`` when absent.
+
+    ``None`` is the access surface's one not-found decision
+    (arch-facade-ingest-coercion); each transport renders it natively — HTTP
+    as 404, MCP as JSON ``null`` — without deciding independently.
+    """
     from compendium.db import repository
     from compendium.db.connection import connection
 
