@@ -131,12 +131,29 @@ def test_platform_detect_refuses_unsupported(monkeypatch) -> None:
 # --- status ---------------------------------------------------------------
 
 
-def test_status_when_unit_absent(monkeypatch, tmp_path) -> None:
+# The readers consume service_unit.probe_activity (arch-status-probe-routing):
+# tests inject recorded Probe values instead of monkeypatching subprocess, so
+# they run identically on any host, including CI runners.
+
+
+def _fake_probe(monkeypatch, probe) -> None:
+    import compendium.service_unit as su
     from compendium.schedule import status as status_module
 
-    # Force the macOS plist path to a tmp location that does not exist.
-    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: tmp_path / "absent.plist")
-    monkeypatch.setattr(status_module.sys, "platform", "darwin")
+    monkeypatch.setattr(su.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        status_module.service_unit, "probe_activity", lambda d, runner=None: probe
+    )
+
+
+def test_status_when_unit_absent(monkeypatch, tmp_path) -> None:
+    from compendium.schedule import status as status_module
+    from compendium.service_unit import Probe
+
+    _fake_probe(
+        monkeypatch,
+        Probe(loaded=False, unit_path=tmp_path / "absent.plist", returncode=-1),
+    )
     s = status_module.read_status()
     assert s.loaded is False
     assert s.state == "absent"
@@ -146,11 +163,7 @@ def test_status_when_unit_absent(monkeypatch, tmp_path) -> None:
 
 def test_status_parses_macos_launchctl_output(monkeypatch, tmp_path) -> None:
     from compendium.schedule import status as status_module
-
-    plist = tmp_path / "exists.plist"
-    plist.write_text("<plist/>")
-    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: plist)
-    monkeypatch.setattr(status_module.sys, "platform", "darwin")
+    from compendium.service_unit import Probe
 
     fake_stdout = """gui/501/com.compendium.curate = {
 \tactive count = 0
@@ -161,14 +174,12 @@ def test_status_parses_macos_launchctl_output(monkeypatch, tmp_path) -> None:
 \tlast exit code = (never exited)
 \trun interval = 1800 seconds
 """
-
-    class _Result:
-        returncode = 0
-        stdout = fake_stdout
-        stderr = ""
-
-    monkeypatch.setattr(status_module.subprocess, "run", lambda *a, **k: _Result())
-
+    plist = tmp_path / "exists.plist"
+    plist.write_text("<plist/>")
+    _fake_probe(
+        monkeypatch,
+        Probe(loaded=True, unit_path=plist, returncode=0, stdout=fake_stdout),
+    )
     s = status_module.read_status()
     assert s.loaded is True
     assert s.state == "not running"
@@ -180,22 +191,62 @@ def test_status_parses_macos_launchctl_output(monkeypatch, tmp_path) -> None:
 def test_status_when_launchctl_returns_nonzero(monkeypatch, tmp_path) -> None:
     """Plist exists on disk but the unit is not loaded into launchd."""
     from compendium.schedule import status as status_module
+    from compendium.service_unit import Probe
 
     plist = tmp_path / "exists.plist"
     plist.write_text("<plist/>")
-    monkeypatch.setattr(status_module, "_macos_plist_path", lambda: plist)
-    monkeypatch.setattr(status_module.sys, "platform", "darwin")
-
-    class _Result:
-        returncode = 1
-        stdout = ""
-        stderr = "service not found"
-
-    monkeypatch.setattr(status_module.subprocess, "run", lambda *a, **k: _Result())
-
+    _fake_probe(
+        monkeypatch,
+        Probe(
+            loaded=False, unit_path=plist, returncode=1,
+            stdout="", stderr="service not found",
+        ),
+    )
     s = status_module.read_status()
     assert s.loaded is False
     assert s.state == "not loaded"
+
+
+def test_status_parses_linux_activity_output(monkeypatch, tmp_path) -> None:
+    """The Linux branch parses status + list-timers output from one Probe."""
+    import compendium.service_unit as su
+    from compendium.schedule import status as status_module
+    from compendium.service_unit import Probe
+
+    timer = tmp_path / "compendium-curate.timer"
+    timer.write_text("[Timer]\nOnUnitActiveSec=1800\nPersistent=true\n")
+    fake_stdout = """● compendium-curate.timer - Compendium curate schedule
+     Loaded: loaded (/home/u/.config/systemd/user/compendium-curate.timer; enabled)
+     Active: active (waiting) since Wed 2026-06-11 12:00:00 UTC
+    Trigger: Wed 2026-06-11 12:30:00 UTC; 28min left
+   Triggers: ● compendium-curate.service
+
+NEXT                        LEFT      LAST                        PASSED  UNIT
+Wed 2026-06-11 12:30:00 UTC 28min --  Wed 2026-06-11 12:00:00 UTC 1min ago compendium-curate.timer
+"""
+    monkeypatch.setattr(su.sys, "platform", "linux")
+    monkeypatch.setattr(
+        status_module.service_unit, "probe_activity",
+        lambda d, runner=None: Probe(
+            loaded=True, unit_path=timer, returncode=0, stdout=fake_stdout
+        ),
+    )
+    s = status_module.read_status()
+    assert s.loaded is True
+    assert s.state == "active"
+    assert s.next_fire == "Wed 2026-06-11 12:30:00 UTC; 28min left"
+    assert s.last_fired == "compendium-curate.service"
+    assert s.interval_seconds == 1800
+
+
+def test_status_readers_own_no_subprocess() -> None:
+    """The routing contract: readers parse Probe.stdout, never shell out."""
+    from pathlib import Path
+
+    for reader in ("compendium/schedule/status.py", "compendium/api/service.py"):
+        text = (Path(__file__).resolve().parents[1] / reader).read_text()
+        assert "subprocess" not in text, reader
+        assert "sys.platform" not in text, reader
 
 
 def test_status_dataclass_to_dict_stringifies_path(tmp_path) -> None:

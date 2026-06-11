@@ -272,3 +272,38 @@ def test_platform_rejects_unsupported(monkeypatch) -> None:
         su.platform()
     assert excinfo.value.step == "platform"
     assert "freebsd14" in excinfo.value.detail
+
+
+def test_systemd_probe_activity_runs_status_and_timers_for_triggered_units(tmp_path, monkeypatch):
+    from compendium.service_unit import Interval, systemd
+
+    monkeypatch.setattr(systemd, "unit_dir", lambda: tmp_path)
+    desc = UnitDescriptor(
+        label="com.compendium.curate", linux_basename="compendium-curate",
+        program_args=["x"], working_dir=tmp_path, trigger=Interval(3600),
+        service_description="d", log_basename="curate",
+    )
+    (tmp_path / "compendium-curate.timer").write_text("[Timer]\n")
+    runner = FakeRunner()
+    probe = systemd.probe_activity(desc, runner=runner)
+    cmds = [" ".join(c) for c in runner.calls]
+    assert any("status compendium-curate.timer" in c for c in cmds)
+    assert any("list-timers --all compendium-curate.timer" in c for c in cmds)
+    assert probe.unit_path == tmp_path / "compendium-curate.timer"
+
+
+def test_systemd_probe_activity_skips_timers_for_alwayson(tmp_path, monkeypatch):
+    from compendium.service_unit import AlwaysOn, systemd
+
+    monkeypatch.setattr(systemd, "unit_dir", lambda: tmp_path)
+    desc = UnitDescriptor(
+        label="com.compendium.serve", linux_basename="compendium-serve",
+        program_args=["x"], working_dir=tmp_path, trigger=AlwaysOn(),
+        service_description="d", log_basename="serve",
+    )
+    (tmp_path / "compendium-serve.service").write_text("[Service]\n")
+    runner = FakeRunner()
+    systemd.probe_activity(desc, runner=runner)
+    cmds = [" ".join(c) for c in runner.calls]
+    assert any("status compendium-serve.service" in c for c in cmds)
+    assert not any("list-timers" in c for c in cmds)
