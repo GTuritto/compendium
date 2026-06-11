@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — compendium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <header class="space-y-4">
+        <h1 class="font-serif text-4xl">Architecture review — compendium</h1>
+        <p class="text-slate-500 text-sm">2026-06-11 · third deepening pass · v0.1 + v0.2 complete, arch fixes #48–#55 merged · honours the verdicts in <span class="font-mono">docs/architecture/review-2026-05-26*.md</span></p>
+        <p class="text-sm text-slate-600">Legend: solid box = module · dashed line = seam · <span class="text-red-600">red</span> = leakage / bypass · <span class="px-1 rounded bg-slate-900 text-slate-100">dark</span> = deep module.</p>
+        <details class="text-sm text-slate-600 border border-slate-200 rounded-lg px-4 py-3 bg-white">
+          <summary class="cursor-pointer font-medium text-slate-700">Reading key — the architecture vocabulary</summary>
+          <dl class="grid sm:grid-cols-2 gap-x-8 gap-y-2 mt-3">
+            <div><dt class="font-mono text-xs text-slate-500">depth</dt><dd>a lot of behaviour behind a small interface</dd></div>
+            <div><dt class="font-mono text-xs text-slate-500">shallow</dt><dd>interface nearly as complex as the implementation</dd></div>
+            <div><dt class="font-mono text-xs text-slate-500">seam</dt><dd>where an interface lives; behaviour altered without editing in place</dd></div>
+            <div><dt class="font-mono text-xs text-slate-500">leverage</dt><dd>what callers get: one interface, N call sites</dd></div>
+            <div><dt class="font-mono text-xs text-slate-500">locality</dt><dd>what maintainers get: change &amp; bugs concentrate in one place</dd></div>
+            <div><dt class="font-mono text-xs text-slate-500">deletion test</dt><dd>delete it — complexity vanishes (pass-through) or reappears (earns keep)?</dd></div>
+          </dl>
+        </details>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+
+        <!-- ============================ CARD 1 ============================ -->
+        <article id="c1" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-8 pt-8 pb-7 space-y-6">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <h2 class="font-serif text-3xl">1 · One chat-completion envelope behind the model-client seam</h2>
+              <div class="flex gap-2">
+                <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Strong</span>
+                <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+              </div>
+            </div>
+            <p class="font-mono text-sm text-slate-500">answer/llm.py · wiki/synth.py · curate/extract.py · model_clients.py</p>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — the envelope copied 5×</p>
+                <pre class="mermaid">
+flowchart TD
+  A["LLMAnswerer<br/>rewrite · compose · stream"]
+  S["LLMSynthesizer<br/>synthesize"]
+  E["LLMExtractor<br/>label"]
+  A -->|"OpenAI(...) ctor + create() + usage"| O1["openai client #1"]
+  S -->|"OpenAI(...) ctor + create()"| O2["openai client #2"]
+  E -->|"OpenAI(...) ctor + create()"| O3["openai client #3"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class O1,O2,O3 leak
+                </pre>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — prompt builders over one deep call</p>
+                <pre class="mermaid">
+flowchart TD
+  A2["answerer<br/>prompts + parse"] --> CH["chat(system, user,<br/>on_token=None) → Completion"]
+  S2["synthesizer<br/>prompts + parse"] --> CH
+  E2["extractor<br/>prompts + parse"] --> CH
+  CH --> O["one openai client<br/>+ usage accounting"]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class CH deep
+                </pre>
+              </div>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">Three byte-identical client constructions and five copies of the chat-completion envelope; token accounting exists in one path out of three.</p></div>
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">One <code>chat(system, user, *, on_token=None) → Completion</code> module beside the model-client registry; the three classes shrink to prompt builders and parsers.</p></div>
+            </div>
+
+            <ul class="text-sm text-slate-700 grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside">
+              <li>locality: envelope and usage rules live once</li>
+              <li>leverage: one interface, five call sites</li>
+              <li>synth + extract gain token accounting free</li>
+              <li>streaming variant exercised in one place</li>
+              <li>deletion test: copies reappear 5×</li>
+            </ul>
+
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-6 space-y-4 text-[15px] leading-relaxed text-slate-700">
+              <p class="text-xs uppercase tracking-wider text-slate-500 font-medium">The reasoning</p>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What's there now</p>
+                <p>The line <code>self._client = OpenAI(base_url=endpoint, api_key=api_key or "not-needed")</code> appears verbatim at <code>answer/llm.py:90</code>, <code>wiki/synth.py:59</code>, and <code>curate/extract.py:183</code>. Around it, the same mechanical envelope — <code>chat.completions.create(model=…, messages=[system, user])</code> then <code>choices[0].message.content or ""</code> — repeats five times: rewrite (<code>llm.py:94-108</code>), buffered compose (<code>llm.py:121-131</code>), streaming compose (<code>llm.py:133-154</code>), synthesize (<code>synth.py:62-79</code>), label (<code>extract.py:186-198</code>). The <code>Completion</code> dataclass and the <code>usage</code>-or-<code>_approx_tokens</code> fallback (<code>llm.py:25-36</code>) exist only in the answerer; the synthesizer and extractor discard <code>response.usage</code>, so two of the three paid LLM paths leave no token trail for <code>cost.py</code> to price.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What changes</p>
+                <p>One deep function — roughly <code>chat(role_cfg, system, user, *, on_token=None) → Completion</code> — owns client construction, the create call, the streaming loop with <code>include_usage</code>, and the usage fallback. <code>Completion</code> moves to that shared home. Everything role-specific stays put: the <code>Answerer</code>/<code>Synthesizer</code>/<code>Extractor</code> protocols, the stub classes, the prompts, <code>_parse_labels</code>, and the <code>get_model_client</code> registry (PR #54), which keeps owning stub-or-real selection — this candidate adds the mechanical call <em>behind</em> that seam, it does not reopen it.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">Why</p>
+                <p>The <strong>deletion test</strong> passes cleanly: delete the helper and the envelope reappears at five call sites in three modules. <strong>Locality:</strong> retry/error/usage conventions, when they evolve (and the live tier says they will), change in one place. <strong>Leverage:</strong> the streaming path — the trickiest copy — is tested once and reused; the extractor and synthesizer get token accounting without writing it. The hermetic tier is untouched because the stubs never cross this seam.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============================ CARD 2 ============================ -->
+        <article id="c2" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-8 pt-8 pb-7 space-y-6">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <h2 class="font-serif text-3xl">2 · Route the status readers through the probe() seam they were built for</h2>
+              <div class="flex gap-2">
+                <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Strong</span>
+                <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">local-substitutable</span>
+              </div>
+            </div>
+            <p class="font-mono text-sm text-slate-500">service_unit/__init__.py · schedule/status.py · api/service.py</p>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — two readers bypass the seam</p>
+                <pre class="mermaid">
+flowchart TD
+  SS["schedule/status.py"] -.->|"own sys.platform +<br/>subprocess.run(launchctl print)"| OS1["launchctl / systemctl"]
+  AS["api/service.py"] -.->|"own sys.platform +<br/>subprocess.run(launchctl print)"| OS1
+  IN["inbox/install.py"] --> PR["service_unit.probe / loaded<br/>(injectable Runner)"]
+  PR --> OS1
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class SS,AS leak
+  class PR deep
+                </pre>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — parse Probe.stdout, never subprocess</p>
+                <pre class="mermaid">
+flowchart TD
+  SS2["schedule status<br/>field regexes only"] --> PR2["service_unit.probe(descriptor)<br/>→ Probe(loaded, stdout, …)"]
+  AS2["serve status<br/>host/port parse only"] --> PR2
+  IN2["inbox watcher_loaded"] --> PR2
+  PR2 --> RU["Runner (fakeable)"] --> OS2["launchctl / systemctl"]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class PR2 deep
+                </pre>
+              </div>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">The seam exposes <code>probe()</code> exactly for status readers, with an injectable Runner — and zero readers use it; two re-implement platform dispatch and the scheduler-CLI calls.</p></div>
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">Both readers consume <code>Probe</code>; their field-extraction regexes stay. On Linux the seam grows the richer probe the readers actually need.</p></div>
+            </div>
+
+            <ul class="text-sm text-slate-700 grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside">
+              <li>deletes duplicated platform dispatch ×2</li>
+              <li>status readers testable via fake Runner</li>
+              <li>locality: scheduler CLI quirks live once</li>
+              <li>deletion test: probing reappears per reader</li>
+              <li>finishes PR #48's documented intent</li>
+            </ul>
+
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-6 space-y-4 text-[15px] leading-relaxed text-slate-700">
+              <p class="text-xs uppercase tracking-wider text-slate-500 font-medium">The reasoning</p>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What's there now</p>
+                <p><code>service_unit.probe()</code> (<code>service_unit/__init__.py:86-94</code>) returns a <code>Probe</code> whose docstring reads "the raw scheduler-CLI output the service parses for interval / next-fire / host:port" (<code>errors.py:37-48</code>) — and it takes an injectable <code>Runner</code> so tests never touch a real launchctl. Its only caller outside the package is <code>inbox/install.py:105</code>. Meanwhile <code>schedule/status.py</code> dispatches on <code>sys.platform</code> itself (line 50) and runs <code>launchctl print gui/&lt;uid&gt;/…</code> directly (lines 85-86) — the <em>identical command</em> <code>launchd.probe</code> runs at <code>launchd.py:137</code> — and <code>api/service.py</code> does the same dance again (platform dispatch at 162-164, launchctl at 139, <code>systemctl is-active</code> at 152-153). Both re-derive <code>loaded</code> by hand and neither can be tested without monkeypatching <code>subprocess</code>.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What changes</p>
+                <p>Both readers call <code>service_unit.probe(descriptor)</code> and parse <code>Probe.stdout</code>. Their rich field extraction — the interval/next-fire regexes, <code>_parse_host_port</code> — stays in each service, exactly as the seam's docstring assigns it. The one real design point: on Linux, <code>systemd.probe</code> runs <code>is-enabled</code>, but the schedule reader needs <code>status</code> + <code>list-timers</code> output — so the seam grows a second probe shape (or a probe verb parameter) rather than readers owning subprocess. On macOS it is a drop-in.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">Why</p>
+                <p>This is finishing an existing seam, not adding one — three adapters (schedule, serve, inbox) make it unambiguously real. <strong>The interface is the test surface:</strong> with the Runner injected at the seam, status readers become pure parsers over recorded CLI output, which is precisely the part worth regression-testing (the smoke notes already record launchd quirks). <strong>Locality:</strong> when launchctl output shifts across macOS releases, the fix lands in one adapter, not two readers. The <strong>deletion test</strong> on the bypassed code passes today in reverse: the duplicated probing can be deleted with <em>no</em> complexity reappearing, because the seam already holds it.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============================ CARD 3 ============================ -->
+        <article id="c3" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-8 pt-8 pb-7 space-y-6">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <h2 class="font-serif text-3xl">3 · Name the index-document shape once</h2>
+              <div class="flex gap-2">
+                <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+                <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+              </div>
+            </div>
+            <p class="font-mono text-sm text-slate-500">index/documents.py · index/opensearch.py · retrieve/search.py · retrieve/pipeline.py</p>
+
+            <!-- hand-built: same field names restated in four places -->
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — one implicit shape, four restatements</p>
+                <div class="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div class="border-2 border-red-300 rounded p-2">
+                    <p class="uppercase tracking-wider text-slate-400 mb-1">documents.py builders</p>
+                    <p class="text-slate-700">"title" "slug" "status"<br/>"body" / "body_preview"</p>
+                  </div>
+                  <div class="border-2 border-red-300 rounded p-2">
+                    <p class="uppercase tracking-wider text-slate-400 mb-1">opensearch.py mappings</p>
+                    <p class="text-slate-700">"title" "slug" "status"<br/>"body" …</p>
+                  </div>
+                  <div class="border-2 border-red-300 rounded p-2">
+                    <p class="uppercase tracking-wider text-slate-400 mb-1">search.py field lists</p>
+                    <p class="text-slate-700">["title^2","aliases","body"]</p>
+                  </div>
+                  <div class="border-2 border-red-300 rounded p-2">
+                    <p class="uppercase tracking-wider text-slate-400 mb-1">pipeline.py consumers</p>
+                    <p class="text-slate-700">f.get("title", "")<br/>f.get("body") or f.get("body_preview")</p>
+                  </div>
+                </div>
+                <p class="text-[11px] text-red-600 mt-2">a renamed field silently returns "" — no test fails</p>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — one named shape, three derivations</p>
+                <div class="flex flex-col items-center gap-2">
+                  <div class="deep text-slate-100 rounded p-3 text-xs font-mono w-2/3 text-center">PageDoc / ChunkDoc<br/><span class="text-slate-400">the field contract, typed once</span></div>
+                  <svg width="200" height="24"><line x1="100" y1="0" x2="20" y2="24" stroke="#94a3b8" class="seam"/><line x1="100" y1="0" x2="100" y2="24" stroke="#94a3b8" class="seam"/><line x1="100" y1="0" x2="180" y2="24" stroke="#94a3b8" class="seam"/></svg>
+                  <div class="grid grid-cols-3 gap-2 text-[10px] font-mono w-full text-center">
+                    <div class="border border-slate-300 rounded p-2">to OpenSearch doc<br/><span class="text-slate-400">ISO ts</span></div>
+                    <div class="border border-slate-300 rounded p-2">to Qdrant payload<br/><span class="text-slate-400">unix-ms, preview</span></div>
+                    <div class="border border-slate-300 rounded p-2">typed hit reader<br/><span class="text-slate-400">pipeline consumes</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">The page/chunk document shape exists only as matching string keys across writer, mappings, search field lists, and <code>.get()</code> consumers — an untyped seam with silent-default failure.</p></div>
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">Declare the shape once in <code>documents.py</code> (typed record or field constants); derive both store dicts and the hit readers from it. Wire format stays byte-identical.</p></div>
+            </div>
+
+            <ul class="text-sm text-slate-700 grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside">
+              <li>field drift fails at construction, not silently</li>
+              <li>locality: shape evolution touches one module</li>
+              <li>per-store body/body_preview split stops leaking</li>
+              <li>deletion test: shape reappears in 4 files</li>
+            </ul>
+
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-6 space-y-4 text-[15px] leading-relaxed text-slate-700">
+              <p class="text-xs uppercase tracking-wider text-slate-500 font-medium">The reasoning</p>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What's there now</p>
+                <p>The page shape is written four times: <code>page_document</code>/<code>page_payload</code> restate eleven shared keys (<code>documents.py:42-82</code>); the OpenSearch mappings restate the names with analyzer config (<code>opensearch.py:60-77</code>); search restates the searchable subset (<code>_PAGE_FIELDS</code>, <code>search.py:28-29</code>); and the pipeline reads it all back through <code>Hit.fields: dict[str, Any]</code> (<code>search.py:38</code>) with silent defaults — <code>f.get("title", "")</code> (<code>pipeline.py:97</code>). The per-store difference even leaks past the seam: <code>_chunk_citation</code> must know OpenSearch carries <code>body</code> while Qdrant carries <code>body_preview</code> (<code>pipeline.py:108</code>). Rename a field in one of the four and retrieval degrades to empty strings; nothing fails until the golden tier notices rankings drift.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What changes</p>
+                <p>One declaration of the shape in <code>documents.py</code> — a frozen record per entity kind is the obvious form, with <code>to_opensearch()</code>/<code>to_qdrant_payload()</code> adapters owning the ISO-vs-unix-ms and body-vs-preview differences, and a typed reader for hits coming back. The wire JSON, the mappings' analyzer config, the StoreProjector registry (PR #25), and RRF fusion all stay put; the exact form (records vs a constants module) is a grilling-loop decision because re-hydrating store responses has a small cost the hot path should choose deliberately.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">Why</p>
+                <p>Today the interface between projection and retrieval is invisible — it lives in string literals four files apart, so <strong>the test surface doesn't exist</strong>: nothing can assert "writer and reader agree" except an end-to-end query. The <strong>deletion test</strong> passes: drop the named shape and the contract re-disperses into all four sites. <strong>Locality:</strong> v0.2 Phase 5 already grew this shape once (aliases for synonyms); the next retrieval-tuning phase will again, and it should be a one-module change. This is also the highest AI-navigability win in the report: the answer to "what fields does a page hit carry?" becomes one definition.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ============================ CARD 4 ============================ -->
+        <article id="c4" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-8 pt-8 pb-7 space-y-6">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <h2 class="font-serif text-3xl">4 · Finish the facade: input coercion and error modes live once</h2>
+              <div class="flex gap-2">
+                <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Worth exploring</span>
+                <span class="px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+              </div>
+            </div>
+            <p class="font-mono text-sm text-slate-500">api/facade.py · api/http.py · api/mcp.py</p>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — the ingest tree copied per transport</p>
+                <pre class="mermaid">
+flowchart TD
+  H["http.py /ingest<br/>b64? decode : path? : 400"]
+  M["mcp.py ingest<br/>b64? decode : path? : raise"]
+  H --> F["facade.ingest(path|content)"]
+  M --> F
+  H2["http page_get → 404"] -.drift.- M2["mcp page_get → null"]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class H,M,H2,M2 leak
+                </pre>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-white p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">After — coercion inside the facade</p>
+                <pre class="mermaid">
+flowchart TD
+  H3["http.py — transport only<br/>(routes, streaming response)"] --> F2["facade.ingest(kind, path,<br/>content_base64, filename, mine)<br/>+ one not-found convention"]
+  M3["mcp.py — transport only<br/>(tool schemas, anyio offload)"] --> F2
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class F2 deep
+                </pre>
+              </div>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">The facade promises the transports cannot drift, yet the ingest decision tree is duplicated in both, and <code>page_get</code>'s not-found behaviour has already drifted (HTTP 404 vs MCP <code>null</code>).</p></div>
+              <div><p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">The facade absorbs base64 decoding, the path-or-bytes validation, and a single documented not-found convention; transports keep only transport-native concerns.</p></div>
+            </div>
+
+            <ul class="text-sm text-slate-700 grid sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside">
+              <li>error modes become part of one interface</li>
+              <li>facade tests cover both transports' semantics</li>
+              <li>deletes the duplicated decision tree</li>
+              <li>deletion test: tree reappears per transport</li>
+            </ul>
+
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-6 space-y-4 text-[15px] leading-relaxed text-slate-700">
+              <p class="text-xs uppercase tracking-wider text-slate-500 font-medium">The reasoning</p>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What's there now</p>
+                <p>The facade's own docstring states the contract: "The MCP and HTTP transports are thin shells over this module; neither holds business logic, so the two surfaces cannot drift" (<code>facade.py:6-8</code>). Mostly true — most verbs are one-liners. But the ingest input logic (decode <code>content_base64</code>, choose path-vs-bytes, reject neither) is written twice, at <code>http.py:74-94</code> and <code>mcp.py:80-92</code>, with separately-maintained error text. And drift is not hypothetical: on a missing page, HTTP raises 404 (<code>http.py:100-101</code>) while MCP returns JSON <code>null</code> (<code>mcp.py:97-98</code>). Error modes are part of the interface, and right now each transport defines its own.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">What changes</p>
+                <p><code>facade.ingest</code> grows to accept the surface's actual input shape (<code>content_base64</code> + <code>filename</code> alongside <code>path</code>) and owns decoding and the either/or validation with one error message; the facade documents one not-found convention for <code>page_get</code> that both transports express natively (404 / null are fine as <em>renderings</em> of one decision, made once). What stays put: the six-verb set (ADR-011), <code>to_payload</code> serialization, the chunked-HTTP and MCP-notification streaming bridges — those are genuinely transport-native, as review work confirmed.</p>
+              </div>
+              <div>
+                <p class="font-semibold text-slate-900 text-sm mb-1">Why</p>
+                <p>The facade is the access surface's interface, and <strong>the interface is the test surface</strong>: today "rejects ingest with neither path nor bytes" must be tested per transport or goes untested. After the move, one facade test covers both callers — <strong>leverage</strong>. The <strong>deletion test</strong> passes: inline the coercion and it reappears in two transports (three when a future transport lands — ADR-011 defers MCP-SSE and LAN HTTP to v0.3, so the third adapter is already on the roadmap). No tension with ADR-011; this enforces the no-drift promise it already makes.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============================ VERDICTS ============================ -->
+      <section id="verdicts" class="space-y-4">
+        <h2 class="font-serif text-2xl">Re-affirmed and rejected this pass</h2>
+        <p class="text-sm text-slate-600">Recorded so future reviews stop re-suggesting them (per the standing reconcile-reviews rule).</p>
+        <div class="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 text-sm text-slate-700">
+          <div class="px-5 py-3"><span class="font-medium text-slate-900">Off-queue graph rebuild — leave as is.</span> Review #2's deferred half, reassessed post-ADR-013: semantic edges now replay from PostgreSQL (<span class="font-mono">rebuild.py:54</span>), a failed rebuild is rerunnable and loses nothing, and queueing the full rebuild would move ~50 lines out of <span class="font-mono">rebuild.py</span> while adding more orchestration to <span class="font-mono">sync.py</span>. The asymmetry is benign; this closes the open item.</div>
+          <div class="px-5 py-3"><span class="font-medium text-slate-900">Per-entity query DSL in <span class="font-mono">retrieve/search.py</span> — leave as is.</span> Fails the deletion test: collapse pages/chunks builders and an if/else on entity kind reappears at every call site; the deprecated-page filter is a real semantic difference, not duplication.</div>
+          <div class="px-5 py-3"><span class="font-medium text-slate-900">Reachability-check dedup — leave as is.</span> Three five-line try/excepts across sync/async/graph clients; an abstraction would be larger than the duplication it removes.</div>
+          <div class="px-5 py-3"><span class="font-medium text-slate-900">Caching the profiling flag at import time — rejected; the per-call env read is load-bearing.</span> <span class="font-mono">--profile</span> sets <span class="font-mono">COMPENDIUM_PROFILE</span> inside <span class="font-mono">main()</span>, after the pipeline modules (and <span class="font-mono">profiling.py</span>) have already imported; a module-level flag would freeze it to off. The uncommitted profiling seam itself is sound: <span class="font-mono">timed()</span>'s sink reuses the existing <span class="font-mono">latencies_ms</span> trace field rather than inventing a parallel channel.</div>
+        </div>
+      </section>
+
+      <!-- ============================ TOP REC ============================ -->
+      <section id="top-recommendation" class="rounded-2xl deep text-slate-100 px-8 py-8 space-y-3">
+        <p class="text-xs uppercase tracking-wider text-slate-400">Top recommendation</p>
+        <h2 class="font-serif text-3xl"><a href="#c1" class="underline decoration-slate-500 underline-offset-4">1 · One chat-completion envelope behind the model-client seam</a></h2>
+        <p class="text-slate-300 text-[15px] leading-relaxed max-w-3xl">Highest leverage of the four: one interface absorbs five envelope copies across three modules, the streaming path gets tested once, and the token-accounting asymmetry closes as a side effect — all behind protocols and stubs that already exist, so the hermetic tier doesn't move. Then candidate 2, which is mostly deletion: the probe() seam is already built and waiting for its callers.</p>
+      </section>
+
+      <footer class="text-xs text-slate-400 pb-8">compendium · architecture review (explanatory variant) · 2026-06-11 · evidence verified against working tree at feat/local-profiler</footer>
+    </main>
+  </body>
+</html>
