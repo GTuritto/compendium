@@ -58,23 +58,23 @@ STEP="migrations to head"
 uv run alembic upgrade head >/dev/null 2>&1 && pass || fail "alembic failed"
 
 STEP="ingest a PDF (stored)"
-OUT=$($C ingest tests/fixtures/sample.pdf --kind paper 2>/dev/null)
+OUT=$($C ingest tests/fixtures/sample.pdf --kind paper 2>/dev/null || true)
 grep -q "1 stored\|1 unchanged" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="re-ingest is idempotent (unchanged)"
-OUT=$($C ingest tests/fixtures/sample.pdf --kind paper 2>/dev/null)
+OUT=$($C ingest tests/fixtures/sample.pdf --kind paper 2>/dev/null || true)
 grep -q "1 unchanged" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="broken source fails without crashing"
-OUT=$($C ingest tests/fixtures/broken.pdf --kind paper 2>/dev/null)
+OUT=$($C ingest tests/fixtures/broken.pdf --kind paper 2>/dev/null || true)
 grep -q "1 failed\|1 unchanged" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="authored provenance (--mine)"
-OUT=$($C ingest tests/fixtures/sample.md --kind note --mine 2>/dev/null)
+OUT=$($C ingest tests/fixtures/sample.md --kind note --mine 2>/dev/null || true)
 grep -q "stored\|unchanged" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="directory ingest handles every file"
-OUT=$($C ingest tests/fixtures/ 2>/dev/null)
+OUT=$($C ingest tests/fixtures/ 2>/dev/null || true)
 grep -q "5 source(s)" <<<"$OUT" && pass || fail "$OUT"
 
 need "pages build exits clean" sh -c "$C pages build >/dev/null 2>&1"
@@ -87,11 +87,11 @@ $C synth concept "psychological safety" >/dev/null 2>&1 \
 need "reindex all" sh -c "$C reindex all >/dev/null 2>&1"
 
 STEP="index status reports counts"
-OUT=$($C index status 2>/dev/null)
+OUT=$($C index status 2>/dev/null || true)
 grep -q "opensearch/pages" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="covered query, no fallback"
-OUT=$($C query "psychological safety" 2>/dev/null)
+OUT=$($C query "psychological safety" 2>/dev/null || true)
 grep -q "coverage 0\.[1-9]\|coverage 1\." <<<"$OUT" && ! grep -q "chunk fallback" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="timed spans fire (--timings)"
@@ -109,7 +109,7 @@ assert d['pages']
 need "graph rebuild" sh -c "$C graph rebuild >/dev/null 2>&1"
 
 STEP="graph status shows structural edges"
-OUT=$($C graph status 2>/dev/null)
+OUT=$($C graph status 2>/dev/null || true)
 grep -qE "GROUNDS: [1-9]" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="trace list + replay"
@@ -123,7 +123,7 @@ if $C page promote psychological-safety --to canonical >/dev/null 2>&1; then fai
 need "curate run (signals + extraction)" sh -c "$C curate run >/dev/null 2>&1"
 
 STEP="ask composes with citations (stub)"
-OUT=$($C ask "What is psychological safety?" 2>/dev/null)
+OUT=$($C ask "What is psychological safety?" 2>/dev/null || true)
 grep -q "citations:" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="ask JSON contract"
@@ -134,7 +134,7 @@ assert all(k in d for k in ('answer','refused','citations','coverage_score','tra
 " && pass || fail "missing keys"
 
 STEP="profile stats aggregates the walk"
-OUT=$($C profile stats --days 1 2>/dev/null)
+OUT=$($C profile stats --days 1 2>/dev/null || true)
 grep -q "retrieval:" <<<"$OUT" && grep -q "ingest.parse" <<<"$OUT" && pass || fail "$OUT"
 
 STEP="profile stats JSON"
@@ -153,7 +153,7 @@ INBOX=$(mktemp -d)
 mkdir -p "$INBOX"/{book,article,paper,note,web,processed,failed}
 cp tests/fixtures/sample.epub "$INBOX/book/"
 echo "NOT-A-PDF-$(date +%s)" > "$INBOX/paper/garbage.pdf"
-OUT=$($C inbox process --path "$INBOX" 2>/dev/null)
+OUT=$($C inbox process --path "$INBOX" 2>/dev/null || true)
 TODAY=$(date -u +%Y-%m-%d)
 { ls "$INBOX/processed/$TODAY/" 2>/dev/null | grep -q "sample.epub" || grep -q "processed=0" <<<"$OUT"; } \
   && ls "$INBOX/failed/$TODAY/" | grep -q "garbage.pdf.error" && pass || fail "$OUT"
