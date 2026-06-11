@@ -91,27 +91,24 @@ def _embedding_model_name() -> str:
 
 
 def _page_result(fused: FusedHit) -> PageResult:
-    f = fused.fields
     return PageResult(
         entity_id=fused.entity_id,
-        title=f.get("title", ""),
-        slug=f.get("slug", ""),
-        kind=f.get("kind", ""),
-        status=f.get("status", ""),
+        title=fused.title,
+        slug=fused.slug,
+        kind=fused.kind,
+        status=fused.status,
         score=fused.score,
         ranks=dict(fused.ranks),
     )
 
 
 def _chunk_citation(fused: FusedHit) -> ChunkCitation:
-    f = fused.fields
-    preview = f.get("body") or f.get("body_preview") or ""
     return ChunkCitation(
         entity_id=fused.entity_id,
-        source_title=f.get("source_title"),
-        position=f.get("position"),
+        source_title=fused.source_title,
+        position=fused.position,
         score=fused.score,
-        preview=" ".join(preview.split())[:200],
+        preview=" ".join(fused.preview.split())[:200],
     )
 
 
