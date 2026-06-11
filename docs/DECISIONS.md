@@ -191,6 +191,15 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   schema decision). Fallback-only normalization: the no-usage heuristic now
   approximates from the actual user message.
 
+### Review-#4 fix 2 — status readers through the probe seam (arch/status-probe-routing)
+
+- **Probing moved to the seam; field extraction stays per-service.** The
+  schedule and serve status readers consume `service_unit.probe_activity`
+  (macOS: `launchctl print`; Linux: `status` + `list-timers` for triggered
+  units) and own no subprocess or platform dispatch. *Why:* the interface is
+  the test surface — readers become pure parsers over recorded CLI output,
+  testable on CI runners; scheduler quirks get one home.
+
 ### The local profiler (post-v0.2, PR #63, 2026-06-11)
 
 Three opt-in halves, all standard-library, recorded here rather than as an ADR
