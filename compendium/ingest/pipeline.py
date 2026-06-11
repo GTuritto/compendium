@@ -47,6 +47,11 @@ def _settings() -> dict[str, object]:
     return settings
 
 
+def _rounded(stage_ms: dict[str, float]) -> dict[str, float]:
+    """Stage durations rounded for the JSONB metadata write."""
+    return {stage: round(ms, 3) for stage, ms in stage_ms.items()}
+
+
 def ingest(path: str, *, kind: str, mine: bool = False) -> list[IngestResult]:
     """Ingest a file, a URL, or a directory; one result per source."""
     if not _is_url(path):
@@ -80,6 +85,11 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
     content_hash = hash_bytes(raw_bytes)
     mime = mime_type_for(path)
     metadata: dict[str, object] = {"authored_by_me": True} if mine else {}
+    # Per-stage wall-clock, persisted on the source row (metadata["stage_ms"])
+    # so `compendium profile stats` can aggregate ingest latency after the
+    # fact. The store stage itself cannot be in the row it writes; it stays a
+    # log-only span.
+    stage_ms: dict[str, float] = {}
 
     with connection() as conn:
         existing = repository.get_source_by_content_hash(conn, content_hash)
@@ -93,9 +103,10 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
         prior_id = repository.get_source_id_by_document_path(conn, path)
 
         try:
-            with timed("ingest.parse", path=path):
+            with timed("ingest.parse", sink=stage_ms, path=path):
                 parsed = parse_source(path)
         except (ParseError, UnsupportedFormatError) as exc:
+            metadata["stage_ms"] = _rounded(stage_ms)
             source_id = _store(
                 conn, path, kind=kind, title=_fallback_title(path),
                 content_hash=content_hash, mime=mime, byte_size=len(raw_bytes),
@@ -104,7 +115,7 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, str(exc))
 
-        with timed("ingest.inspect", path=path):
+        with timed("ingest.inspect", sink=stage_ms, path=path):
             result = inspect(
                 parsed, raw_bytes,
                 max_source_bytes=cfg["max_source_bytes"],
@@ -115,6 +126,7 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             metadata["author_detected"] = parsed.metadata["author"]
 
         if result.is_failed:
+            metadata["stage_ms"] = _rounded(stage_ms)
             source_id = _store(
                 conn, path, kind=kind, title=title, content_hash=content_hash,
                 mime=mime, byte_size=len(raw_bytes), metadata=metadata,
@@ -123,12 +135,13 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, result.notes)
 
-        with timed("ingest.chunk", path=path):
+        with timed("ingest.chunk", sink=stage_ms, path=path):
             chunks = chunk_sections(
                 parsed.sections,
                 target_tokens=cfg["target_tokens"],
                 overlap_tokens=cfg["overlap_tokens"],
             )
+        metadata["stage_ms"] = _rounded(stage_ms)
         with timed("ingest.store", path=path, chunks=len(chunks)):
             source_id = _store(
                 conn, path, kind=kind, title=title, content_hash=content_hash,
