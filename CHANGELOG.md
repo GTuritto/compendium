@@ -24,6 +24,12 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
   reports). Standard library only; no new stores; no ADR (posture-neutral).
 - **Stack lifecycle verbs** (PR #63): `compendium start|stop|restart` as thin
   adapters over `deploy/compendiumctl`.
+- **Smoke-gated distribution pipeline**: a `smoke` CI job (`deploy/ci-smoke.sh`
+  — the full suite incl. golden plus a scripted end-to-end walk with the
+  profilers on) runs on every `main` push and `v*` tag; the `distribution` job
+  builds `deploy/make-bundle.sh` only when smoke is green, uploading the bundle
+  as a workflow artifact and publishing a GitHub Release on tags. The committed
+  `2Deploy/` bundle is refreshed from current `main`.
 
 The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
 record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase

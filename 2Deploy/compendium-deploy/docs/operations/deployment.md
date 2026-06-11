@@ -75,6 +75,10 @@ deploy/compendiumctl restart
 deploy/compendiumctl logs        # tail ~/Library/Logs/compendium/*.log
 ```
 
+The same lifecycle is available as CLI verbs — `compendium start`, `compendium
+stop`, `compendium restart` — thin adapters that delegate to
+`deploy/compendiumctl` and propagate its exit code (PR #63).
+
 Once installed, the units persist across reboots and run on their own; the only
 thing that may need a manual `start` after a reboot is the docker stores (unless
 Docker Desktop is set to launch at login).

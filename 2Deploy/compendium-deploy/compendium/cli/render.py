@@ -425,3 +425,129 @@ def curate_list(rows: list[dict], fmt: Format = "text") -> str:
     ]
     lines.append(f"curate list: {len(rows)} open signal(s)")
     return "\n".join(lines)
+
+
+def _fmt_ms(value: Any) -> str:
+    """A millisecond duration to one place, or ``-`` when absent."""
+    return f"{float(value):.1f}" if value is not None else "-"
+
+
+def _fmt_rate(value: Any) -> str:
+    """A 0..1 rate as a percentage, or ``-`` when absent."""
+    return f"{float(value) * 100:.1f}%" if value is not None else "-"
+
+
+def _stage_table(stages: list[dict]) -> str:
+    return _aligned(
+        ["stage", "n", "avg ms", "p95 ms"],
+        [
+            [s["stage"], str(s["n"]), _fmt_ms(s["avg_ms"]), _fmt_ms(s["p95_ms"])]
+            for s in stages
+        ],
+    )
+
+
+def profile_stats(report: Any, fmt: Format = "text") -> str:
+    if fmt == "json":
+        return to_json(report)
+
+    lines = [f"performance stats — last {report.days} day(s)", ""]
+
+    r = report.retrieval
+    if r.get("n"):
+        coverage = (
+            fmt_coverage(float(r["avg_coverage"]))
+            if r.get("avg_coverage") is not None
+            else "-"
+        )
+        lines.append(
+            f"retrieval: {r['n']} query(ies), fallback {_fmt_rate(r['fallback_rate'])}, "
+            f"avg coverage {coverage}"
+        )
+        lines.append(_stage_table(report.retrieval_stages))
+        per_day = ", ".join(f"{d['day']}: {d['n']}" for d in report.retrieval_per_day)
+        lines.append(f"per day: {per_day}")
+    else:
+        lines.append("retrieval: no queries in the window")
+    if report.retrieval_grouped:
+        lines.append("")
+        lines.append(
+            _aligned(
+                [report.by or "group", "n", "fallback", "avg coverage"],
+                [
+                    [
+                        str(g["grp"] or "-"), str(g["n"]),
+                        _fmt_rate(g["fallback_rate"]),
+                        fmt_coverage(
+                            float(g["avg_coverage"])
+                            if g["avg_coverage"] is not None else None
+                        ),
+                    ]
+                    for g in report.retrieval_grouped
+                ],
+            )
+        )
+
+    lines.append("")
+    a = report.ask
+    if a.get("n"):
+        lines.append(
+            f"ask: {a['n']} question(s), refusals {_fmt_rate(a['refusal_rate'])}, "
+            f"tokens {a['input_tokens']} in / {a['output_tokens']} out, "
+            f"est cost ${float(a['cost_estimate']):.4f}"
+        )
+        lines.append(
+            _aligned(
+                ["model", "n", "refusals", "in", "out", "cost"],
+                [
+                    [
+                        m["model"], str(m["n"]), _fmt_rate(m["refusal_rate"]),
+                        str(m["input_tokens"]), str(m["output_tokens"]),
+                        f"${float(m['cost_estimate']):.4f}",
+                    ]
+                    for m in report.ask_by_model
+                ],
+            )
+        )
+    else:
+        lines.append("ask: no questions in the window")
+
+    lines.append("")
+    c = report.curate
+    if c.get("n"):
+        lines.append(
+            f"curate: {c['n']} run(s), avg {float(c['avg_duration_s']):.1f}s, "
+            f"avg signals {float(c['avg_signals']):.1f}"
+        )
+    else:
+        lines.append("curate: no completed runs in the window")
+
+    lines.append("")
+    lag_rows = report.sync.get("lag") or []
+    if lag_rows:
+        lines.append(
+            _aligned(
+                ["index", "state", "n"],
+                [[g["index_kind"], g["state"], str(g["n"])] for g in lag_rows],
+            )
+        )
+    else:
+        lines.append("sync: queue empty")
+    age = report.sync.get("oldest_pending_age_s")
+    if age is not None:
+        lines.append(f"oldest pending: {float(age):.0f}s")
+
+    lines.append("")
+    if report.ingest_outcomes:
+        lines.append(
+            _aligned(
+                ["ingest outcome", "n"],
+                [[o["status"], str(o["n"])] for o in report.ingest_outcomes],
+            )
+        )
+    else:
+        lines.append("ingest: no sources in the window")
+    if report.ingest_stages:
+        lines.append(_stage_table(report.ingest_stages))
+
+    return "\n".join(lines)

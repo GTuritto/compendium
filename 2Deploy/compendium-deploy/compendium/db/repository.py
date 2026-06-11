@@ -1259,3 +1259,142 @@ def all_semantic_edges(conn: psycopg.Connection) -> list[dict[str, Any]]:
         "extracted_by, model, confidence, extracted_at, source_revision_id, weight "
         "FROM semantic_edges ORDER BY edge_type, from_id, to_id"
     ).fetchall()
+
+
+# --- profile stats (read-only aggregation over existing tables) -------------
+
+
+def retrieval_summary_stats(conn: psycopg.Connection, days: int) -> dict[str, Any]:
+    """Query count, fallback rate, and mean coverage over the window."""
+    return conn.execute(
+        "SELECT COUNT(*) AS n, "
+        "AVG(CASE WHEN fallback_to_chunks THEN 1.0 ELSE 0.0 END) AS fallback_rate, "
+        "AVG(coverage_score) AS avg_coverage "
+        "FROM query_traces "
+        "WHERE created_at >= now() - make_interval(days => %s)",
+        (days,),
+    ).fetchone()
+
+
+def retrieval_stage_stats(conn: psycopg.Connection, days: int) -> list[dict[str, Any]]:
+    """Per-stage avg and p95 latency from query_traces.latencies_ms."""
+    return conn.execute(
+        "SELECT key AS stage, COUNT(*) AS n, "
+        "AVG(value::float8) AS avg_ms, "
+        "percentile_cont(0.95) WITHIN GROUP (ORDER BY value::float8) AS p95_ms "
+        "FROM query_traces, LATERAL jsonb_each_text(latencies_ms) "
+        "WHERE created_at >= now() - make_interval(days => %s) "
+        "GROUP BY key ORDER BY key",
+        (days,),
+    ).fetchall()
+
+
+def retrieval_per_day(conn: psycopg.Connection, days: int) -> list[dict[str, Any]]:
+    """Daily query throughput over the window."""
+    return conn.execute(
+        "SELECT date_trunc('day', created_at)::date AS day, COUNT(*) AS n "
+        "FROM query_traces "
+        "WHERE created_at >= now() - make_interval(days => %s) "
+        "GROUP BY 1 ORDER BY 1",
+        (days,),
+    ).fetchall()
+
+
+_RETRIEVAL_GROUP_COLUMNS = {
+    "corpus-revision": "corpus_revision",
+    "embedding-model": "embedding_model",
+}
+
+
+def retrieval_grouped_stats(
+    conn: psycopg.Connection, days: int, by: str
+) -> list[dict[str, Any]]:
+    """Retrieval summary grouped by corpus revision or embedding model."""
+    column = _RETRIEVAL_GROUP_COLUMNS[by]  # KeyError on unknown is deliberate
+    return conn.execute(
+        f"SELECT {column} AS grp, COUNT(*) AS n, "
+        "AVG(CASE WHEN fallback_to_chunks THEN 1.0 ELSE 0.0 END) AS fallback_rate, "
+        "AVG(coverage_score) AS avg_coverage "
+        "FROM query_traces "
+        "WHERE created_at >= now() - make_interval(days => %s) "
+        "GROUP BY 1 ORDER BY n DESC",
+        (days,),
+    ).fetchall()
+
+
+def ask_summary_stats(conn: psycopg.Connection, days: int) -> dict[str, Any]:
+    """Ask volume, refusal rate, token totals, and summed cost estimate."""
+    return conn.execute(
+        "SELECT COUNT(*) AS n, "
+        "AVG(CASE WHEN refused THEN 1.0 ELSE 0.0 END) AS refusal_rate, "
+        "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
+        "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
+        "COALESCE(SUM(cost_estimate), 0.0) AS cost_estimate "
+        "FROM ask_traces "
+        "WHERE created_at >= now() - make_interval(days => %s)",
+        (days,),
+    ).fetchone()
+
+
+def ask_by_model_stats(conn: psycopg.Connection, days: int) -> list[dict[str, Any]]:
+    """Ask volume and cost grouped by model."""
+    return conn.execute(
+        "SELECT model, COUNT(*) AS n, "
+        "AVG(CASE WHEN refused THEN 1.0 ELSE 0.0 END) AS refusal_rate, "
+        "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
+        "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
+        "COALESCE(SUM(cost_estimate), 0.0) AS cost_estimate "
+        "FROM ask_traces "
+        "WHERE created_at >= now() - make_interval(days => %s) "
+        "GROUP BY model ORDER BY n DESC",
+        (days,),
+    ).fetchall()
+
+
+def curate_run_stats(conn: psycopg.Connection, days: int) -> dict[str, Any]:
+    """Completed curate-run count, avg duration, and avg signal yield."""
+    return conn.execute(
+        "SELECT COUNT(*) AS n, "
+        "AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) AS avg_duration_s, "
+        "AVG(signal_count) AS avg_signals "
+        "FROM graph_analysis_runs "
+        "WHERE completed_at IS NOT NULL "
+        "AND started_at >= now() - make_interval(days => %s)",
+        (days,),
+    ).fetchone()
+
+
+def sync_backlog_stats(conn: psycopg.Connection) -> dict[str, Any]:
+    """Current sync backlog by (index_kind, state) plus the oldest pending age."""
+    lag = conn.execute(
+        "SELECT index_kind, state, n FROM v_sync_lag ORDER BY index_kind, state"
+    ).fetchall()
+    oldest = conn.execute(
+        "SELECT EXTRACT(EPOCH FROM (now() - MIN(updated_at))) AS age_s "
+        "FROM index_sync_state WHERE state = 'pending'"
+    ).fetchone()
+    return {"lag": lag, "oldest_pending_age_s": oldest["age_s"]}
+
+
+def ingest_outcome_stats(conn: psycopg.Connection, days: int) -> list[dict[str, Any]]:
+    """Source counts by inspection status over the window."""
+    return conn.execute(
+        "SELECT COALESCE(inspection_status::text, 'unknown') AS status, COUNT(*) AS n "
+        "FROM sources "
+        "WHERE ingested_at >= now() - make_interval(days => %s) "
+        "GROUP BY 1 ORDER BY n DESC",
+        (days,),
+    ).fetchall()
+
+
+def ingest_stage_stats(conn: psycopg.Connection, days: int) -> list[dict[str, Any]]:
+    """Per-stage avg and p95 ingest latency from sources.metadata['stage_ms']."""
+    return conn.execute(
+        "SELECT key AS stage, COUNT(*) AS n, "
+        "AVG(value::float8) AS avg_ms, "
+        "percentile_cont(0.95) WITHIN GROUP (ORDER BY value::float8) AS p95_ms "
+        "FROM sources, LATERAL jsonb_each_text(metadata -> 'stage_ms') "
+        "WHERE ingested_at >= now() - make_interval(days => %s) "
+        "GROUP BY key ORDER BY key",
+        (days,),
+    ).fetchall()
