@@ -47,6 +47,22 @@ single `COMPENDIUM_LLM_STUB` runs every model seam offline; it is additive — t
 `COMPENDIUM_SYNTH_STUB` / `COMPENDIUM_EMBED_STUB` flags still force their own roles. Builders are
 lazy thunks so the registry imports no client class at load time (no import cycle).
 
+**Local profiler.** The opt-in, stdlib-only debugging instrument (`compendium/profiling.py`
+runtime seam + `compendium/profile_stats.py` aggregation), in three halves. *Performance
+stats* (`compendium profile stats`) is an on-demand, read-only aggregation over what
+PostgreSQL already persists (query/ask traces, analysis runs, sync lag, sources) — it adds
+no storage; its one write is the ingest pipeline persisting parse/inspect/chunk durations
+into `sources.metadata["stage_ms"]` at the store it already does. The *CPU half* (global
+`--profile` flag) wraps one CLI dispatch in cProfile and writes a `.prof` artifact; the
+*memory half* arms/reports tracemalloc baseline-and-diff inside the serve daemon via
+SIGUSR1/SIGUSR2. Timed spans activate via `COMPENDIUM_PROFILE` (`.env` or environment) or
+the one-shot `--timings` flag; everything is off by default, a profiler failure never
+breaks the profiled operation, and all artifacts land in `~/.compendium/profiles`
+(`COMPENDIUM_PROFILE_DIR` overrides). Local-first: no exporters, no agents, no telemetry
+plumbing — a rejected Grafana/Prometheus stack is recorded in DECISIONS.md. Not to be
+called "telemetry" (that word names the Phase 7 traces/revisions layer) or "monitoring"
+(nothing runs continuously).
+
 **Access surface.** The callable layer of Compendium, introduced in v0.2: two transports
 (MCP over stdio; HTTP REST/JSON on `127.0.0.1`) sharing one internal facade over the existing
 `pipeline.query`, `ingest`, and `ask` functions. The set of verbs is deliberately narrower
@@ -114,6 +130,11 @@ curator / `SYNTHESIZES` / LLM edges; `compendium graph backfill-edges` is the on
 capture of edges created before this. The graph is now fully derived (ADR-004/005, ADR-013).
 
 ## Deployment
+
+**Stack lifecycle verbs.** `compendium start` / `stop` / `restart`: thin CLI adapters over
+`deploy/compendiumctl`, which keeps single ownership of the stack lifecycle (docker compose
+for the stores; a nudge to the serve unit on start). The verbs exist so the operator can
+drive the stack without leaving the `compendium` CLI; exit codes propagate from the script.
 
 **Personal-LAN service.** The v0.2 deployment posture: Compendium runs as one or more
 always-on services on the curator's own hardware (Apple Silicon Mac mini preferred; Mac mini

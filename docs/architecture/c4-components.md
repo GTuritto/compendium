@@ -28,6 +28,7 @@ C4Component
     Component(curate, "Curation", "—", "Signal lifecycle, slow-loop signals, synth-from-signal")
     Component(trace, "Telemetry", "difflib", "Query traces, revision diffs, replay, promotions")
     Component(db, "Database access", "psycopg 3", "Raw-SQL repository over PostgreSQL")
+    Component(profile, "Profiler", "stdlib", "Opt-in spans + cProfile + tracemalloc; read-only stats over the operational record")
   }
 
   Rel(curator, cli, "Runs commands")
@@ -42,6 +43,8 @@ C4Component
   Rel(cli, graph, "Rebuild, status, link")
   Rel(cli, curate, "Run, list, synth")
   Rel(cli, trace, "Inspect, replay, promote")
+  Rel(cli, profile, "profile stats; --profile / --timings")
+  Rel(profile, db, "Reads traces, runs, sync lag, sources")
   Rel(tui, retrieve, "Query / synth / browse, via the data provider")
 
   Rel(cli, config, "Loads at startup")
@@ -111,6 +114,13 @@ C4Component
   `compendium/`: `cli` (+ `cli/render.py`), `tui`, `config`, `ingest`, `wiki`,
   `index`, `retrieve`, `graph`, `curate`, `trace`, `db`. `graph` speaks Bolt to
   Memgraph via the official `neo4j` driver with raw Cypher (no OGM).
+- **The profiler is opt-in and additive** (`profiling.py` + `profile_stats.py`,
+  PR #63). `timed()` spans are inlined in `ingest`, `retrieve`, and `index` but are
+  inert by default (the retrieval sink that feeds `query_traces.latencies_ms`
+  predates it and always runs); `profile stats` only reads what PostgreSQL already
+  persists; the CPU and memory halves wrap one dispatch / one daemon on demand. A
+  profiler failure never alters the profiled operation. No container or context
+  box changes.
 - The two loops that make the system compound — the fast per-query graph walk
   (in `retrieve`, calling `graph`) and the slow curation loop (in `curate`) —
   are detailed in [c4-components-retrieval.md](c4-components-retrieval.md) and

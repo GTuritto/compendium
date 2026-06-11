@@ -58,7 +58,10 @@ C4Deployment
   triggered units — `curate` (timer), `inbox` (path watcher), `backup` (timer).
   On macOS these are launchd LaunchAgents; on Linux, systemd `--user` units
   (enable **lingering** so they run without an active login). `deploy/compendiumctl`
-  drives the running stack; MCP is launched per-session by the client, not a unit.
+  drives the running stack (`compendium start|stop|restart` are thin CLI adapters over
+  it, PR #63); MCP is launched per-session by the client, not a unit. The serve daemon
+  also answers SIGUSR1/SIGUSR2 with the opt-in tracemalloc memory profiler
+  (artifacts in `~/.compendium/profiles`).
 - **Model inference is OpenRouter** for both synthesis (`anthropic/claude-sonnet-4.5`)
   and embeddings (`BAAI/bge-m3`) as of v0.2 — BGE-M3 is not in the local Docker
   Model Runner catalogue, so the v0.1 "embeddings always local" note no longer
