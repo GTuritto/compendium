@@ -124,3 +124,82 @@ def test_cpu_profile_block_exception_passes_through(monkeypatch, tmp_path):
             raise ValueError("boom")
     # The artifact is still written for the failed run.
     assert list(tmp_path.glob("query-*.prof"))
+
+
+# --- memory half -----------------------------------------------------------
+
+
+@pytest.fixture
+def mem_clean(monkeypatch, tmp_path):
+    """An isolated artifacts dir and a disarmed baseline before and after."""
+    import tracemalloc
+
+    monkeypatch.setenv("COMPENDIUM_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setattr(profiling, "_mem_baseline", None)
+    yield tmp_path
+    if tracemalloc.is_tracing():
+        tracemalloc.stop()
+
+
+def test_mem_report_without_arm_is_a_message(mem_clean):
+    assert "not armed" in profiling.mem_report()
+    assert not list(mem_clean.glob("mem-*.txt"))
+
+
+def test_mem_arm_then_report_shows_growth_and_writes_artifact(mem_clean):
+    profiling.mem_arm()
+    hoard = ["x" * 1024 for _ in range(2000)]  # ~2 MiB of tracked growth
+    report = profiling.mem_report()
+    assert "allocation growth sites since baseline" in report
+    assert "traced:" in report and "rss:" in report
+    assert __file__.rsplit("/", 1)[-1] in report  # this file is a growth site
+    artifacts = list(mem_clean.glob("mem-*.txt"))
+    assert len(artifacts) == 1
+    assert artifacts[0].read_text().startswith("memory report")
+    del hoard
+
+
+def test_mem_rearm_replaces_baseline(mem_clean):
+    profiling.mem_arm()
+    first_baseline = profiling._mem_baseline
+    profiling.mem_arm()
+    assert profiling._mem_baseline is not first_baseline
+
+
+def test_memory_signal_handlers_never_break_the_process(mem_clean, monkeypatch):
+    import os
+    import signal
+
+    old_usr1 = signal.getsignal(signal.SIGUSR1)
+    old_usr2 = signal.getsignal(signal.SIGUSR2)
+    try:
+        assert profiling.install_memory_signal_handlers() is True
+
+        def boom(top=15):
+            raise RuntimeError("report exploded")
+
+        monkeypatch.setattr(profiling, "mem_arm", lambda: (_ for _ in ()).throw(RuntimeError("arm exploded")))
+        monkeypatch.setattr(profiling, "mem_report", boom)
+        os.kill(os.getpid(), signal.SIGUSR1)  # arm fails inside the handler
+        os.kill(os.getpid(), signal.SIGUSR2)  # report fails inside the handler
+        # Reaching here means neither handler let the exception escape.
+    finally:
+        signal.signal(signal.SIGUSR1, old_usr1)
+        signal.signal(signal.SIGUSR2, old_usr2)
+
+
+def test_memory_signals_drive_arm_and_report(mem_clean):
+    import os
+    import signal
+
+    old_usr1 = signal.getsignal(signal.SIGUSR1)
+    old_usr2 = signal.getsignal(signal.SIGUSR2)
+    try:
+        profiling.install_memory_signal_handlers()
+        os.kill(os.getpid(), signal.SIGUSR1)
+        assert profiling._mem_baseline is not None
+        os.kill(os.getpid(), signal.SIGUSR2)
+        assert list(mem_clean.glob("mem-*.txt"))
+    finally:
+        signal.signal(signal.SIGUSR1, old_usr1)
+        signal.signal(signal.SIGUSR2, old_usr2)
