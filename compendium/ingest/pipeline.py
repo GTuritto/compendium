@@ -20,6 +20,7 @@ from compendium.ingest.adapters.dispatch import mime_type_for, parse_source
 from compendium.ingest.chunking import chunk_sections
 from compendium.ingest.hashing import hash_bytes
 from compendium.ingest.inspection import inspect
+from compendium.profiling import timed
 from compendium.wiki.source_page import generate_source_page
 
 
@@ -44,6 +45,11 @@ def _settings() -> dict[str, object]:
     settings: dict[str, object] = dict(config_sections.ingestion())
     settings["vault_path"] = load_config().vault_path
     return settings
+
+
+def _rounded(stage_ms: dict[str, float]) -> dict[str, float]:
+    """Stage durations rounded for the JSONB metadata write."""
+    return {stage: round(ms, 3) for stage, ms in stage_ms.items()}
 
 
 def ingest(path: str, *, kind: str, mine: bool = False) -> list[IngestResult]:
@@ -79,6 +85,11 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
     content_hash = hash_bytes(raw_bytes)
     mime = mime_type_for(path)
     metadata: dict[str, object] = {"authored_by_me": True} if mine else {}
+    # Per-stage wall-clock, persisted on the source row (metadata["stage_ms"])
+    # so `compendium profile stats` can aggregate ingest latency after the
+    # fact. The store stage itself cannot be in the row it writes; it stays a
+    # log-only span.
+    stage_ms: dict[str, float] = {}
 
     with connection() as conn:
         existing = repository.get_source_by_content_hash(conn, content_hash)
@@ -92,8 +103,10 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
         prior_id = repository.get_source_id_by_document_path(conn, path)
 
         try:
-            parsed = parse_source(path)
+            with timed("ingest.parse", sink=stage_ms, path=path):
+                parsed = parse_source(path)
         except (ParseError, UnsupportedFormatError) as exc:
+            metadata["stage_ms"] = _rounded(stage_ms)
             source_id = _store(
                 conn, path, kind=kind, title=_fallback_title(path),
                 content_hash=content_hash, mime=mime, byte_size=len(raw_bytes),
@@ -102,16 +115,18 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, str(exc))
 
-        result = inspect(
-            parsed, raw_bytes,
-            max_source_bytes=cfg["max_source_bytes"],
-            min_text_tokens=cfg["min_text_tokens"],
-        )
+        with timed("ingest.inspect", sink=stage_ms, path=path):
+            result = inspect(
+                parsed, raw_bytes,
+                max_source_bytes=cfg["max_source_bytes"],
+                min_text_tokens=cfg["min_text_tokens"],
+            )
         title = str(parsed.metadata.get("title") or _fallback_title(path))
         if parsed.metadata.get("author"):
             metadata["author_detected"] = parsed.metadata["author"]
 
         if result.is_failed:
+            metadata["stage_ms"] = _rounded(stage_ms)
             source_id = _store(
                 conn, path, kind=kind, title=title, content_hash=content_hash,
                 mime=mime, byte_size=len(raw_bytes), metadata=metadata,
@@ -120,17 +135,20 @@ def _ingest_one(path: str, *, kind: str, mine: bool) -> IngestResult:
             )
             return IngestResult(path, "failed", source_id, 0, result.notes)
 
-        chunks = chunk_sections(
-            parsed.sections,
-            target_tokens=cfg["target_tokens"],
-            overlap_tokens=cfg["overlap_tokens"],
-        )
-        source_id = _store(
-            conn, path, kind=kind, title=title, content_hash=content_hash,
-            mime=mime, byte_size=len(raw_bytes), metadata=metadata,
-            inspection_status=result.status, inspection_notes=result.notes,
-            chunks=chunks, prior_id=prior_id,
-        )
+        with timed("ingest.chunk", sink=stage_ms, path=path):
+            chunks = chunk_sections(
+                parsed.sections,
+                target_tokens=cfg["target_tokens"],
+                overlap_tokens=cfg["overlap_tokens"],
+            )
+        metadata["stage_ms"] = _rounded(stage_ms)
+        with timed("ingest.store", path=path, chunks=len(chunks)):
+            source_id = _store(
+                conn, path, kind=kind, title=title, content_hash=content_hash,
+                mime=mime, byte_size=len(raw_bytes), metadata=metadata,
+                inspection_status=result.status, inspection_notes=result.notes,
+                chunks=chunks, prior_id=prior_id,
+            )
         if chunks:
             generate_source_page(conn, source_id, vault_path=str(cfg["vault_path"]))
         status = "updated" if prior_id is not None else "ingested"

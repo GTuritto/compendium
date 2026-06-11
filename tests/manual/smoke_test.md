@@ -457,3 +457,20 @@ and the test-only `_retrieve` fork is gone (composition is the public `compose_a
 | --- | --- | --- | --- |
 | arch-ar.1 | ask unchanged | `COMPENDIUM_LLM_STUB=1 uv run python -m compendium ask "What is psychological safety?"` then an uncovered question | covered answers with citations + footer; uncovered refuses with gap + suggested action; both still write `query_traces` + `ask_traces` |
 | arch-ar.2 | no test-only seam | `grep -rnE '_retrieve[ =:)]' compendium/ tests/` | no matches — composition is the public `compose_answer`, the same function `ask` composes through |
+
+## Local profiler — stats / CPU / memory + stack verbs
+
+Prerequisites: stores up; seeded corpus (at least one ingested source and a few
+queries). All artifacts land in `~/.compendium/profiles` unless
+`COMPENDIUM_PROFILE_DIR` overrides.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| prof.1 | Spans off by default | `uv run python -m compendium query "spaced repetition"` | no `profile` events on stderr; the query trace still records `latencies_ms` |
+| prof.2 | Span switch (flag) | `uv run python -m compendium --timings query "spaced repetition"` | one JSON `profile` event per stage (`embed`, `pages_fanout`, …) on stderr |
+| prof.3 | Span switch (.env) | add `COMPENDIUM_PROFILE=1` to `.env`, run prof.1's command, then remove it | same span events without any flag; removing restores silence |
+| prof.4 | CPU profile | `uv run python -m compendium --profile index status` | command output unchanged; stderr shows `cpu profile written: …/index-<ts>.prof` plus a top-25 cumulative table; `python -m pstats <path>` loads it |
+| prof.5 | Performance stats | `uv run python -m compendium profile stats --days 90` | retrieval per-stage avg/p95 + per-day counts, ask tokens/refusals/cost, curate runs, sync backlog, ingest outcomes; `--format json` emits one object |
+| prof.6 | Ingest stage durations | ingest any fixture, then prof.5 again | the ingest table gains `ingest.parse` / `ingest.inspect` / `ingest.chunk` rows (from `sources.metadata["stage_ms"]`) |
+| prof.7 | Memory arm/report | `uv run python -m compendium serve` in one shell; from another: `kill -USR1 <pid>`, run a few `/query` requests, `kill -USR2 <pid>` | daemon undisturbed; `mem-<ts>.txt` appears in the artifacts dir with traced size, RSS, and top growth sites |
+| prof.8 | Stack verbs | `uv run python -m compendium stop` then `… start` then `… restart` | each delegates to `deploy/compendiumctl` (same output as calling it directly); exit codes propagate |

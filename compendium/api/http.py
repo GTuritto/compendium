@@ -158,4 +158,12 @@ def run(*, host: str = "127.0.0.1", port: int = 8787) -> None:
     """Run the HTTP server with uvicorn. Imported lazily by ``compendium serve``."""
     import uvicorn
 
+    from compendium.profiling import install_memory_signal_handlers
+
+    # Leak hunting on the long-running daemon (opt-in, in-process): SIGUSR1
+    # arms a tracemalloc baseline, SIGUSR2 writes a diff report into the
+    # profile artifacts dir. Must happen here, in the main thread, before
+    # uvicorn installs its own SIGTERM/SIGINT handling.
+    install_memory_signal_handlers()
+
     uvicorn.run(create_app(), host=host, port=port, log_level="info")

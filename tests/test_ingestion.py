@@ -186,3 +186,20 @@ def test_authored_provenance(ingest_db: str) -> None:
     with psycopg.connect(ingest_db) as conn:
         metadata = conn.execute("SELECT metadata FROM sources").fetchone()[0]
     assert metadata.get("authored_by_me") is True
+
+
+def test_stage_durations_persisted_in_metadata(ingest_db: str) -> None:
+    ingest(str(_FIXTURES / "sample.md"), kind="note")
+    with psycopg.connect(ingest_db) as conn:
+        metadata = conn.execute("SELECT metadata FROM sources").fetchone()[0]
+    stage_ms = metadata.get("stage_ms")
+    assert set(stage_ms) == {"ingest.parse", "ingest.inspect", "ingest.chunk"}
+    assert all(isinstance(v, (int, float)) and v >= 0 for v in stage_ms.values())
+
+
+def test_failed_parse_still_records_stage_durations(ingest_db: str) -> None:
+    result = ingest(str(_FIXTURES / "broken.pdf"), kind="paper")[0]
+    assert result.status == "failed"
+    with psycopg.connect(ingest_db) as conn:
+        metadata = conn.execute("SELECT metadata FROM sources").fetchone()[0]
+    assert "ingest.parse" in metadata.get("stage_ms", {})
