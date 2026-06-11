@@ -494,3 +494,15 @@ share one construction site + one call envelope, with output unchanged.
 | arch-ce.2 | One construction site | `grep -rn "OpenAI(" compendium/` | exactly two matches: `model_clients.py` (the envelope) and `index/embedder.py` (embeddings, out of scope) |
 | arch-ce.3 | Envelope speaks real OpenRouter | `uv run pytest -m live` (stubs unset, keys in `.env`) | 2 passed — the live tier exercises the real path through `chat()` |
 | arch-ce.4 | Usage now logged for synth/extract | `COMPENDIUM_PROFILE=1` real `synth concept "<term>"` (or inspect stderr of a real `curate run`) | one `llm_usage` event with role/model/input_tokens/output_tokens |
+
+## Arch — status probe routing (behaviour-preserving)
+
+Prerequisites: none beyond the repo. Confirms the schedule + serve status
+readers consume the service_unit probe seam with unchanged output.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| arch-spr.1 | Schedule status unchanged | `compendium schedule install --every 30m` → `schedule status` → `uninstall` | field-for-field identical to v0.2-3.3: loaded/state/unit_path/interval 1800s/last_fired/next_fire |
+| arch-spr.2 | Serve status unchanged | `compendium serve install` → `serve status` → `uninstall` | loaded/state/host/port/unit line as before |
+| arch-spr.3 | Readers own no scheduler CLI | `grep -n "subprocess\|sys.platform" compendium/schedule/status.py compendium/api/service.py` | no matches — probing lives in `service_unit.probe_activity` |
+| arch-spr.4 | Absent unit | `schedule status` with nothing installed | `state="absent"`, exit 1 |

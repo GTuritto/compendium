@@ -191,3 +191,30 @@ def probe(descriptor: UnitDescriptor, *, runner: Runner = DEFAULT_RUNNER) -> Pro
         stdout=result.stdout,
         stderr=result.stderr,
     )
+
+
+def probe_activity(descriptor: UnitDescriptor, *, runner: Runner = DEFAULT_RUNNER) -> Probe:
+    """Scheduler-activity output for a status reader to parse.
+
+    Runs ``systemctl --user status <enable-unit>`` and, for triggered units
+    (timer/path), ``list-timers --all <unit>`` too; both outputs (stdout and
+    stderr — systemd writes status text to either) are concatenated into
+    ``Probe.stdout``. Field extraction stays in each service's status reader.
+    """
+    primary = _primary_path(descriptor)
+    if not primary.exists():
+        return Probe(loaded=False, unit_path=primary, returncode=-1)
+    enable = enable_unit_name(descriptor)
+    status = runner.run(["systemctl", "--user", "status", enable])
+    out = status.stdout + "\n" + status.stderr
+    if trigger_unit_path(descriptor) is not None:
+        timers = runner.run(["systemctl", "--user", "list-timers", "--all", enable])
+        out += "\n" + timers.stdout
+    loaded = "Loaded:" in out and "could not be found" not in out
+    return Probe(
+        loaded=loaded,
+        unit_path=primary,
+        returncode=status.returncode,
+        stdout=out,
+        stderr=status.stderr,
+    )

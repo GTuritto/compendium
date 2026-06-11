@@ -1,28 +1,22 @@
 """Read the per-OS scheduler state for the curate unit.
 
-macOS parses ``launchctl print gui/<uid>/com.compendium.curate``;
-Linux parses ``systemctl --user list-timers --all compendium-curate.timer``
-together with ``systemctl --user status compendium-curate.service``.
-Fields the scheduler does not surface (for example, macOS does not
-report next-fire time) are returned as ``None``.
+The scheduler-CLI interaction lives behind ``service_unit.probe_activity``
+(arch-status-probe-routing): this module never shells out or dispatches
+on the platform itself — it parses ``Probe.stdout`` with the schedule-specific
+regexes (state, last-fired, next-fire, interval). Fields the scheduler does
+not surface (for example, macOS does not report next-fire time) are returned
+as ``None``.
 """
 
 from __future__ import annotations
 
-import os
 import re
-import subprocess
-import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from compendium.schedule.install import (
-    LABEL,
-    LINUX_UNIT_BASENAME,
-    _linux_service_path,
-    _linux_timer_path,
-    _macos_plist_path,
-)
+from compendium import service_unit
+from compendium.service_unit import DEFAULT_RUNNER, Probe, Runner, ServiceUnitError
+from compendium.schedule.install import _descriptor
 
 
 @dataclass
@@ -42,24 +36,30 @@ class ScheduleStatus:
         return d
 
 
-def read_status() -> ScheduleStatus:
-    """Return the current schedule status. Never raises — returns
-    ``loaded=False`` when the unit is absent or the OS scheduler is
-    unreachable.
-    """
-    plat = sys.platform
-    if plat == "darwin":
-        return _macos_status()
-    if plat.startswith("linux"):
-        return _linux_status()
+def _bare(unit_path: Path, state: str, *, loaded: bool = False) -> ScheduleStatus:
     return ScheduleStatus(
-        loaded=False,
-        unit_path=Path("unknown"),
-        state="unsupported platform",
-        last_fired=None,
-        next_fire=None,
-        interval_seconds=None,
+        loaded=loaded, unit_path=unit_path, state=state,
+        last_fired=None, next_fire=None, interval_seconds=None,
     )
+
+
+def read_status(*, runner: Runner = DEFAULT_RUNNER) -> ScheduleStatus:
+    """Return the current schedule status. Never raises — returns
+    ``loaded=False`` when the unit is absent, the OS scheduler is
+    unreachable, or the platform is unsupported.
+    """
+    try:
+        plat = service_unit.platform()
+    except ServiceUnitError:
+        return _bare(Path("unknown"), "unsupported platform")
+
+    descriptor = _descriptor(3600)  # label/paths only; the cadence is irrelevant to probing
+    probe = service_unit.probe_activity(descriptor, runner=runner)
+    if probe.returncode == -1 and not probe.stdout:
+        return _bare(probe.unit_path, "absent")
+    if plat == "darwin":
+        return _macos_status(probe)
+    return _linux_status(probe)
 
 
 # --- macOS ----------------------------------------------------------------
@@ -70,39 +70,17 @@ _MACOS_LAST_EXIT_RE = re.compile(r"last exit code\s*=\s*(.+)")
 _MACOS_INTERVAL_RE = re.compile(r"run interval\s*=\s*(\d+)\s*seconds")
 
 
-def _macos_status() -> ScheduleStatus:
-    plist = _macos_plist_path()
-    if not plist.exists():
-        return ScheduleStatus(
-            loaded=False,
-            unit_path=plist,
-            state="absent",
-            last_fired=None,
-            next_fire=None,
-            interval_seconds=None,
-        )
-    uid = os.getuid()
-    result = subprocess.run(
-        ["launchctl", "print", f"gui/{uid}/{LABEL}"],
-        capture_output=True, text=True, check=False,
-    )
-    if result.returncode != 0:
-        return ScheduleStatus(
-            loaded=False,
-            unit_path=plist,
-            state="not loaded",
-            last_fired=None,
-            next_fire=None,
-            interval_seconds=None,
-        )
-    output = result.stdout
+def _macos_status(probe: Probe) -> ScheduleStatus:
+    if not probe.loaded:
+        return _bare(probe.unit_path, "not loaded")
+    output = probe.stdout
     state_match = _MACOS_STATE_RE.search(output)
     last_match = _MACOS_LAST_EXIT_RE.search(output)
     interval_match = _MACOS_INTERVAL_RE.search(output)
 
     return ScheduleStatus(
         loaded=True,
-        unit_path=plist,
+        unit_path=probe.unit_path,
         state=state_match.group(1).strip() if state_match else "unknown",
         last_fired=last_match.group(1).strip() if last_match else None,
         next_fire=None,  # launchctl does not surface next-fire wall clock
@@ -113,84 +91,40 @@ def _macos_status() -> ScheduleStatus:
 # --- Linux ----------------------------------------------------------------
 
 
+_LINUX_ACTIVE_RE = re.compile(r"Active:\s*(\S+)")
 _LINUX_NEXT_RE = re.compile(r"Trigger:\s*(.+)")
-_LINUX_LAST_RE = re.compile(r"Triggers:\s*\n\s*●\s*(.+)")  # rare; usually below
-_LINUX_TIMER_LAST_RE = re.compile(r"^\s*LAST\s*=\s*(.+)", re.MULTILINE)
+_LINUX_LAST_RE = re.compile(r"Triggers:[\s\S]*?●\s*(\S[^\n]*)")
+_LINUX_INTERVAL_RE = re.compile(r"OnUnitActiveSec=(\d+)")
 
 
-def _linux_status() -> ScheduleStatus:
-    timer_path = _linux_timer_path()
-    service_path = _linux_service_path()
-    unit_path = timer_path if timer_path.exists() else service_path
-    if not timer_path.exists():
-        return ScheduleStatus(
-            loaded=False,
-            unit_path=timer_path,
-            state="absent",
-            last_fired=None,
-            next_fire=None,
-            interval_seconds=None,
-        )
-
-    # `systemctl --user status compendium-curate.timer` shows Active state,
-    # ExecMainStartTimestamp, Trigger: timestamp.
-    timer_status = subprocess.run(
-        ["systemctl", "--user", "status", f"{LINUX_UNIT_BASENAME}.timer"],
-        capture_output=True, text=True, check=False,
-    )
-    output = timer_status.stdout + "\n" + timer_status.stderr
-    loaded = "Loaded:" in output and "could not be found" not in output
+def _linux_status(probe: Probe) -> ScheduleStatus:
+    output = probe.stdout
 
     state = "unknown"
-    active_match = re.search(r"Active:\s*(\S+)", output)
+    active_match = _LINUX_ACTIVE_RE.search(output)
     if active_match:
         state = active_match.group(1).strip()
 
     next_fire = None
-    next_match = re.search(r"Trigger:\s*(.+)", output)
+    next_match = _LINUX_NEXT_RE.search(output)
     if next_match:
         next_fire = next_match.group(1).strip()
 
     last_fired = None
-    last_match = re.search(r"Triggers:[\s\S]*?●\s*(\S[^\n]*)", output)
+    last_match = _LINUX_LAST_RE.search(output)
     if last_match:
         last_fired = last_match.group(1).strip()
 
-    # `list-timers` is a more reliable source of NEXT/LAST when populated.
-    timers_list = subprocess.run(
-        ["systemctl", "--user", "list-timers", "--all", f"{LINUX_UNIT_BASENAME}.timer"],
-        capture_output=True, text=True, check=False,
-    )
-    list_output = timers_list.stdout
-    if list_output:
-        for line in list_output.splitlines():
-            line = line.strip()
-            if not line or line.startswith("NEXT") or line.startswith("---"):
-                continue
-            if LINUX_UNIT_BASENAME in line:
-                # Columns: NEXT  LEFT  LAST  PASSED  UNIT  ACTIVATES
-                cols = line.split()
-                if len(cols) >= 6:
-                    # NEXT is cols[0] + cols[1] + cols[2] (date + time + tz)
-                    # Be defensive: just take the first three tokens as NEXT
-                    # and the next three as LAST when present.
-                    next_fire = next_fire or " ".join(cols[0:3])
-                    if cols[3] not in ("n/a", "-"):
-                        # LEFT is cols[3]; LAST starts at cols[4]
-                        # The exact column count depends on output formatting;
-                        # we already pulled NEXT, treat LAST as best-effort.
-                        pass
-                break
-
+    # The interval is authored into the timer unit file, not the CLI output.
     interval_seconds = None
-    timer_text = timer_path.read_text() if timer_path.exists() else ""
-    interval_match = re.search(r"OnUnitActiveSec=(\d+)", timer_text)
+    timer_text = probe.unit_path.read_text() if probe.unit_path.exists() else ""
+    interval_match = _LINUX_INTERVAL_RE.search(timer_text)
     if interval_match:
         interval_seconds = int(interval_match.group(1))
 
     return ScheduleStatus(
-        loaded=loaded,
-        unit_path=timer_path,
+        loaded=probe.loaded,
+        unit_path=probe.unit_path,
         state=state,
         last_fired=last_fired,
         next_fire=next_fire,

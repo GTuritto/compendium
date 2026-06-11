@@ -15,15 +15,22 @@ a v0.3 concern.
 
 from __future__ import annotations
 
-import os
+import re
 import shutil
-import subprocess
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from compendium import service_unit
-from compendium.service_unit import AlwaysOn, ServiceUnitError, UnitDescriptor, UnitResult, launchd, systemd
+from compendium.service_unit import (
+    AlwaysOn,
+    DEFAULT_RUNNER,
+    Runner,
+    ServiceUnitError,
+    UnitDescriptor,
+    UnitResult,
+    launchd,
+    systemd,
+)
 
 LABEL = "com.compendium.serve"
 LINUX_UNIT_BASENAME = "compendium-serve"
@@ -128,39 +135,33 @@ def uninstall_service() -> ServiceResult:
 
 
 # --- status (serve-specific: host / port + running state) -------------------
+#
+# The scheduler-CLI interaction lives behind service_unit.probe_activity
+# (arch-status-probe-routing); this reader parses Probe.stdout and recovers
+# the serve-specific fields (host/port) from the written unit file.
 
 
-def _macos_status() -> ServiceStatus:
-    plist = _macos_plist_path()
-    if not plist.exists():
-        return ServiceStatus(False, plist, "absent", None, None)
-    host, port = _parse_host_port(plist.read_text())
-    uid = os.getuid()
-    out = subprocess.run(["launchctl", "print", f"gui/{uid}/{LABEL}"],
-                         capture_output=True, text=True, check=False)
-    if out.returncode != 0:
-        return ServiceStatus(False, plist, "not running", host, port)
-    state = "running" if ("state = running" in out.stdout) else "not running"
-    return ServiceStatus(True, plist, state, host, port)
+_LINUX_ACTIVE_RE = re.compile(r"Active:\s*(\S+)")
 
 
-def _linux_status() -> ServiceStatus:
-    service = _linux_service_path()
-    if not service.exists():
-        return ServiceStatus(False, service, "absent", None, None)
-    host, port = _parse_host_port(service.read_text())
-    active = subprocess.run(
-        ["systemctl", "--user", "is-active", f"{LINUX_UNIT_BASENAME}.service"],
-        capture_output=True, text=True, check=False,
-    )
-    state = "running" if active.stdout.strip() == "active" else "not running"
-    return ServiceStatus(True, service, state, host, port)
-
-
-def read_status() -> ServiceStatus:
+def read_status(*, runner: Runner = DEFAULT_RUNNER) -> ServiceStatus:
     """Current state of the access-surface unit; never raises."""
-    if sys.platform == "darwin":
-        return _macos_status()
-    if sys.platform.startswith("linux"):
-        return _linux_status()
-    return ServiceStatus(False, Path("unknown"), "unsupported platform", None, None)
+    try:
+        plat = service_unit.platform()
+    except ServiceUnitError:
+        return ServiceStatus(False, Path("unknown"), "unsupported platform", None, None)
+
+    probe = service_unit.probe_activity(_descriptor(DEFAULT_HOST, DEFAULT_PORT), runner=runner)
+    if probe.returncode == -1 and not probe.stdout:
+        return ServiceStatus(False, probe.unit_path, "absent", None, None)
+    host, port = _parse_host_port(
+        probe.unit_path.read_text() if probe.unit_path.exists() else ""
+    )
+    if plat == "darwin":
+        if not probe.loaded:
+            return ServiceStatus(False, probe.unit_path, "not running", host, port)
+        state = "running" if ("state = running" in probe.stdout) else "not running"
+        return ServiceStatus(True, probe.unit_path, state, host, port)
+    active = _LINUX_ACTIVE_RE.search(probe.stdout)
+    state = "running" if active and active.group(1) == "active" else "not running"
+    return ServiceStatus(True, probe.unit_path, state, host, port)
