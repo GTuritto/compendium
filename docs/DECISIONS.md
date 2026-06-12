@@ -24,7 +24,7 @@ or deferred.
 
 ---
 
-## 2. Architecture Decision Records (ADR-001 … ADR-014)
+## 2. Architecture Decision Records (ADR-001 … ADR-015)
 
 Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 
@@ -180,6 +180,16 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   the one CLI, but the lifecycle logic keeps a single home in the script — the
   verbs only delegate and propagate exit codes.
 
+### v0.3 Phase 2 — the web UI (ADR-015)
+
+- **Streamlit, as a documented stack exception**; loopback-only; manual launch
+  (Q5); the `compendium web` subcommand owns the bind default (Q4). *Why:* one
+  Python dependency buys the browser surface; exposure stays the joint v0.4
+  decision with ADR-011.
+- **No third data layer** (Q3): `tui/data.py` already is the shared
+  channel-free provider; the web UI imports the facade + the provider and
+  nothing else, so browser actions cannot drift from the CLI/TUI.
+
 ### v0.3 Phase 1 — contradiction candidates (ADR-014)
 
 - **Shape C, exactly:** the LLM proposes (`contradiction_candidate` signals,
@@ -278,7 +288,7 @@ exposure) and ADR-014/ADR-015 are reserved by the v0.3 plan.
 | **Autonomous `SYNTHESIZES` extraction.** | Owned by the promote hook (`curate/lifecycle`) **forever**; autonomous extraction would race and double-write. |
 | **gRPC.** | No cross-machine / typed-polyglot earning case for a single personal host; HTTP/JSON + MCP suffice. |
 | **pgvector.** | Adopt only if trace-similarity analysis earns it; Qdrant owns vector search today. |
-| **A web UI.** | The access surface enables one; the UI itself is out of scope. |
+| **A web UI.** | **Shipped in v0.3 Phase 2 as ADR-015** — Streamlit, loopback-only, over the existing facade + provider. LAN exposure stays deferred with auth/TLS. |
 | **Full C4 diagram refresh for v0.2 surfaces.** | The prose/operational docs cover ask, the access surface, the daemon, and extracted edges; the diagram redraw is a tracked follow-up. |
 
 ---

@@ -479,6 +479,7 @@ rebuilds replay from PostgreSQL.
 | `page promote <slug>` | page slug | `--to {canonical,deprecated}` (**required**) |
 | `promotions list` | — | `--slug <slug>` (filter to one page); `--format` |
 | `tui` | — | — (interactive) |
+| `web` | — (launches the loopback Streamlit UI; ADR-015) | `--host <host>` (default `127.0.0.1`); `--port <int>` (default `8501`) |
 
 ### Access surface
 
@@ -513,6 +514,7 @@ rebuilds replay from PostgreSQL.
 | `curate run` | — (one slow-loop pass: signals + edge extraction) | `--format` |
 | `curate list` | — | `--format` |
 | `curate synth <signal_id>` | curation signal id | — |
+| `curate resolve <signal_id>` | curation signal id | `--approve` \| `--drop` (**one required**) — approve on a `contradiction_candidate` writes the curator `CONTRADICTS` edge; drop records the decline for any kind |
 
 ### Stack and profiler
 
@@ -531,7 +533,7 @@ rebuilds replay from PostgreSQL.
 
 - Operational docs: [`operations/`](operations/) — real-models, backup-restore,
   schedule, inbox, retrieval-tuning, ask, access-surface, edge-extraction,
-  deployment, profiling.
+  deployment, profiling, web-ui.
 - Design + ADRs: [`Compendium.md`](Compendium.md). Decisions + rationale:
   [`DECISIONS.md`](DECISIONS.md).
 - Every CLI verb: `uv run python -m compendium --help` (and `<verb> --help`).

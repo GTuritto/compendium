@@ -83,6 +83,12 @@ A refusal returns the gap and suggested actions (e.g. `compendium ingest …`,
 `compendium synth concept …`), not a hallucinated answer. The honesty mechanism that keeps
 agent memory trustworthy.
 
+**Web UI.** The loopback-only Streamlit surface (`compendium web`, ADR-015, v0.3):
+four views — Ask, Search, Pages, Curation — each a thin rendering over the access
+surface facade or the `tui/data.py` provider. It adds no data layer and no logic;
+a browser click runs exactly the CLI/TUI code path (an Approve is the ADR-014
+resolve). Manual launch, no service unit, never leaves `127.0.0.1` in v0.3.
+
 **Inbox.** A watched filesystem directory under which files dropped by the curator or an
 external process are ingested automatically by the v0.2 inbox watcher. Subdirectories declare
 the source kind (`inbox/paper/`, `inbox/note/`, etc.); processed files move to
