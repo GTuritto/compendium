@@ -50,7 +50,10 @@ def _approve_contradiction(conn: Any, signal: dict[str, Any]) -> str:
             f"signal {signal['id']} payload carries no page slugs; cannot approve"
         )
     try:
-        link(from_slug, to_slug, "CONTRADICTS")
+        link(
+            from_slug, to_slug, "CONTRADICTS",
+            from_kind=payload.get("from_kind"), to_kind=payload.get("to_kind"),
+        )
     except LinkError as exc:
         raise ResolveError(str(exc)) from exc
     return f"CONTRADICTS edge written: {from_slug} -[CONTRADICTS]-> {to_slug}"

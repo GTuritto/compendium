@@ -256,8 +256,10 @@ def from_contradiction_candidates(
                 continue
             payload = {
                 "from_slug": page["slug"],
+                "from_kind": page["kind"],
                 "from_title": page["title"],
                 "to_slug": neighbour.slug,
+                "to_kind": neighbour.kind,
                 "to_title": neighbour.title,
                 "confidence": lbl.confidence,
                 "rationale": lbl.rationale,

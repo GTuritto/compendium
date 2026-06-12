@@ -244,3 +244,31 @@ def test_resolve_errors(extract_corpus):
     resolve(str(low_cov), approve=False)  # generic drop works for any kind
     with pytest.raises(ResolveError, match="already 'dropped'"):
         resolve(str(low_cov), approve=False)
+
+
+def test_link_disambiguates_by_kind(monkeypatch):
+    """A slug existing as both concept and source must not break approval."""
+    from compendium.graph import links
+
+    seen = {}
+
+    def fake_get_by_slug(conn, kind, slug):
+        seen[(kind, slug)] = True
+        return {"kind": kind, "id": f"{kind}-id", "source_id": "src-id", "slug": slug}
+
+    def boom(conn, slug):
+        raise AssertionError("kind-qualified resolution must not fall back to slug-only")
+
+    class _Conn:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(links.repository, "get_wiki_page_by_slug", fake_get_by_slug)
+    monkeypatch.setattr(links.repository, "resolve_page_by_slug", boom)
+    monkeypatch.setattr(links, "connection", lambda: _Conn())
+    monkeypatch.setattr(links, "graph_connection", lambda: _Conn())
+    monkeypatch.setattr(
+        links.semantic_edges, "record_semantic_edge", lambda *a, **k: "written"
+    )
+    links.link("dup-slug", "other", "CONTRADICTS", from_kind="concept", to_kind="source")
+    assert ("concept", "dup-slug") in seen and ("source", "other") in seen
