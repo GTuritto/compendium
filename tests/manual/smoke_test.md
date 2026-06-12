@@ -527,3 +527,17 @@ not-found convention live once in the facade, with the surface unchanged.
 | --- | --- | --- | --- |
 | arch-fc.1 | Surface unchanged | run the v0.2-7 walk (or `deploy/ci-smoke.sh` layer 3) | byte-identical responses: b64 ingest auto-syncs, missing input → 400 with "ingest requires 'path' or 'content_base64'", unknown page → HTTP 404 / MCP null |
 | arch-fc.2 | Transports coercion-free | `grep -n "b64decode\|import base64" compendium/api/http.py compendium/api/mcp.py` | no matches |
+
+## v0.3 Phase 1 — Contradiction candidates (ADR-014)
+
+Prerequisites: stores up; a corpus with at least one concept page and an
+unlinked neighbour (the standard fixture corpus works). Stubs are fine
+(`COMPENDIUM_LLM_STUB=1` proposes deterministically).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.3-1.1 | Propose, no edge | `compendium curate run`, then `curate list` and `graph status` | a `contradiction_candidate` signal (slugs + confidence + rationale in the payload); `CONTRADICTS: 0` |
+| v0.3-1.2 | Approve writes the curator edge | `compendium curate resolve <id> --approve`, then `graph status` | `CONTRADICTS: 1`; the edge carries `extracted_by="curator"`; the signal is `addressed` |
+| v0.3-1.3 | Never re-proposed | `compendium curate run` again | no new candidate for that pair (watermark + linked/proposed pre-filters) |
+| v0.3-1.4 | Survives rebuild | `compendium graph rebuild`, then `graph status` | `CONTRADICTS: 1` (replayed from PostgreSQL, ADR-013) |
+| v0.3-1.5 | Drop is recorded | propose another candidate (or seed one), `curate resolve <id> --drop`, re-run | signal `dropped`; the pair is never re-asked; no edge |

@@ -108,6 +108,16 @@ the type is `automatic` (structural: `PART_OF`/`EVIDENCES`/`GROUNDS`), `symmetri
 from it. Every semantic-edge write goes through one provenance-enforcing seam
 (`schema.upsert_semantic_edge`); the generic `upsert_edge` writes structural edges only.
 
+**Contradiction candidate.** An LLM-*proposed* contradiction awaiting the curator's
+verdict (ADR-014, v0.3): a `contradiction_candidate` curation signal carrying both
+page slugs, a confidence, and a one-sentence rationale, emitted by the slow loop
+(`compendium/curate/contradict.py`, prompt `contradict-v1`) under the same bounds as
+ADR-010 extraction. It is not an edge: only `compendium curate resolve <id>
+--approve` writes the `CONTRADICTS` edge, through the curator path with
+`extracted_by="curator"` provenance; `--drop` records the decline and the pair is
+never re-proposed. Distinct from `unresolved_contradiction`, which is a
+curator-noticed observation.
+
 **LLM-extracted edge.** A semantic edge written by the v0.2 autonomous extractor
 (`RELATED_TO` or `PREREQUISITE_FOR` only). Distinguished from a curator-added edge by its
 **edge provenance** properties — never confused with curator work, prunable by predicate

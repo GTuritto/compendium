@@ -24,6 +24,7 @@ class CurateReport:
     by_kind: dict[str, int] = field(default_factory=dict)
     skipped_generators: list[str] = field(default_factory=list)
     extracted_edges: dict[str, int] = field(default_factory=dict)
+    contradictions: dict[str, int] = field(default_factory=dict)
 
 
 def _curation_cfg() -> tuple[int, float]:
@@ -40,10 +41,11 @@ def run() -> CurateReport:
         candidates: list[gen.Signal] = []
         skipped: list[str] = []
 
-        from compendium.curate import extract
+        from compendium.curate import contradict, extract
         from compendium.graph.client import graph_connection, graph_reachable
 
         extracted: dict[str, int] = {}
+        contradictions: dict[str, int] = {}
         with graph_connection() as driver:
             graph_up = graph_reachable(driver)
             ctx = gen.GenerationContext(
@@ -79,9 +81,28 @@ def run() -> CurateReport:
                 else:
                     skipped.append("extracted_edges")
 
+            # Contradiction candidates (ADR-014): the second separate step.
+            # Proposes signals only; the curator's resolve writes any edge.
+            ccfg = contradict.contradict_cfg()
+            if ccfg["enabled"] and graph_up:
+                from compendium.index.clients import qdrant_client, qdrant_reachable
+
+                qc = qdrant_client()
+                if qdrant_reachable(qc):
+                    try:
+                        creport = contradict.from_contradiction_candidates(
+                            conn, driver, qc, ccfg, run_id=run_id
+                        )
+                        contradictions = creport.as_dict()
+                    except Exception:  # best-effort; keep the run
+                        skipped.append("contradiction_candidate")
+                else:
+                    skipped.append("contradiction_candidate")
+
         open_keys = repository.open_signal_keys(conn)
         report = CurateReport(
-            run_id=str(run_id), skipped_generators=skipped, extracted_edges=extracted
+            run_id=str(run_id), skipped_generators=skipped,
+            extracted_edges=extracted, contradictions=contradictions,
         )
         for kind, priority, payload in candidates:
             key = (kind, repository._signal_dedup_key(payload))
@@ -95,7 +116,8 @@ def run() -> CurateReport:
             report.by_kind[kind] = report.by_kind.get(kind, 0) + 1
 
         summary: dict[str, Any] = {
-            "by_kind": report.by_kind, "skipped": skipped, "extracted_edges": extracted
+            "by_kind": report.by_kind, "skipped": skipped,
+            "extracted_edges": extracted, "contradictions": contradictions,
         }
         repository.complete_analysis_run(
             conn, run_id, signal_count=report.inserted, summary=summary

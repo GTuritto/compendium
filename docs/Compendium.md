@@ -706,6 +706,31 @@ Persist semantic edges in PostgreSQL and replay them on rebuild — *do not* tea
 
 **An automatic first-run backfill** (inside the migration) was rejected for an explicit, idempotent CLI verb — observable, and it needs Memgraph reachable, which a migration cannot assume.
 
+### ADR-014: Autonomous `CONTRADICTS` as curator-approved suggestions (v0.3)
+
+**Status:** Accepted (v0.3 Phase 1, 2026-06-12). Reverses the "autonomous `CONTRADICTS` deferred" line of ADR-010 for the *suggestion* half only — the write stays curator-owned forever.
+
+#### Context
+
+`CONTRADICTS` is the strongest content claim in the graph: it asserts two pages make incompatible claims. ADR-010 deliberately excluded it from autonomous extraction — most consequential if wrong — but a curator cannot notice contradictions across a growing corpus alone. ADR-010's taxonomy named the middle shape: *LLM-proposed, curator-approved* (Shape C). The v0.2 curation queue and the ADR-013 persistence layer make that shape cheap to build honestly.
+
+#### Decision
+
+A fifth slow-loop step, `from_contradiction_candidates` (`compendium/curate/contradict.py`), runs inside `compendium curate run` beside the ADR-010 extractor. Per concept page changed since the last proposal (a **signal-derived watermark**, with the same cold-start / every-Nth-run full-sweep cadence), it pulls the top K=10 Qdrant neighbours, pre-filters pairs already linked by **any** edge or already carrying a `contradiction_candidate` signal in **any** status (a dropped candidate is a recorded curator decision, never re-asked), and asks the LLM — one call per page, prompt id `contradict-v1`, over a `Contradictor` seam registered as the fifth model-client role — to label pairs `CONTRADICTS`-or-`NONE` with a confidence and a one-sentence rationale. Candidates at or above `curation.contradict.min_confidence` (default `0.7`) become **`contradiction_candidate` curation signals** (migration `0014` adds the distinct kind), carrying both slugs, the confidence, and the rationale. **The generator writes no edge.**
+
+Approval is the curator's act: `compendium curate resolve <signal_id> --approve` (or the TUI binding) writes the `CONTRADICTS` edge through the existing curator path — `graph/links.link` → the ADR-013 dual-write coordinator — so it lands with `extracted_by="curator"` provenance, is persisted to PostgreSQL, and survives `graph rebuild`. `--drop` records the decline. `curate resolve` is generic: drop works for every signal kind; approve dispatches through a per-kind action map of which the contradiction candidate is the first entry.
+
+#### Consequences
+
+- The ADR-010 curator-protection invariant holds **by construction**: no LLM-provenance `CONTRADICTS` edge can exist, because no code path writes one.
+- The expansion walk is unchanged: `CONTRADICTS` stays non-walkable (`EdgeType`), so approving a candidate flags a tension without rewiring retrieval.
+- A new distinct signal kind keeps proposed contradictions separate from curator-noticed `unresolved_contradiction` signals — provenance clarity in the queue itself.
+- Cost is bounded exactly like ADR-010: one LLM call per changed concept page per run.
+
+#### Alternatives considered
+
+**Autonomous write with high threshold** (Shape D) was rejected: a wrong `CONTRADICTS` is the most damaging wrong edge, and no confidence threshold substitutes for the curator on incompatible-claims judgements. **Reusing `unresolved_contradiction`** was rejected for provenance clarity (Q1): a proposal awaiting a verdict is a different thing from a curator's own observation. **A contradiction-specific resolve verb** was rejected (Q2): drop is meaningful for every kind today, and the per-kind approve map gives later kinds (e.g. merge candidates) a home without a second verb.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.

@@ -23,8 +23,8 @@ list by an explicit curator decision (2026-06-10):
 | 1 | Autonomous `CONTRADICTS` (curator-approved suggestions) | `v0.3-phase-1-contradicts` | **ADR-014** | `0.2.4` |
 | 2 | Web UI (Streamlit, loopback) | `v0.3-phase-2-web-ui` | **ADR-015** | `0.2.5` |
 
-Status: **planned — not yet started.** This document is the plan of record for
-review before any implementation code is written.
+Status: **Phase 1 merged (PR #74, 2026-06-12, ships ADR-014, version 0.2.4).**
+Phase 2 (web UI) not yet started. This document remains the plan of record.
 
 ### Versioning during the v0.3 build
 

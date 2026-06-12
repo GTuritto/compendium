@@ -231,6 +231,22 @@ def upsert_extracted_edge(
     )
 
 
+def semantic_adjacent_ids(driver: Driver, node_id: str) -> set[str]:
+    """Page-node ids directly linked to ``node_id`` by any semantic edge.
+
+    Composed with :func:`structural_pairs` this gives "linked by any edge" —
+    the ADR-014 contradiction generator's pre-filter, so an approved (or
+    curator-written) edge stops the pair from being re-proposed.
+    """
+    with driver.session() as session:
+        result = session.run(
+            "MATCH (n {id: $id})-[:RELATED_TO|PREREQUISITE_FOR|SYNTHESIZES|CONTRADICTS]-(m) "
+            "RETURN DISTINCT m.id AS id",
+            id=node_id,
+        )
+        return {record["id"] for record in result}
+
+
 def structural_pairs(driver: Driver, node_id: str) -> set[str]:
     """Page-node ids reachable from a node via 1-2 structural-edge hops.
 

@@ -24,7 +24,7 @@ or deferred.
 
 ---
 
-## 2. Architecture Decision Records (ADR-001 … ADR-013)
+## 2. Architecture Decision Records (ADR-001 … ADR-014)
 
 Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 
@@ -180,6 +180,19 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   the one CLI, but the lifecycle logic keeps a single home in the script — the
   verbs only delegate and propagate exit codes.
 
+### v0.3 Phase 1 — contradiction candidates (ADR-014)
+
+- **Shape C, exactly:** the LLM proposes (`contradiction_candidate` signals,
+  prompt `contradict-v1`, fifth model-client role, the ADR-010 bounds); only
+  `curate resolve --approve` writes the edge, through the curator path
+  (`extracted_by="curator"`, ADR-013-persisted). *Why:* the strongest claim
+  needs the curator's judgement; the invariant "no LLM CONTRADICTS edge" holds
+  by construction, not by threshold.
+- **Distinct signal kind** (migration `0014`), not `unresolved_contradiction`
+  reuse — a proposal awaiting a verdict is not a curator observation (Q1).
+- **`curate resolve` is generic** (Q2): drop for every kind (a dropped
+  candidate is recorded and never re-asked); approve via a per-kind action map.
+
 ### Review-#4 fix 1 — the chat envelope (arch/chat-envelope)
 
 - **One envelope behind the model-client registry**: `chat() → Completion` +
@@ -261,7 +274,7 @@ exposure) and ADR-014/ADR-015 are reserved by the v0.3 plan.
 | --- | --- |
 | **Network exposure** (MCP-SSE, HTTP over LAN/Tailscale) + **auth** + **TLS**. | The auth surface earns its place only when there is network exposure to authenticate against. Localhost/colocated needs none yet. |
 | **Multi-project namespacing / multi-tenancy.** | v0.2 keeps one shared logical pool; the namespacing model earns its place when a second project actually needs isolation. |
-| **Autonomous `CONTRADICTS` extraction.** | The strongest content claim; most consequential if wrong. v0.3+ as a curator-approved-suggestion (Shape B), not autonomous. |
+| **Autonomous `CONTRADICTS` extraction.** | **Shipped in v0.3 Phase 1 as ADR-014** — LLM-proposed `contradiction_candidate` signals, curator-approved writes (`curate resolve`). The autonomous-*write* half stays excluded forever. |
 | **Autonomous `SYNTHESIZES` extraction.** | Owned by the promote hook (`curate/lifecycle`) **forever**; autonomous extraction would race and double-write. |
 | **gRPC.** | No cross-machine / typed-polyglot earning case for a single personal host; HTTP/JSON + MCP suffice. |
 | **pgvector.** | Adopt only if trace-similarity analysis earns it; Qdrant owns vector search today. |

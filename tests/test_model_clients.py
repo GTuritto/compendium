@@ -24,7 +24,7 @@ _REQUIRED = {
     "EMBED_MODEL": "BAAI/bge-m3",
 }
 
-_ROLES = ("answerer", "synthesizer", "extractor", "embedder")
+_ROLES = ("answerer", "synthesizer", "extractor", "contradictor", "embedder")
 
 
 @pytest.fixture
@@ -36,10 +36,11 @@ def env(monkeypatch):
     return monkeypatch
 
 
-def test_registry_has_the_four_roles():
+def test_registry_has_the_five_roles():
     assert set(mc.REGISTRY) == set(_ROLES)
     assert mc.REGISTRY["embedder"].stub_env == "COMPENDIUM_EMBED_STUB"
     assert mc.REGISTRY["answerer"].stub_env == "COMPENDIUM_SYNTH_STUB"
+    assert mc.REGISTRY["contradictor"].stub_env == "COMPENDIUM_SYNTH_STUB"
 
 
 def test_each_role_returns_its_real_client_by_default(env):

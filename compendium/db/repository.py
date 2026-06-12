@@ -1398,3 +1398,45 @@ def ingest_stage_stats(conn: psycopg.Connection, days: int) -> list[dict[str, An
         "GROUP BY key ORDER BY key",
         (days,),
     ).fetchall()
+
+
+# --- contradiction candidates (ADR-014, v0.3 Phase 1) -----------------------
+
+
+def latest_signal_created_at(conn: psycopg.Connection, kind: str) -> Any | None:
+    """The newest signal timestamp for ``kind`` — the proposal watermark."""
+    row = conn.execute(
+        "SELECT MAX(created_at) AS ts FROM graph_curation_signals "
+        "WHERE kind = %s::curation_signal_kind",
+        (kind,),
+    ).fetchone()
+    return row["ts"] if row else None
+
+
+def signal_pair_slugs(conn: psycopg.Connection, kind: str) -> set[tuple[str, str]]:
+    """Canonicalised (slug, slug) pairs already carrying a ``kind`` signal.
+
+    Any status counts: a dropped candidate is a curator decision and is not
+    re-proposed.
+    """
+    rows = conn.execute(
+        "SELECT payload->>'from_slug' AS a, payload->>'to_slug' AS b "
+        "FROM graph_curation_signals WHERE kind = %s::curation_signal_kind",
+        (kind,),
+    ).fetchall()
+    return {tuple(sorted((r["a"], r["b"]))) for r in rows if r["a"] and r["b"]}
+
+
+def concept_pages_changed_since(
+    conn: psycopg.Connection, since: Any | None
+) -> list[dict[str, Any]]:
+    """Concept pages updated after ``since`` (all concept pages when None)."""
+    if since is None:
+        return conn.execute(
+            "SELECT * FROM wiki_pages WHERE kind = 'concept' ORDER BY updated_at"
+        ).fetchall()
+    return conn.execute(
+        "SELECT * FROM wiki_pages WHERE kind = 'concept' AND updated_at > %s "
+        "ORDER BY updated_at",
+        (since,),
+    ).fetchall()

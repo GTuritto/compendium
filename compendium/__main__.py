@@ -677,6 +677,22 @@ def _tui() -> int:
     return run()
 
 
+def _curate_resolve(signal_id: str, approve: bool, fmt: str) -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    from compendium.curate.resolve import ResolveError, resolve
+
+    try:
+        result = resolve(signal_id, approve=approve)
+    except ResolveError as exc:
+        print(f"curate resolve error: {exc}", file=sys.stderr)
+        return 1
+    print(render.curate_resolve(result, fmt))
+    return 0
+
+
 def _profile_stats(days: int, by: str | None, fmt: str) -> int:
     from compendium.profile_stats import gather
 
@@ -955,6 +971,18 @@ def main(argv: list[str] | None = None) -> int:
     curate_sub.add_parser("list", help="list open curation signals", parents=[fmt])
     curate_synth = curate_sub.add_parser("synth", help="synthesize from a signal")
     curate_synth.add_argument("signal_id", help="curation signal id")
+    curate_resolve = curate_sub.add_parser(
+        "resolve", help="apply the curator's verdict to a signal", parents=[fmt]
+    )
+    curate_resolve.add_argument("signal_id", help="curation signal id")
+    verdict = curate_resolve.add_mutually_exclusive_group(required=True)
+    verdict.add_argument(
+        "--approve", action="store_true",
+        help="approve the suggestion (contradiction_candidate: write the CONTRADICTS edge)",
+    )
+    verdict.add_argument(
+        "--drop", action="store_true", help="drop the signal (recorded; never re-proposed)"
+    )
 
     subparsers.add_parser(
         "start",
@@ -1039,6 +1067,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
     if args.command == "tui":
         return _tui()
     if args.command == "curate":
+        if args.curate_action == "resolve":
+            return _curate_resolve(args.signal_id, args.approve, fmt_arg)
         return _curate(args.curate_action, getattr(args, "signal_id", None), fmt_arg)
     if args.command == "backup":
         return _backup(

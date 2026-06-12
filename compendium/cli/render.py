@@ -205,6 +205,9 @@ def curate_run(report: Any, fmt: Format = "text") -> str:
     if fmt == "json":
         return to_json(report)
     lines = [f"  {kind}: {n}" for kind, n in report.by_kind.items()]
+    contradictions = getattr(report, "contradictions", None) or {}
+    if contradictions.get("proposed"):
+        lines.append(f"  contradiction_candidate (proposed): {contradictions['proposed']}")
     if report.skipped_generators:
         lines.append(
             f"  skipped (memgraph down): {', '.join(report.skipped_generators)}"
@@ -213,6 +216,12 @@ def curate_run(report: Any, fmt: Format = "text") -> str:
         f"curate run: {report.inserted} new signal(s) [run {report.run_id}]"
     )
     return "\n".join(lines)
+
+
+def curate_resolve(result: Any, fmt: Format = "text") -> str:
+    if fmt == "json":
+        return to_json(result)
+    return f"curate resolve: {result.action} {result.kind} {result.signal_id}\n  {result.detail}"
 
 
 def curate_synth(slug: str, fmt: Format = "text") -> str:

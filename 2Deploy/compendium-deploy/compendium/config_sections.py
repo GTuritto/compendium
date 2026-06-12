@@ -82,6 +82,17 @@ def extract() -> dict[str, Any]:
     }
 
 
+def contradict() -> dict[str, Any]:
+    """``curation.contradict``: ADR-014 contradiction-candidate parameters."""
+    c = _section("curation").get("contradict", {}) or {}
+    return {
+        "enabled": bool(c.get("enabled", True)),
+        "min_confidence": float(c.get("min_confidence", 0.7)),
+        "top_k_neighbours": int(c.get("top_k_neighbours", 10)),
+        "full_sweep_every": int(c.get("full_sweep_every", 24)),
+    }
+
+
 def ingestion() -> dict[str, Any]:
     """``ingestion``: size/chunk parameters. ``vault_path`` is NOT here -- it is
     env-sensitive and read via ``load_config().vault_path`` by the ingest pipeline.

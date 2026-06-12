@@ -80,6 +80,20 @@ def _extractor_real() -> Any:
     return LLMExtractor(c.synthesis_endpoint, c.synthesis_model, c.synthesis_api_key)
 
 
+def _contradictor_stub() -> Any:
+    from compendium.curate.contradict import StubContradictor
+
+    return StubContradictor()
+
+
+def _contradictor_real() -> Any:
+    from compendium.config import load_config
+    from compendium.curate.contradict import LLMContradictor
+
+    c = load_config()
+    return LLMContradictor(c.synthesis_endpoint, c.synthesis_model, c.synthesis_api_key)
+
+
 def _embedder_stub() -> Any:
     from compendium.index.embedder import StubEmbedder
 
@@ -98,6 +112,7 @@ REGISTRY: dict[str, ModelRole] = {
     "answerer": ModelRole("COMPENDIUM_SYNTH_STUB", _answerer_stub, _answerer_real),
     "synthesizer": ModelRole("COMPENDIUM_SYNTH_STUB", _synthesizer_stub, _synthesizer_real),
     "extractor": ModelRole("COMPENDIUM_SYNTH_STUB", _extractor_stub, _extractor_real),
+    "contradictor": ModelRole("COMPENDIUM_SYNTH_STUB", _contradictor_stub, _contradictor_real),
     "embedder": ModelRole("COMPENDIUM_EMBED_STUB", _embedder_stub, _embedder_real),
 }
 

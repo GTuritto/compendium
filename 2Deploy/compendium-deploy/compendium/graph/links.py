@@ -20,18 +20,41 @@ class LinkError(Exception):
     """Raised when an edge cannot be created (bad endpoint or non-semantic type)."""
 
 
-def link(from_slug: str, to_slug: str, edge_type: str, *, weight: float = 1.0) -> None:
-    """Create one semantic edge from one page to another, by slug."""
+def link(
+    from_slug: str,
+    to_slug: str,
+    edge_type: str,
+    *,
+    weight: float = 1.0,
+    from_kind: str | None = None,
+    to_kind: str | None = None,
+) -> None:
+    """Create one semantic edge from one page to another, by slug.
+
+    Slugs are unique per *kind*, not globally; pass ``from_kind`` / ``to_kind``
+    to disambiguate when the caller knows the exact pages (the ADR-014 resolve
+    path does — its signal payload is kind-qualified). Without a kind, an
+    ambiguous slug raises, mirroring the CLI verb's behaviour.
+    """
     if edge_type not in SEMANTIC_EDGES:
         raise LinkError(
             f"'{edge_type}' is not a curator-settable semantic edge "
             f"({', '.join(SEMANTIC_EDGES)})"
         )
+
+    def _resolve(conn, slug, kind):
+        if kind is not None:
+            return repository.get_wiki_page_by_slug(conn, kind, slug)
+        try:
+            return repository.resolve_page_by_slug(conn, slug)
+        except ValueError as exc:  # ambiguous across kinds
+            raise LinkError(str(exc)) from exc
+
     # Keep the connection open across the graph write so the curator edge's
     # PostgreSQL row commits with it (connection() commits on clean exit).
     with connection() as conn:
-        a = repository.resolve_page_by_slug(conn, from_slug)
-        b = repository.resolve_page_by_slug(conn, to_slug)
+        a = _resolve(conn, from_slug, from_kind)
+        b = _resolve(conn, to_slug, to_kind)
         if a is None:
             raise LinkError(f"page not found: {from_slug}")
         if b is None:
