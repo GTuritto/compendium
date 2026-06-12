@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium: Design and Build Reference
 
 This is the complete design and build documentation for Compendium, assembled into one document. It carries the product vision, the architecture decisions, the data contracts, the phased build plan, and the testing strategy in a single readable artifact. Read it top to bottom if you are new; jump via the table of contents if you are not.

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium v0.2 — Build Plan
 
 The execution plan for v0.2. Mirrors the discipline of [COMPENDIUM_BUILD.md](COMPENDIUM_BUILD.md)

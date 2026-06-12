@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium — Decisions and Rationale
 
 A consolidated record of every significant decision in Compendium and *why* it

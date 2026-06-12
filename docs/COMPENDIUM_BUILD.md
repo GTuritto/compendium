@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium — Project Build Plan
 
 This is the master build plan for Compendium v0.1. It turns the design in
