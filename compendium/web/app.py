@@ -10,16 +10,21 @@ No retrieval, answer, compose, or curation logic lives here.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from compendium import __version__
 from compendium.api import facade
 from compendium.tui import data as provider
 
-st.set_page_config(page_title="Compendium", layout="wide")
+_LOGO = Path(__file__).resolve().parent / "logo.png"
+
+st.set_page_config(page_title="Compendium", page_icon=str(_LOGO), layout="wide")
 
 VIEWS = ("Ask", "Search", "Pages", "Curation")
 
+st.sidebar.image(str(_LOGO), width=140)
 st.sidebar.title("Compendium")
 st.sidebar.caption(f"v{__version__} · loopback only (ADR-015)")
 view = st.sidebar.radio("View", VIEWS, key="view")
