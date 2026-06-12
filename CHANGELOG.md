@@ -50,6 +50,37 @@ record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each pha
 ships under the `0.2.x` line:
 
 
+## [0.3.1] - 2026-06-12
+
+v0.4 Phase 0 — clear the deck, per
+[docs/COMPENDIUM_V0.4_BUILD.md](docs/COMPENDIUM_V0.4_BUILD.md) § 4 (plan:
+[Plans/v0.4-phase-0-clear-the-deck.md](Plans/v0.4-phase-0-clear-the-deck.md)).
+The deck-clearing before the v0.4 measurement work; no behaviour change.
+
+### Added
+
+- **Wire-format snapshot tests** (`tests/test_wire_format.py`): one frozen
+  `render.to_json` literal per facade verb payload shape (`query`, `ask`,
+  `ingest`, `page_get`, `page_list`, `index_status`) plus the `to_payload`
+  equivalence cross-check. The access-surface wire contract is now pinned
+  byte-for-byte; changing it is a deliberate test edit.
+
+### Changed
+
+- **Cost table is loud about unknown models** (`compendium/answer/cost.py`):
+  an unknown non-stub model logs a structlog `unknown_model_rate` warning
+  instead of silently pricing at zero (the returned `0.0` and the
+  `ask_traces` schema are unchanged); the `anthropic/claude-haiku-4.5` alias
+  joins the rate table.
+
+### Removed
+
+- **The mutmut experiment is retired** (the v0.4 Phase 0 "mutants verdict"):
+  the local gitignored `mutants/` tree is deleted and draft PR #47 closed
+  with the verdict comment. A mutation gate stays a real idea for a suite
+  whose live tier is skip-not-fail, but adopting one is its own project —
+  recorded so future architecture reviews do not re-suggest it.
+
 ## [0.3.0] - 2026-06-12
 
 The v0.3 consolidation cut: both build-plan phases are merged (`0.2.4` /
@@ -164,3 +195,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [0.2.4]: https://github.com/GTuritto/compendium/releases/tag/v0.2.4
 [0.2.5]: https://github.com/GTuritto/compendium/releases/tag/v0.2.5
 [0.3.0]: https://github.com/GTuritto/compendium/releases/tag/v0.3.0
+[0.3.1]: https://github.com/GTuritto/compendium/releases/tag/v0.3.1

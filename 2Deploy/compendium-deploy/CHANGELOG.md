@@ -50,9 +50,17 @@ record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each pha
 ships under the `0.2.x` line:
 
 
-## [0.3.0] - 2026-06-12
+## [0.3.1] - 2026-06-12
 
 - _Describe the changes in this release._
+
+## [0.3.0] - 2026-06-12
+
+The v0.3 consolidation cut: both build-plan phases are merged (`0.2.4` /
+ADR-014 contradiction candidates; `0.2.5` / ADR-015 web UI), the C4 container
+view folds in the web UI and the contradiction-suggestion flow, and the v0.3
+build plan is closed. No code changes beyond the version itself.
+
 
 ## [0.2.5] - 2026-06-12
 
@@ -160,3 +168,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [0.2.4]: https://github.com/GTuritto/compendium/releases/tag/v0.2.4
 [0.2.5]: https://github.com/GTuritto/compendium/releases/tag/v0.2.5
 [0.3.0]: https://github.com/GTuritto/compendium/releases/tag/v0.3.0
+[0.3.1]: https://github.com/GTuritto/compendium/releases/tag/v0.3.1

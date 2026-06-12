@@ -554,3 +554,14 @@ Prerequisites: stores up; a seeded wiki; at least one open
 | v0.3-2.3 | Refusal | Ask view: an off-corpus question (raise `ask.refuse_below_coverage` if the corpus is tiny) | the refusal renders with the gap and copy-paste suggested actions |
 | v0.3-2.4 | Search + open a page | Search view: a covered query; Pages view: open the top result | ranked pages with coverage; the page renders frontmatter + Markdown body |
 | v0.3-2.5 | Approve from the browser | Curation view: Approve on a `contradiction_candidate`; then `compendium graph status` | the `CONTRADICTS` count increments (curator provenance); the signal leaves the queue |
+
+## v0.4 Phase 0 — Clear the deck
+
+Prerequisites: none beyond a dev checkout (hermetic; no stores needed for
+0.1; 0.2 wants the dev stack for a real `ask`, or runs as the unit tier).
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.4-0.1 | Wire snapshots hold | `uv run pytest tests/test_wire_format.py -q` | 12 passed; any failure names the wire contract in its message |
+| v0.4-0.2 | Unknown model is loud | `uv run pytest tests/test_ask.py -q` (unit), or set `SYNTHESIS_MODEL` to an unpriced name and run one `ask` against the dev stack | `unknown_model_rate` warning with the model name; `cost_estimate` records 0.0 |
+| v0.4-0.3 | Mutants retired | `ls mutants`; `gh pr view 47 --json state -q .state` | `No such file or directory`; `CLOSED` |
