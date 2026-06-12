@@ -31,7 +31,11 @@ launchd/systemd services (ADR-012 — in the [deployment](c4-deployment.md) view
 LLM-extracted semantic edges (ADR-010 — noted on the graph store). The post-v0.2
 local profiler (PR #63) is folded into the component view and the seams table below; it is
 opt-in and read-only over the operational record, so the context, container, and dynamic
-views are unchanged by it. The decision rationale is in
+views are unchanged by it. v0.3 is folded in (2026-06-12): the **contradiction-candidate
+flow** (ADR-014 — propose-as-signal in the curation loop, curator approval via
+`curate resolve`) rides the existing curation and graph views, and the **web UI**
+(ADR-015, `compendium web`, Streamlit on loopback) appears as a container over the
+facade + the TUI provider — it adds no component-level data path of its own. The decision rationale is in
 [../DECISIONS.md](../DECISIONS.md); the operator runbooks in [../operations/](../operations/).
 
 ## Reviews

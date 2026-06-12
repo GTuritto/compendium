@@ -49,13 +49,27 @@ The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
 record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase
 ships under the `0.2.x` line:
 
-- **Planned — `0.2.5` (v0.3 Phase 2, ADR-015):** a loopback Streamlit web UI
-  (`compendium web`) for ask / search / browse / curate, reusing the access-surface
-  facade and the TUI data paths. No new retrieval or answer logic.
+
+## [0.3.0] - 2026-06-12
+
+- _Describe the changes in this release._
 
 ## [0.2.5] - 2026-06-12
 
-- _Describe the changes in this release._
+v0.3 Phase 2 — the web UI (**ADR-015**). With this, the v0.3 build plan is
+complete (both phases merged); `0.3.0` is the consolidation cut.
+
+### Added
+
+- **`compendium web [--host 127.0.0.1] [--port 8501]`** — a loopback Streamlit
+  surface with four views over the existing seams: Ask (`facade.ask`, answers +
+  citations, refusals + suggested actions), Search (`facade.query`), Pages
+  (`facade.page_list`/`page_get`, rendered Markdown), and Curation (the
+  `tui/data.py` provider — Approve/Drop on ADR-014 contradiction candidates,
+  Synth for coverage signals). No new data layer, no new logic; one new
+  dependency (`streamlit`), declared as a stack-discipline exception in
+  ADR-015. Manual launch; no service unit; loopback only.
+
 
 ## [0.2.4] - 2026-06-12
 
@@ -145,3 +159,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [0.1.0]: https://github.com/GTuritto/compendium/releases/tag/v0.1.0
 [0.2.4]: https://github.com/GTuritto/compendium/releases/tag/v0.2.4
 [0.2.5]: https://github.com/GTuritto/compendium/releases/tag/v0.2.5
+[0.3.0]: https://github.com/GTuritto/compendium/releases/tag/v0.3.0
