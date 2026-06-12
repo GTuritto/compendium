@@ -128,3 +128,29 @@ The LLM endpoint/model/key reuse the `synthesis:` block.
 - A `compendium extract` CLI verb (runs inside `curate run`).
 - Retrieval re-ranking / filtering by `extracted_by` or `confidence` (expansion
   walks the edges as-is, weighted by `weight=confidence`).
+
+## Contradiction candidates (ADR-014, v0.3 Phase 1)
+
+The second autonomous step inside `compendium curate run` proposes — never
+writes — `CONTRADICTS`. Per changed concept page (signal-derived watermark,
+same full-sweep cadence), it pulls the top `curation.contradict.top_k_neighbours`
+Qdrant neighbours, drops pairs already linked by **any** edge or already
+proposed in any status, and asks the LLM (one call per page, prompt
+`contradict-v1`, the `Contradictor` seam with a hermetic stub) to label pairs
+`CONTRADICTS`-or-`NONE` with confidence and a one-sentence rationale.
+Candidates `>= curation.contradict.min_confidence` (0.7) land as
+`contradiction_candidate` curation signals.
+
+The curator drains them with:
+
+```bash
+uv run python -m compendium curate list                       # see candidates
+uv run python -m compendium curate resolve <id> --approve     # write the CONTRADICTS edge (curator provenance)
+uv run python -m compendium curate resolve <id> --drop        # decline; never re-proposed
+```
+
+(or the TUI curation screen's `a` / `x` bindings). An approved edge is
+persisted per ADR-013 and survives `graph rebuild`; it stays non-walkable by
+expansion. Every proposal is logged (`written-as-signal` /
+`dropped-by-confidence` / `dropped-by-collision` / `dropped-already-proposed`)
+and counted under `contradictions` in the `graph_analysis_runs` summary.
