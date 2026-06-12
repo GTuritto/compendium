@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium — Principles & How It Works
 
 What Compendium believes about memory, and what each operation actually does.

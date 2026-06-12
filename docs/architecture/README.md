@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../logo.png" alt="Compendium logo" width="280">
+</p>
+
 # Compendium — Architecture (C4)
 
 C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
