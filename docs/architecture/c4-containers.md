@@ -15,6 +15,7 @@ C4Container
   System_Boundary(compendium, "Compendium") {
     Container(app, "Compendium application", "Python 3.12 (uv)", "CLI + Textual TUI: ingest, synth, retrieve, ask, curate")
     Container(access, "Access surface", "FastAPI (HTTP) + MCP (stdio)", "compendium serve / mcp: six verbs over a shared facade")
+    Container(web, "Web UI", "Streamlit (loopback)", "compendium web: ask / search / pages / curation views over the facade + the TUI provider (ADR-015)")
     Container(services, "Always-on services", "launchd / systemd units", "backup, curate schedule, inbox watcher, serve daemon (ADR-012)")
     ContainerDb(vault, "Markdown vault", "Plain files on disk", "Canonical wiki: concept, topic, source pages")
     ContainerDb(postgres, "PostgreSQL", "PostgreSQL 16", "System of record: sources, chunks, pages, revisions, query/ask traces")
@@ -25,6 +26,8 @@ C4Container
 
   Rel(curator, app, "Operates", "CLI / TUI")
   Rel(agents, access, "query / ask / ingest", "HTTP 127.0.0.1 / MCP stdio")
+  Rel(curator, web, "Browser (127.0.0.1:8501)")
+  Rel(web, app, "Facade verbs + curation provider", "in-process import")
   Rel(access, app, "Calls the shared facade", "in-process")
   Rel(services, app, "Invoke on schedule / on file events / keep serve up")
   Rel(curator, obsidian, "Browses the wiki")
