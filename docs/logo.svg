@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Compendium golem logo">
+  <defs>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4b5563"/>
+      <stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="stoneDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#374151"/>
+      <stop offset="1" stop-color="#1f2937"/>
+    </linearGradient>
+    <radialGradient id="greenGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#bbf7d0"/>
+      <stop offset="0.45" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#065f46"/>
+    </radialGradient>
+    <radialGradient id="blueLens" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#bfdbfe"/>
+      <stop offset="0.5" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- knowledge-graph filaments -->
+  <g stroke="#34d399" stroke-width="4" fill="none" opacity="0.9">
+    <polyline points="60,170 96,140 132,160"/>
+    <polyline points="452,180 416,150 382,168"/>
+    <polyline points="70,300 110,290 140,304"/>
+    <polyline points="444,296 404,286 372,300"/>
+  </g>
+  <g fill="#a7f3d0">
+    <circle cx="60" cy="170" r="8"/><circle cx="96" cy="140" r="7"/><circle cx="132" cy="160" r="6"/>
+    <circle cx="452" cy="180" r="8"/><circle cx="416" cy="150" r="7"/><circle cx="382" cy="168" r="6"/>
+    <circle cx="70" cy="300" r="7"/><circle cx="140" cy="304" r="6"/>
+    <circle cx="444" cy="296" r="7"/><circle cx="372" cy="300" r="6"/>
+  </g>
+
+  <!-- feet -->
+  <rect x="128" y="430" width="104" height="52" rx="16" fill="url(#stoneDark)"/>
+  <rect x="282" y="430" width="104" height="52" rx="16" fill="url(#stoneDark)"/>
+
+  <!-- arms -->
+  <rect x="58" y="250" width="86" height="150" rx="26" fill="url(#stoneDark)"/>
+  <rect x="368" y="250" width="86" height="150" rx="26" fill="url(#stoneDark)"/>
+
+  <!-- body: stone slabs interleaved with book pages -->
+  <rect x="120" y="372" width="272" height="64" rx="14" fill="url(#stone)"/>
+  <g>
+    <rect x="138" y="346" width="116" height="26" rx="5" fill="#f5f0df"/>
+    <rect x="138" y="352" width="116" height="3" fill="#d8d2bd"/>
+    <rect x="138" y="360" width="116" height="3" fill="#d8d2bd"/>
+    <rect x="236" y="346" width="14" height="26" fill="#e8862e"/>
+  </g>
+  <rect x="124" y="282" width="264" height="64" rx="14" fill="url(#stone)"/>
+  <g>
+    <rect x="262" y="256" width="112" height="26" rx="5" fill="#f5f0df"/>
+    <rect x="262" y="262" width="112" height="3" fill="#d8d2bd"/>
+    <rect x="262" y="270" width="112" height="3" fill="#d8d2bd"/>
+    <rect x="268" y="256" width="14" height="26" fill="#e8862e"/>
+  </g>
+  <rect x="130" y="196" width="252" height="60" rx="14" fill="url(#stone)"/>
+
+  <!-- chest plate with pixel glyph -->
+  <path d="M216 224 h80 l-8 64 -32 18 -32 -18 z" fill="#1f2937" stroke="#0f172a" stroke-width="3"/>
+  <g fill="#f8fafc">
+    <rect x="234" y="240" width="10" height="10"/><rect x="254" y="240" width="10" height="10"/><rect x="269" y="240" width="10" height="10"/>
+    <rect x="241" y="252" width="36" height="8"/>
+    <rect x="234" y="262" width="10" height="10"/><rect x="254" y="262" width="10" height="10"/><rect x="269" y="262" width="10" height="10"/>
+  </g>
+
+  <!-- head -->
+  <rect x="142" y="92" width="228" height="104" rx="22" fill="url(#stone)"/>
+  <line x1="300" y1="96" x2="262" y2="192" stroke="#1f2937" stroke-width="4" opacity="0.5"/>
+  <!-- blue lens eye -->
+  <circle cx="208" cy="142" r="34" fill="#111827"/>
+  <circle cx="208" cy="142" r="27" fill="url(#blueLens)"/>
+  <circle cx="198" cy="131" r="8" fill="#ffffff" opacity="0.85"/>
+  <!-- green sensor eye -->
+  <circle cx="312" cy="140" r="26" fill="#052e1f"/>
+  <circle cx="312" cy="140" r="20" fill="url(#greenGlow)"/>
+  <circle cx="306" cy="134" r="6" fill="#ecfdf5"/>
+  <rect x="346" y="124" width="34" height="32" rx="8" fill="#1f2937"/>
+
+  <!-- pages tucked at the head's right -->
+  <g>
+    <rect x="352" y="158" width="64" height="18" rx="4" fill="#f5f0df"/>
+    <rect x="352" y="180" width="58" height="14" rx="4" fill="#eae3cc"/>
+    <rect x="398" y="158" width="10" height="18" fill="#e8862e"/>
+  </g>
+</svg>
