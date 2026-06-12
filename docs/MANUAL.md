@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="compendium_knowitall_book_graph.svg" alt="Compendium logo" width="320">
+  <img src="logo.png" alt="Compendium logo" width="320">
 </p>
 
 # Compendium — Instruction Manual
