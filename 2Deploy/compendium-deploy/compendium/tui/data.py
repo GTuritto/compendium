@@ -108,3 +108,10 @@ def graph_walk(node_id: str, hops: int = 2) -> dict[str, Any]:
 
 class GraphUnreachable(Exception):
     """Raised when the graph browser cannot reach Memgraph."""
+
+
+def resolve_signal(signal_id: str, *, approve: bool) -> str:
+    """Apply the curator's verdict (v0.3 Phase 1); returns the detail line."""
+    from compendium.curate.resolve import resolve
+
+    return resolve(signal_id, approve=approve).detail

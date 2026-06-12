@@ -25,7 +25,12 @@ class CurationScreen(DataScreen):
     signal moves to ``in_progress`` and leaves the open queue.
     """
 
-    BINDINGS = [("r", "refresh", "Refresh"), ("y", "synth", "Synth from signal")]
+    BINDINGS = [
+        ("r", "refresh", "Refresh"),
+        ("y", "synth", "Synth from signal"),
+        ("a", "approve", "Approve"),
+        ("x", "drop", "Drop"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -60,8 +65,39 @@ class CurationScreen(DataScreen):
                 str(r["priority"]), r["kind"], summary, render.fmt_ts(r["created_at"])
             )
             self._signal_ids.append(str(r["id"]))
-        note = "no open signals" if not rows else f"{len(rows)} open signal(s) — y to synth"
+        note = (
+            "no open signals" if not rows
+            else f"{len(rows)} open signal(s) — y synth · a approve · x drop"
+        )
         self.query_one("#status", Static).update(note)
+
+    def _selected_signal_id(self) -> str | None:
+        table = self.query_one("#signals", DataTable)
+        row = table.cursor_row
+        if row is None or row >= len(self._signal_ids):
+            return None
+        return self._signal_ids[row]
+
+    def action_approve(self) -> None:
+        signal_id = self._selected_signal_id()
+        if signal_id is not None:
+            self._resolve(signal_id, True)
+
+    def action_drop(self) -> None:
+        signal_id = self._selected_signal_id()
+        if signal_id is not None:
+            self._resolve(signal_id, False)
+
+    @work(thread=True, exclusive=True)
+    def _resolve(self, signal_id: str, approve: bool) -> None:
+        def done(detail: str) -> None:
+            self.notify(detail)
+            self.load()
+
+        self.run_threaded(
+            lambda: tui_data.resolve_signal(signal_id, approve=approve),
+            on_ok=done, error_label="resolve",
+        )
 
     def action_synth(self) -> None:
         table = self.query_one("#signals", DataTable)

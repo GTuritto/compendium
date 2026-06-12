@@ -58,6 +58,10 @@ ships under the `0.2.x` line:
   (`compendium web`) for ask / search / browse / curate, reusing the access-surface
   facade and the TUI data paths. No new retrieval or answer logic.
 
+## [0.2.4] - 2026-06-12
+
+- _Describe the changes in this release._
+
 ## [0.2.3] - 2026-06-09
 
 The `0.2.x` line opens. This consolidates everything built after v0.1 — the eight
@@ -123,3 +127,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [Unreleased]: https://github.com/GTuritto/compendium/compare/main...HEAD
 [0.2.3]: https://github.com/GTuritto/compendium/releases/tag/v0.2.3
 [0.1.0]: https://github.com/GTuritto/compendium/releases/tag/v0.1.0
+[0.2.4]: https://github.com/GTuritto/compendium/releases/tag/v0.2.4
