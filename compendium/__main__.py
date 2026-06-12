@@ -701,6 +701,16 @@ def _profile_stats(days: int, by: str | None, fmt: str) -> int:
     return 0
 
 
+def _web(host: str, port: int) -> int:
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    from compendium.web import run as web_run
+
+    return web_run(host=host, port=port)
+
+
 def _stack(action: str) -> int:
     """Drive the whole stack via deploy/compendiumctl (its single home).
 
@@ -984,6 +994,13 @@ def main(argv: list[str] | None = None) -> int:
         "--drop", action="store_true", help="drop the signal (recorded; never re-proposed)"
     )
 
+    web_parser = subparsers.add_parser(
+        "web",
+        help="launch the browser UI (Streamlit, loopback-only; ADR-015)",
+    )
+    web_parser.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
+    web_parser.add_argument("--port", type=int, default=8501, help="port (default 8501)")
+
     subparsers.add_parser(
         "start",
         help="start the backing stores and nudge the serve unit (deploy/compendiumctl start)",
@@ -1091,6 +1108,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
         )
     if args.command == "profile":
         return _profile_stats(args.days, args.by, fmt_arg)
+    if args.command == "web":
+        return _web(args.host, args.port)
     if args.command in ("start", "stop", "restart"):
         return _stack(args.command)
     return _startup()

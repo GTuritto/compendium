@@ -45,7 +45,7 @@ Resolved build decisions: embedding model is BGE-M3 (`BAAI/bge-m3`); vault layou
 ## What Compendium Is Not (v0.1)
 
 - Not real-time or streaming ingestion. Batch only.
-- Not a chat UI and not LLM-composed answers. v0.1 output is ranked pages with citations. (v0.2 Phase 6 reverses the "not LLM-composed answers" half for the single `compendium ask` verb per `docs/COMPENDIUM_V0.2_BUILD.md` § Phase 6; `ask` composes over the page-first retrieval and refuses below a coverage threshold. Still not a chat UI: single question, single answer, no session state.)
+- Not a chat UI and not LLM-composed answers. v0.1 output is ranked pages with citations. (v0.2 Phase 6 reverses the "not LLM-composed answers" half for the single `compendium ask` verb per `docs/COMPENDIUM_V0.2_BUILD.md` § Phase 6; `ask` composes over the page-first retrieval and refuses below a coverage threshold. Still not a chat UI: single question, single answer, no session state. v0.3 Phase 2 / ADR-015 adds a loopback Streamlit web UI — `compendium web`: ask/search/browse/curate views over the existing facade + TUI provider, still single-question/single-answer, no session state, no new logic.)
 - Not chunk-first RAG. Page-first; chunks are the fallback.
 - Not multi-user. No auth, no permissions. (v0.2 Phase 7 / ADR-011 adds a callable access surface — `compendium serve` HTTP on `127.0.0.1` and `compendium mcp` stdio — but it stays single-user and **no-auth**: the bind is loopback / stdio for colocated callers only. Network exposure, token/Tailscale auth, and TLS are deferred to v0.3+.)
 - Not a cloud deployment, SaaS, hosted service, or product.

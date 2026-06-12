@@ -49,18 +49,34 @@ The v0.3 build (two phases, pulled forward from the v0.2 deferral list). Plan of
 record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each phase
 ships under the `0.2.x` line:
 
-- **Planned — `0.2.4` (v0.3 Phase 1, ADR-014):** autonomous `CONTRADICTS` as
-  curator-approved suggestions. A slow-loop generator proposes `CONTRADICTS`
-  candidates into the curation queue (`contradiction_candidate` signals); a new
-  `curate resolve --approve | --drop` action writes the curator-owned edge on
-  approval. The LLM never writes a `CONTRADICTS` edge directly.
 - **Planned — `0.2.5` (v0.3 Phase 2, ADR-015):** a loopback Streamlit web UI
   (`compendium web`) for ask / search / browse / curate, reusing the access-surface
   facade and the TUI data paths. No new retrieval or answer logic.
 
-## [0.2.4] - 2026-06-12
+## [0.2.5] - 2026-06-12
 
 - _Describe the changes in this release._
+
+## [0.2.4] - 2026-06-12
+
+v0.3 Phase 1 — autonomous `CONTRADICTS` as curator-approved suggestions
+(**ADR-014**). See [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md).
+
+### Added
+
+- **Contradiction candidates**: a second autonomous step inside
+  `compendium curate run` (`curate/contradict.py`, prompt `contradict-v1`,
+  fifth model-client role) proposes `contradiction_candidate` curation signals
+  (migration `0014`) per changed concept page — slugs + kinds, confidence, and
+  a one-sentence rationale in the payload. The generator writes **no** edge.
+- **`compendium curate resolve <id> --approve | --drop`** — the generic
+  curator verdict verb: drop records the decline for any kind (never
+  re-proposed); approve on a contradiction candidate writes the `CONTRADICTS`
+  edge through the curator path (`extracted_by="curator"`, ADR-013-persisted,
+  survives `graph rebuild`). TUI curation screen gains `a`/`x` bindings.
+- Config: `curation.contradict` (enabled / min_confidence 0.7 /
+  top_k_neighbours 10 / full_sweep_every 24).
+
 
 ## [0.2.3] - 2026-06-09
 
@@ -128,3 +144,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [0.2.3]: https://github.com/GTuritto/compendium/releases/tag/v0.2.3
 [0.1.0]: https://github.com/GTuritto/compendium/releases/tag/v0.1.0
 [0.2.4]: https://github.com/GTuritto/compendium/releases/tag/v0.2.4
+[0.2.5]: https://github.com/GTuritto/compendium/releases/tag/v0.2.5

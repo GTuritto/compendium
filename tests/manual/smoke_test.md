@@ -541,3 +541,16 @@ unlinked neighbour (the standard fixture corpus works). Stubs are fine
 | v0.3-1.3 | Never re-proposed | `compendium curate run` again | no new candidate for that pair (watermark + linked/proposed pre-filters) |
 | v0.3-1.4 | Survives rebuild | `compendium graph rebuild`, then `graph status` | `CONTRADICTS: 1` (replayed from PostgreSQL, ADR-013) |
 | v0.3-1.5 | Drop is recorded | propose another candidate (or seed one), `curate resolve <id> --drop`, re-run | signal `dropped`; the pair is never re-asked; no edge |
+
+## v0.3 Phase 2 — Web UI (ADR-015)
+
+Prerequisites: stores up; a seeded wiki; at least one open
+`contradiction_candidate` (run the v0.3-1 walk first). Stubs are fine.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.3-2.1 | Launch, loopback only | `compendium web`; `lsof -nP -iTCP:8501 -sTCP:LISTEN` | the app serves on `http://127.0.0.1:8501`; the listener binds 127.0.0.1 only |
+| v0.3-2.2 | Covered ask | Ask view: a corpus-covered question | the composed answer renders with `[n]` citations and the coverage footer |
+| v0.3-2.3 | Refusal | Ask view: an off-corpus question (raise `ask.refuse_below_coverage` if the corpus is tiny) | the refusal renders with the gap and copy-paste suggested actions |
+| v0.3-2.4 | Search + open a page | Search view: a covered query; Pages view: open the top result | ranked pages with coverage; the page renders frontmatter + Markdown body |
+| v0.3-2.5 | Approve from the browser | Curation view: Approve on a `contradiction_candidate`; then `compendium graph status` | the `CONTRADICTS` count increments (curator provenance); the signal leaves the queue |

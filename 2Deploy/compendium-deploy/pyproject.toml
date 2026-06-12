@@ -2,7 +2,7 @@
 name = "compendium"
 # Canonical version lives in the root VERSION file (compendium.__version__ reads it).
 # This literal mirrors it; bump both together. See CHANGELOG.md.
-version = "0.2.4"
+version = "0.2.5"
 description = "Personal knowledge synthesis system: ingest sources, synthesize a canonical Markdown wiki, retrieve page-first."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "qdrant-client>=1.18.0",
+    "streamlit>=1.58.0",
     "structlog>=24.1",
     "textual>=0.80",
     "trafilatura>=2.0.0",

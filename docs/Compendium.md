@@ -731,6 +731,28 @@ Approval is the curator's act: `compendium curate resolve <signal_id> --approve`
 
 **Autonomous write with high threshold** (Shape D) was rejected: a wrong `CONTRADICTS` is the most damaging wrong edge, and no confidence threshold substitutes for the curator on incompatible-claims judgements. **Reusing `unresolved_contradiction`** was rejected for provenance clarity (Q1): a proposal awaiting a verdict is a different thing from a curator's own observation. **A contradiction-specific resolve verb** was rejected (Q2): drop is meaningful for every kind today, and the per-kind approve map gives later kinds (e.g. merge candidates) a home without a second verb.
 
+### ADR-015: A Streamlit web UI, loopback-only (v0.3)
+
+**Status:** Accepted (v0.3 Phase 2, 2026-06-12). A deliberate, documented stack-discipline exception — the way ADR-012 reversed "no daemon" — adding exactly one dependency (`streamlit`) and zero new data paths.
+
+#### Context
+
+The daily read / ask / curate loop lived only in the terminal. Everything a browser surface needs already exists behind two seams: the six-verb access-surface facade (ADR-011) and the TUI's channel-free data provider (`tui/data.py`, which v0.3 Phase 1 extended with the resolve action). The remaining question was only the front-end stack and the posture.
+
+#### Decision
+
+`compendium web [--host 127.0.0.1] [--port 8501]` launches a **Streamlit** app as a separate colocated process, **bound to loopback only**. Four views, all thin: **Ask** (`facade.ask` — composed answer with `[n]` citations; refusals render the gap and the suggested next CLI commands), **Search** (`facade.query` — ranked pages, coverage, chunk citations on fallback), **Pages** (`facade.page_list`/`page_get` — frontmatter + Markdown body), **Curation** (the `tui/data.py` provider — the queue including ADR-014 contradiction candidates, with Approve / Drop running the same resolve action as the CLI and TUI, and Synth for coverage-shaped signals). The app adds **no third data layer and no retrieval/answer/compose/curation logic**; it imports the facade and the provider, full stop. The launch is manual (no service unit in v0.3 — it is interactive, not a daemon); the bind default lives in one place (`compendium/web/__init__.py`).
+
+#### Consequences
+
+- The stack-discipline table gains one entry (Streamlit), justified the only way the discipline allows: a documented ADR exception with the exclusion lines updated to point here. The "no JS/Node build toolchain" line stays intact — Streamlit is a Python dependency.
+- Single-user / no-auth posture is unchanged: loopback is the access control, exactly as ADR-011. The moment the web UI (or the HTTP surface) leaves `127.0.0.1` is the **same** v0.4 decision — auth + TLS + exposure together, not a flag to flip.
+- Because every action crosses the existing seams, the web UI cannot drift from the CLI/TUI behaviour: an approve in the browser is the Phase 1 resolve, byte for byte.
+
+#### Alternatives considered
+
+**A hand-rolled FastAPI + HTML/JS front-end** was rejected: it would re-introduce the JS toolchain the stack discipline excludes and duplicate what Streamlit gives for one dependency. **Extending the TUI instead** was rejected: the browser is the point (reading pages as rendered Markdown, links, a laptop-away surface). **A third data layer for the web** was rejected before it started (Q3): `tui/data.py` already is the shared channel-free provider.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
