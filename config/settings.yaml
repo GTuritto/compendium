@@ -75,6 +75,11 @@ curation:
     min_confidence: 0.7          # labels below this are dropped
     top_k_neighbours: 10         # Qdrant neighbours per source page
     full_sweep_every: 24         # re-sweep all pages every Nth run (cold start always sweeps)
+  contradict:
+    enabled: true
+    min_confidence: 0.7          # candidates below this are dropped (ADR-014)
+    top_k_neighbours: 10         # Qdrant neighbours per concept page
+    full_sweep_every: 24         # re-sweep all concept pages every Nth run
 
 loops:
   slow_loop_interval_seconds: 3600
