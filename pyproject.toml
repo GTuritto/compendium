@@ -2,7 +2,7 @@
 name = "compendium"
 # Canonical version lives in the root VERSION file (compendium.__version__ reads it).
 # This literal mirrors it; bump both together. See CHANGELOG.md.
-version = "0.2.4"
+version = "0.2.5"
 description = "Personal knowledge synthesis system: ingest sources, synthesize a canonical Markdown wiki, retrieve page-first."
 readme = "README.md"
 requires-python = ">=3.12"
