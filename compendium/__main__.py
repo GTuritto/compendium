@@ -701,6 +701,39 @@ def _profile_stats(days: int, by: str | None, fmt: str) -> int:
     return 0
 
 
+def _validate(args: argparse.Namespace, fmt: str) -> int:
+    """The v0.4 A/B harness verbs (ADR-016): harvest, run."""
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+    from pathlib import Path
+
+    from compendium.validate import probes as probes_mod
+    from compendium.validate.run import run_ab
+
+    if args.validate_action == "harvest":
+        out_dir = Path(args.out) if args.out else probes_mod.default_probe_dir()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        candidates = probes_mod.harvest_candidates(limit=args.limit)
+        out_path = out_dir / "candidates.yaml"
+        out_path.write_text(probes_mod.dump_candidates(candidates), encoding="utf-8")
+        print(render.validate_harvest(candidates, str(out_path), fmt))
+        return 0
+
+    if args.validate_action == "run":
+        try:
+            probe_set = probes_mod.load_probe_set(args.probes)
+        except probes_mod.ProbeSetError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        report = run_ab(probe_set)
+        print(render.validate_run(report, fmt))
+        return 0
+
+    return 1
+
+
 def _web(host: str, port: int) -> int:
     try:
         load_config()
@@ -1013,6 +1046,31 @@ def main(argv: list[str] | None = None) -> int:
         "restart", help="stop then start the whole stack (deploy/compendiumctl restart)"
     )
 
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="v0.4 validation harness: page-first vs chunk-only A/B (ADR-016)",
+    )
+    validate_sub = validate_parser.add_subparsers(dest="validate_action", required=True)
+    validate_harvest = validate_sub.add_parser(
+        "harvest",
+        help="list real questions from ask_traces into a candidate probe set",
+        parents=[fmt],
+    )
+    validate_harvest.add_argument(
+        "--out", default=None, help="output dir (default ~/.compendium/probes)"
+    )
+    validate_harvest.add_argument(
+        "--limit", type=int, default=200, help="max candidates (default 200)"
+    )
+    validate_run = validate_sub.add_parser(
+        "run",
+        help="run a frozen probe set through both arms and report the delta",
+        parents=[fmt],
+    )
+    validate_run.add_argument(
+        "--probes", required=True, help="path to a frozen probe-set YAML"
+    )
+
     profile_parser = subparsers.add_parser(
         "profile", help="local profiler: on-demand performance stats"
     )
@@ -1108,6 +1166,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
         )
     if args.command == "profile":
         return _profile_stats(args.days, args.by, fmt_arg)
+    if args.command == "validate":
+        return _validate(args, fmt_arg)
     if args.command == "web":
         return _web(args.host, args.port)
     if args.command in ("start", "stop", "restart"):
