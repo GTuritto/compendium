@@ -1,0 +1,14 @@
+# A synthetic, frozen probe set over the standard fixture corpus, for the
+# hermetic test tier and the smoke walk. NOT a real probe set: real probe sets
+# are harvested from ask_traces and live outside the repo (~/.compendium/probes).
+# `expected` slugs reference pages the seeded fixture corpus produces.
+frozen: true
+probes:
+  - id: fixture-team-learning
+    query: "teams that learn from mistakes"
+    expected: [sample-markdown-source]
+    notes: "synthetic; the source page is retrievable by both arms"
+  - id: fixture-psych-safety
+    query: "psychological safety"
+    expected: [sample-markdown-source]
+    notes: "synthetic; lexical + dense match on the seeded source"
