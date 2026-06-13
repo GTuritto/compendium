@@ -574,7 +574,7 @@ reindex state). Stubs are fine. The chunk arm is validate-only.
 | # | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
 | v0.4-1.1 | Control arm fenced | `compendium query --help` | no `--arm` option on the supported surface |
-| v0.4-1.2 | A/B over the fixtures | `compendium validate run --probes tests/fixtures/probe-set.yaml` | per-query table (page vs chunk hit/recall/mrr), methodology header, aggregate row, exit 0 |
+| v0.4-1.2 | A/B over the fixtures | `compendium validate run --probes tests/fixtures/probes/probe-set.yaml` | per-query table (page vs chunk hit/recall/mrr), methodology header, aggregate row, exit 0 |
 | v0.4-1.3 | Determinism | run v0.4-1.2 twice with `--format json`; diff the two | identical reports |
 | v0.4-1.4 | Frozen guard | `compendium validate run --probes <an unfrozen yaml>` | refuses, names the freeze step, exit 1 |
 | v0.4-1.5 | Harvest hygiene | `compendium validate harvest --out /tmp/probes` | `candidates.yaml` written under /tmp; `git status` clean |
