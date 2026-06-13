@@ -130,8 +130,22 @@ async def run(
     qd_client: Any | None = None,
     corpus_revision: str | None = None,
     alias_index: AliasIndex | None = None,
+    arm: str = "pages",
+    exact: bool = False,
 ) -> RetrievalResult:
-    """Run the page-first pipeline. Clients/embedder are injectable for tests."""
+    """Run the page-first pipeline. Clients/embedder are injectable for tests.
+
+    ``arm`` selects the retrieval arm (ADR-016): ``"pages"`` is the supported
+    page-first path, byte-identical to pre-v0.4 behaviour; ``"chunks"`` is the
+    validation control arm — the identical BM25 + dense fan-out and RRF fusion
+    over the chunk indexes, unconditionally, with no page ranking and no
+    coverage gating. The control arm is reachable only through
+    ``compendium/validate/``; ``query`` and the access surface never expose
+    it. ``exact`` switches Qdrant to exact kNN (measurement determinism); the
+    production default stays HNSW.
+    """
+    if arm not in ("pages", "chunks"):
+        raise ValueError(f"unknown retrieval arm: {arm!r}")
     rrf_k, threshold, top_k = _retrieval_params()
     embedder = embedder or get_embedder()
 
@@ -148,23 +162,33 @@ async def run(
     qd_client = qd_client or async_qdrant_client()
 
     latencies: dict[str, float] = {}
+    pages: list[PageResult] = []
+    fused_pages: list[FusedHit] = []
+    os_pages: list[search.Hit] = []
+    qd_pages: list[search.Hit] = []
+    coverage = 0.0
     try:
         # Embed once; reuse the vector for the dense searches and the trace.
         with timed("embed", sink=latencies):
             query_vector = embedder.embed([query_text])[0]
 
-        # Fan out to the two pages indexes in parallel.
-        with timed("pages_fanout", sink=latencies):
-            os_pages, qd_pages = await asyncio.gather(
-                search.opensearch_pages(os_client, query_text, CANDIDATE_POOL_SIZE),
-                search.qdrant_pages(qd_client, query_vector, CANDIDATE_POOL_SIZE),
-            )
+        if arm == "pages":
+            # Fan out to the two pages indexes in parallel.
+            with timed("pages_fanout", sink=latencies):
+                os_pages, qd_pages = await asyncio.gather(
+                    search.opensearch_pages(
+                        os_client, query_text, CANDIDATE_POOL_SIZE
+                    ),
+                    search.qdrant_pages(
+                        qd_client, query_vector, CANDIDATE_POOL_SIZE, exact=exact
+                    ),
+                )
 
-        fused_pages = reciprocal_rank_fusion(
-            {"opensearch": os_pages, "qdrant": qd_pages}, rrf_k=rrf_k
-        )
-        coverage = coverage_score([f.score for f in fused_pages], top_k)
-        pages = [_page_result(f) for f in fused_pages[:top_k]]
+            fused_pages = reciprocal_rank_fusion(
+                {"opensearch": os_pages, "qdrant": qd_pages}, rrf_k=rrf_k
+            )
+            coverage = coverage_score([f.score for f in fused_pages], top_k)
+            pages = [_page_result(f) for f in fused_pages[:top_k]]
 
         # Fast-loop graph expansion (ADR-009): walk semantic edges from the top
         # seeds and merge reached pages. No-op when disabled / no edges / graph
@@ -194,7 +218,10 @@ async def run(
                     pages = sorted(pages + extra, key=lambda p: -p.score)[:top_k]
                 graph_expansion_payload = outcome.payload
 
-        fallback = coverage < threshold
+        # The chunks fan-out runs for the control arm (always) or the pages
+        # arm's low-coverage fallback. The control arm carries no gap: ranked
+        # chunks are its output, not a symptom.
+        fallback = coverage < threshold if arm == "pages" else True
         citations: list[ChunkCitation] = []
         gaps: list[dict[str, Any]] = []
         os_chunks: list[search.Hit] = []
@@ -205,20 +232,23 @@ async def run(
             with timed("chunks_fanout", sink=latencies):
                 os_chunks, qd_chunks = await asyncio.gather(
                     search.opensearch_chunks(os_client, query_text, CANDIDATE_POOL_SIZE),
-                    search.qdrant_chunks(qd_client, query_vector, CANDIDATE_POOL_SIZE),
+                    search.qdrant_chunks(
+                        qd_client, query_vector, CANDIDATE_POOL_SIZE, exact=exact
+                    ),
                 )
             fused_chunks = reciprocal_rank_fusion(
                 {"opensearch": os_chunks, "qdrant": qd_chunks}, rrf_k=rrf_k
             )
             citations = [_chunk_citation(f) for f in fused_chunks[:top_k]]
-            gaps = [
-                {
-                    "kind": "low_coverage",
-                    "query": raw_query,
-                    "coverage_score": coverage,
-                    "threshold": threshold,
-                }
-            ]
+            if arm == "pages":
+                gaps = [
+                    {
+                        "kind": "low_coverage",
+                        "query": raw_query,
+                        "coverage_score": coverage,
+                        "threshold": threshold,
+                    }
+                ]
     finally:
         if owns_clients:
             await os_client.close()
@@ -262,6 +292,10 @@ async def run(
         "gaps": gaps,
         "graph_expansion": graph_expansion_payload,
     }
+    if arm != "pages":
+        # ADR-016: the control arm stamps itself; the pages arm's trace stays
+        # byte-identical to pre-v0.4 (the Phase 0 wire snapshots pin it).
+        trace["pipeline"]["arm"] = arm
 
     return RetrievalResult(
         query_text=raw_query,
