@@ -12,6 +12,18 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ## [Unreleased]
 
+### Changed (merged to `main`, ships with the next cut)
+
+- **Automated tag + release on VERSION change** (`.github/workflows/ci.yml`):
+  the `distribution` job now owns the tag. On a push to `main` whose `VERSION`
+  has no matching `v*` tag, it creates and pushes `v<VERSION>` and publishes
+  the GitHub Release in the same smoke-gated run; a hand-pushed `v*` tag still
+  releases as before. `release.sh` keeps owning the version *number* (bumped
+  in a phase's completion commit); CI owns turning that bump into a tagged
+  release. Fixes the decoupling where a bumped `VERSION` never became a tagged
+  release unless someone tagged by hand. No version churn: merges that do not
+  touch `VERSION` (docs, phase-prep) produce no tag and no release.
+
 ### Added (merged to `main`, ships with the next cut)
 
 - **Local profiler** (PR #63, 2026-06-11): `compendium profile stats` (read-only
