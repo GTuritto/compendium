@@ -565,3 +565,17 @@ Prerequisites: none beyond a dev checkout (hermetic; no stores needed for
 | v0.4-0.1 | Wire snapshots hold | `uv run pytest tests/test_wire_format.py -q` | 12 passed; any failure names the wire contract in its message |
 | v0.4-0.2 | Unknown model is loud | `uv run pytest tests/test_ask.py -q` (unit), or set `SYNTHESIS_MODEL` to an unpriced name and run one `ask` against the dev stack | `unknown_model_rate` warning with the model name; `cost_estimate` records 0.0 |
 | v0.4-0.3 | Mutants retired | `ls mutants`; `gh pr view 47 --json state -q .state` | `No such file or directory`; `CLOSED` |
+
+## v0.4 Phase 1 — The single-point A/B (ADR-016)
+
+Prerequisites: stores up; the fixture corpus seeded (the smoke walk's ingest +
+reindex state). Stubs are fine. The chunk arm is validate-only.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.4-1.1 | Control arm fenced | `compendium query --help` | no `--arm` option on the supported surface |
+| v0.4-1.2 | A/B over the fixtures | `compendium validate run --probes tests/fixtures/probe-set.yaml` | per-query table (page vs chunk hit/recall/mrr), methodology header, aggregate row, exit 0 |
+| v0.4-1.3 | Determinism | run v0.4-1.2 twice with `--format json`; diff the two | identical reports |
+| v0.4-1.4 | Frozen guard | `compendium validate run --probes <an unfrozen yaml>` | refuses, names the freeze step, exit 1 |
+| v0.4-1.5 | Harvest hygiene | `compendium validate harvest --out /tmp/probes` | `candidates.yaml` written under /tmp; `git status` clean |
+| v0.4-1.6 | Real run (post-Track-A) | freeze a probe set; `compendium backup`; `validate run --probes ~/.compendium/probes/probe-set.yaml` | report readable against the pre-registered criteria |

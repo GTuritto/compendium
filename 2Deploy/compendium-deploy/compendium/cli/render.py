@@ -231,6 +231,58 @@ def curate_synth(slug: str, fmt: Format = "text") -> str:
 
 
 # ---------------------------------------------------------------------------
+# validation harness (v0.4, ADR-016)
+# ---------------------------------------------------------------------------
+
+
+def validate_harvest(candidates: list[dict], path: str, fmt: Format = "text") -> str:
+    if fmt == "json":
+        return to_json({"path": path, "count": len(candidates), "candidates": candidates})
+    head = f"validate harvest: {len(candidates)} candidate(s) -> {path}"
+    tip = (
+        "  curate: prune, fill `expected` with relevant page slugs, set "
+        "`frozen: true`, then `compendium validate run --probes <file>`"
+    )
+    return head + "\n" + tip if candidates else head + "\n  (no ask traces yet)"
+
+
+def validate_run(report: dict, fmt: Format = "text") -> str:
+    if fmt == "json":
+        return to_json(report)
+    m = report["methodology"]
+    lines = [
+        "validate run (page-first vs chunk-only, ADR-016)",
+        f"  methodology: scoring={m['scoring_unit']}; "
+        f"normalization={m['normalization']}; search={m['search']}",
+        f"  k={report['k']}",
+        "",
+        _aligned(
+            ["probe", "page hit/recall/mrr", "chunk hit/recall/mrr", "Δmrr"],
+            [
+                [
+                    r["id"],
+                    f"{r['page']['hit_at_k']:.0f}/{r['page']['recall_at_k']:.2f}/{r['page']['mrr']:.2f}",
+                    f"{r['chunk']['hit_at_k']:.0f}/{r['chunk']['recall_at_k']:.2f}/{r['chunk']['mrr']:.2f}",
+                    f"{r['delta']['mrr']:+.2f}",
+                ]
+                for r in report["per_query"]
+            ],
+        ),
+    ]
+    agg = report["aggregate"]
+    if agg.get("n"):
+        lines.append("")
+        lines.append(
+            f"  aggregate (n={agg['n']}): "
+            f"page mrr {agg['page']['mrr']:.3f} vs chunk mrr {agg['chunk']['mrr']:.3f} "
+            f"(Δ {agg['delta']['mrr']:+.3f}); "
+            f"page recall {agg['page']['recall_at_k']:.3f} vs chunk {agg['chunk']['recall_at_k']:.3f} "
+            f"(Δ {agg['delta']['recall_at_k']:+.3f})"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # read commands (queries / listings)
 # ---------------------------------------------------------------------------
 
