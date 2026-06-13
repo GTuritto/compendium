@@ -282,17 +282,17 @@ def test_concurrent_page_fanout(seeded_corpus):
     order: list[str] = []
     real_os, real_qd = search_mod.opensearch_pages, search_mod.qdrant_pages
 
-    async def traced_os(client, q, size):
+    async def traced_os(client, q, size, **kwargs):
         order.append("os_start")
         await asyncio.sleep(0.05)
         order.append("os_end")
-        return await real_os(client, q, size)
+        return await real_os(client, q, size, **kwargs)
 
-    async def traced_qd(client, v, size):
+    async def traced_qd(client, v, size, **kwargs):
         order.append("qd_start")
         await asyncio.sleep(0.05)
         order.append("qd_end")
-        return await real_qd(client, v, size)
+        return await real_qd(client, v, size, **kwargs)
 
     search_mod.opensearch_pages = traced_os
     search_mod.qdrant_pages = traced_qd

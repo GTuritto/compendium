@@ -402,6 +402,29 @@ def get_wiki_page_by_slug(
     ).fetchone()
 
 
+def source_page_slugs_for_chunks(
+    conn: psycopg.Connection, chunk_ids: list[str]
+) -> dict[str, str]:
+    """Map each chunk id to its parent source page's slug (v0.4 Phase 1).
+
+    The chunk-arm scorer reduces a chunk hit to its parent source page so both
+    arms score in page space (ADR-016). Chunks whose source has no source page
+    are omitted. One batched join; reader for ``compendium/validate/`` only.
+    """
+    if not chunk_ids:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT c.id AS chunk_id, w.slug AS slug
+        FROM chunks c
+        JOIN wiki_pages w ON w.source_id = c.source_id AND w.kind = 'source'
+        WHERE c.id = ANY(%s)
+        """,
+        ([str(cid) for cid in chunk_ids],),
+    ).fetchall()
+    return {str(r["chunk_id"]): r["slug"] for r in rows}
+
+
 def get_wiki_page_by_source_id(
     conn: psycopg.Connection, source_id: str | UUID
 ) -> dict[str, Any] | None:
@@ -800,6 +823,27 @@ def get_ask_trace(conn: psycopg.Connection, ask_trace_id: str | UUID) -> dict[st
     return conn.execute(
         "SELECT * FROM ask_traces WHERE id = %s", (str(ask_trace_id),)
     ).fetchone()
+
+
+def distinct_ask_questions(
+    conn: psycopg.Connection, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Distinct real questions asked, newest first (v0.4 Phase 1 harvest).
+
+    Joins ``ask_traces`` to ``query_traces`` for the question text; collapses
+    repeats to the most recent ask. Reader for ``compendium/validate/`` only.
+    """
+    return conn.execute(
+        """
+        SELECT q.query_text AS query_text, max(a.created_at) AS asked_at
+        FROM ask_traces a
+        JOIN query_traces q ON q.id = a.query_trace_id
+        GROUP BY q.query_text
+        ORDER BY asked_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    ).fetchall()
 
 
 def get_ask_trace_with_query(

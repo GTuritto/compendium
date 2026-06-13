@@ -62,6 +62,35 @@ record: [docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md). Each pha
 ships under the `0.2.x` line:
 
 
+## [0.3.2] - 2026-06-13
+
+v0.4 Phase 1 — the single-point A/B (**ADR-016**), per
+[docs/COMPENDIUM_V0.4_BUILD.md](docs/COMPENDIUM_V0.4_BUILD.md) § 5. The first
+instrument that can give the core wiki-over-chunks bet a verdict.
+
+### Added
+
+- **Chunk-only retrieval control arm (ADR-016)**: `pipeline.run`/`query` gain
+  an `arm` parameter — `"pages"` is the byte-identical supported path,
+  `"chunks"` is the validation control (the existing chunk fan-out + RRF
+  fusion, unconditional, no page ranking, no coverage gate, arm stamped into
+  the trace). Reachable only via `compendium validate`; `query`/facade stay
+  page-first. `search.qdrant_*` gain `exact` for repeatable measurement.
+- **`compendium validate harvest`**: lists distinct real questions from
+  `ask_traces` into a candidate probe set under `~/.compendium/probes/` —
+  outside the repo and the bundle.
+- **`compendium validate run --probes <file>`**: runs a frozen probe set
+  through both arms (exact search), scores page-space hit@k/recall@k/MRR (a
+  chunk credits its parent source page), and reports the per-query delta +
+  aggregate under a pre-registered methodology header.
+- `docs/operations/validation.md`; the v0.4 Phase 1 smoke section; 17 tests
+  (`tests/test_validate.py`, acceptance suite TC-AB-001..008).
+
+### Pre-registered (ADR-016)
+
+- Scoring unit is the page; normalization applies to both arms (both
+  conservative toward the control); exact search for measurement runs only.
+
 ## [0.3.1] - 2026-06-12
 
 v0.4 Phase 0 — clear the deck, per
@@ -208,3 +237,4 @@ console (`compendium tui`), the knowledge-graph curation loop
 [0.2.5]: https://github.com/GTuritto/compendium/releases/tag/v0.2.5
 [0.3.0]: https://github.com/GTuritto/compendium/releases/tag/v0.3.0
 [0.3.1]: https://github.com/GTuritto/compendium/releases/tag/v0.3.1
+[0.3.2]: https://github.com/GTuritto/compendium/releases/tag/v0.3.2

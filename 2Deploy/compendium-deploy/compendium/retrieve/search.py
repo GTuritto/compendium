@@ -124,8 +124,22 @@ def _qdrant_hits(points: list[Any]) -> list[Hit]:
     ]
 
 
+def _qdrant_params(exact: bool) -> Any:
+    """HNSW params for production; exact kNN for measurement runs (ADR-016).
+
+    Exact search removes the HNSW insertion-order non-determinism, so the
+    v0.4 validation harness gets repeatable rankings; the hot path keeps the
+    tuned approximate params.
+    """
+    if not exact:
+        return _QDRANT_SEARCH_PARAMS
+    from qdrant_client import models
+
+    return models.SearchParams(exact=True)
+
+
 async def qdrant_pages(
-    client: AsyncQdrantClient, vector: list[float], size: int
+    client: AsyncQdrantClient, vector: list[float], size: int, *, exact: bool = False
 ) -> list[Hit]:
     """Dense page search, excluding deprecated pages."""
     from qdrant_client import models
@@ -143,13 +157,13 @@ async def qdrant_pages(
         limit=size,
         with_payload=True,
         query_filter=query_filter,
-        search_params=_QDRANT_SEARCH_PARAMS,
+        search_params=_qdrant_params(exact),
     )
     return _qdrant_hits(response.points)
 
 
 async def qdrant_chunks(
-    client: AsyncQdrantClient, vector: list[float], size: int
+    client: AsyncQdrantClient, vector: list[float], size: int, *, exact: bool = False
 ) -> list[Hit]:
     """Dense chunk search."""
     response = await client.query_points(
@@ -157,6 +171,6 @@ async def qdrant_chunks(
         query=vector,
         limit=size,
         with_payload=True,
-        search_params=_QDRANT_SEARCH_PARAMS,
+        search_params=_qdrant_params(exact),
     )
     return _qdrant_hits(response.points)

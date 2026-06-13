@@ -757,6 +757,31 @@ The daily read / ask / curate loop lived only in the terminal. Everything a brow
 
 **A hand-rolled FastAPI + HTML/JS front-end** was rejected: it would re-introduce the JS toolchain the stack discipline excludes and duplicate what Streamlit gives for one dependency. **Extending the TUI instead** was rejected: the browser is the point (reading pages as rendered Markdown, links, a laptop-away surface). **A third data layer for the web** was rejected before it started (Q3): `tui/data.py` already is the shared channel-free provider.
 
+### ADR-016: A chunk-only retrieval control arm for validation (v0.4)
+
+**Status:** Accepted (v0.4 Phase 1, 2026-06-13). The constitution gates new retrieval pathways behind an ADR; this records the one v0.4 needs to measure the core bet, scoped tightly as an instrument, not a surface.
+
+#### Context
+
+The whole project rides on one claim: a maintained wiki out-retrieves raw chunks over time. It has never been measured, and the naive test fails silently — on a growing corpus single-arm metrics climb regardless, because more data is more data. The thesis isolates only one way: run a chunk-only arm against the identical corpus snapshot and compare it to the page-first arm, with corpus size held constant. The control arm is the load-bearing instrument of v0.4.
+
+#### Decision
+
+The retrieval pipeline gains an `arm` parameter (`pipeline.run`/`query`). `arm="pages"` is the supported page-first path, byte-identical to pre-v0.4 behaviour. `arm="chunks"` is the **control arm**: the identical BM25 + dense fan-out and RRF fusion the page-first fallback already runs (`pipeline.py`), but unconditionally over the chunk indexes, with **no page ranking and no coverage gating** — ranked chunks are its output, not a low-coverage symptom, so it carries no gap. The control arm stamps `pipeline.arm` into its trace; the pages arm's trace is unchanged. The arm is reachable **only through `compendium/validate/`** — `compendium query`, the facade, and every other surface stay page-first. A `validate` run sets `exact=True`, switching Qdrant to exact kNN so the measurement is repeatable (the HNSW insertion-order flap, informational since v0.2 Phase 5, would otherwise make a longitudinal curve unreadable); production retrieval keeps the tuned HNSW params.
+
+Three measurement decisions are **pre-registered** here so a verdict cannot be shaped after the fact: (1) **scoring unit is the page** — a chunk hit credits its parent source page, which flatters the control arm slightly, so a surviving page-arm advantage is conservative; (2) **query normalization applies to both arms** — alias expansion is wiki-derived, so the control freeloads on it, a conservative contamination that strengthens the control; (3) **exact search for measurement runs only**.
+
+#### Consequences
+
+- The chunk arm is an instrument with a single caller (`validate/`); the deletion test holds — remove `validate/` and the arm has zero callers. It is not a supported retrieval mode and earns no facade/CLI surface.
+- The pages arm and every existing surface are provably unchanged: the Phase 0 wire-format snapshots and the full fast tier pass untouched.
+- Snapshot freezing for an A/B run stays operational (`compendium backup` before the run is the audit artifact); the runner asserts nothing about backups.
+- This ADR covers the control arm only. The compounding test (milestone replays, Phase 2) and answer-quality judgment (LLM-as-judge, Phase 3, conditional) are out of scope and unbuilt.
+
+#### Alternatives considered
+
+**A separate chunk-RAG codebase** was rejected: the comparison must hold every variable but the arm constant — same fan-out, same fusion, same normalization, same process — which only a parameter on the one pipeline guarantees. **Scoring in chunk space** was rejected: the page arm returns pages, so a shared relevance unit is required; page space is the honest common denominator and its bias direction (favouring the control) is the safe one. **Averaging over HNSW runs for determinism** was rejected in favour of exact search: at personal-corpus scale the latency cost of exact kNN is irrelevant for measurement, and it removes the non-determinism outright rather than estimating around it.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
