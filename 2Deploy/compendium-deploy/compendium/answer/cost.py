@@ -1,12 +1,18 @@
 """Best-effort cost estimation for ``ask`` (v0.2 Phase 6).
 
 A static per-model rate table, USD per 1,000 tokens as ``(input, output)``.
-Informational only, not billing-grade. Unknown models and the stub fall back to
-zero. Edit the table as model pricing changes; it lives in code on purpose so it
-needs no network lookup and no extra dependency.
+Informational only, not billing-grade. Unknown models fall back to zero — but
+loudly (v0.4 Phase 0): a structlog warning names the model so a day of real
+use is never silently priced at 0.0. Edit the table as model pricing changes;
+it lives in code on purpose so it needs no network lookup and no extra
+dependency.
 """
 
 from __future__ import annotations
+
+import structlog
+
+log = structlog.get_logger()
 
 _RATES: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-5": (0.003, 0.015),
@@ -14,13 +20,25 @@ _RATES: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (0.005, 0.025),
     "anthropic/claude-opus-4.8": (0.005, 0.025),
     "claude-haiku-4-5": (0.001, 0.005),
+    "anthropic/claude-haiku-4.5": (0.001, 0.005),
 }
+
+# The stub answerer reports this model name; it is free by definition and
+# must not trip the unknown-model warning in the hermetic tiers.
+_FREE_MODELS = {"stub"}
 
 
 def estimate_cost(
     model: str, input_tokens: int | None, output_tokens: int | None
 ) -> float:
-    """Estimate the USD cost of a call from token counts and the rate table."""
+    """Estimate the USD cost of a call from token counts and the rate table.
+
+    Unknown non-stub models return 0.0 AND log ``unknown_model_rate`` —
+    the zero is a flagged estimate, not a price.
+    """
+    if model not in _RATES and model not in _FREE_MODELS:
+        log.warning("unknown_model_rate", model=model)
+        return 0.0
     rate_in, rate_out = _RATES.get(model, (0.0, 0.0))
     cost = (input_tokens or 0) / 1000 * rate_in + (output_tokens or 0) / 1000 * rate_out
     return round(cost, 6)

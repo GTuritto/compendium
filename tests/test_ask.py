@@ -137,6 +137,23 @@ def test_cost_estimate_uses_rate_table_with_zero_fallback():
     assert estimate_cost("stub", 100, 50) == 0.0
 
 
+def test_cost_estimate_unknown_model_is_loud_known_models_silent():
+    """v0.4 Phase 0: an unknown non-stub model logs unknown_model_rate."""
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        estimate_cost("nope/unknown-model", 1000, 1000)
+    assert any(
+        e["event"] == "unknown_model_rate" and e["model"] == "nope/unknown-model"
+        for e in logs
+    )
+
+    with capture_logs() as logs:
+        estimate_cost("anthropic/claude-sonnet-4.5", 1000, 1000)
+        estimate_cost("stub", 100, 50)
+    assert not logs
+
+
 def _swap_db(url: str, dbname: str) -> str:
     base, _, _ = url.rpartition("/")
     return f"{base}/{dbname}"
