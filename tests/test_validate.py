@@ -25,7 +25,7 @@ from compendium.validate.probes import Probe, ProbeSet, ProbeSetError
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _FIXTURES = _REPO_ROOT / "tests" / "fixtures"
-_PROBE_FIXTURE = _FIXTURES / "probe-set.yaml"
+_PROBE_FIXTURE = _FIXTURES / "probes" / "probe-set.yaml"
 
 
 # --- unit: page-space scoring (TC-AB-004, TC-AB-008) -----------------------
