@@ -201,23 +201,55 @@ jobs:
           retention-days: 7
 
   # The distribution: built only when the smoke gate is green. Uploads the
-  # self-contained bundle as a workflow artifact on every main push; on a
-  # v* tag it also publishes a GitHub Release with the zip + installer.
+  # self-contained bundle as a workflow artifact on every main push. The
+  # version is owned by the VERSION file (bumped in a phase's completion
+  # commit); this job is the single automated link the pipeline was missing —
+  # on a main push where VERSION has no matching tag yet, it creates and
+  # pushes `v<VERSION>` and publishes the GitHub Release in the same run. A
+  # v* tag pushed by hand still publishes exactly as before. No version churn:
+  # docs/prep merges that do not touch VERSION produce no tag and no release.
   distribution:
-    name: distribution (bundle, gated on smoke)
+    name: distribution (bundle + auto-tag + release, gated on smoke)
     needs: smoke
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Build the deployment bundle
-        run: bash deploy/make-bundle.sh
-      - name: Name the artifact
+        with:
+          fetch-depth: 0
+      - name: Resolve version and decide whether to tag/release
         id: meta
         run: |
-          echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          git fetch --tags --quiet || true
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Auto-tag a new VERSION on main
+        # On a main push where VERSION has no matching tag, create and push it.
+        # Pushed with GITHUB_TOKEN; we publish the release in this same job, so
+        # we do not rely on the tag push to trigger another workflow.
+        if: >-
+          steps.meta.outputs.on_main == 'true' &&
+          steps.meta.outputs.tag_exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.meta.outputs.version }}" \
+            -m "Compendium v${{ steps.meta.outputs.version }}"
+          git push origin "v${{ steps.meta.outputs.version }}"
+      - name: Build the deployment bundle
+        run: bash deploy/make-bundle.sh
       - name: Upload the bundle artifact
         uses: actions/upload-artifact@v4
         with:
@@ -226,10 +258,16 @@ jobs:
             2Deploy/compendium-deploy.zip
             2Deploy/install.sh
           retention-days: 30
-      - name: Publish the GitHub Release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish the GitHub Release
+        # On a v* tag push, or when we just auto-tagged a new VERSION on main.
+        # Idempotent: a main push whose VERSION was already tagged does neither.
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') ||
+          (steps.meta.outputs.on_main == 'true' &&
+           steps.meta.outputs.tag_exists == 'false')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.meta.outputs.version }}
           files: |
             2Deploy/compendium-deploy.zip
             2Deploy/install.sh
