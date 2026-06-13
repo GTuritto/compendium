@@ -4,12 +4,14 @@
 
 # v0.4 Pre-registration (the curator's, before ingesting)
 
-> **Status: TEMPLATE — unfilled.** Complete every `TODO` below **before the
-> first real PDF is ingested**, then change this line to "Registered
-> <date>". Committing it makes it tamper-evident: the whole point is that you
-> cannot quietly move the goalposts after seeing the numbers. Do not edit the
-> thresholds once registered — if the methodology turns out wrong, supersede
-> this file with a new dated one and say why, the way an ADR is superseded.
+> **Status: PARTIAL — privacy (§4) and tempo (§5) recorded 2026-06-13; the
+> win/null/loss thresholds (§1–§3) are still unfilled.** Complete the remaining
+> `TODO`s **before the first real PDF is ingested**, then change this line to
+> "Registered <date>". Committing it makes it tamper-evident: the whole point
+> is that you cannot quietly move the goalposts after seeing the numbers. Do
+> not edit the thresholds once registered — if the methodology turns out wrong,
+> supersede this file with a new dated one and say why, the way an ADR is
+> superseded.
 
 This is the §8 artifact of [COMPENDIUM_V0.4_BUILD.md](../COMPENDIUM_V0.4_BUILD.md).
 It is the curator's judgment, not the harness's. The harness
@@ -51,17 +53,20 @@ keeping the system because you built it.
 Real ingestion sends your actual reading to OpenRouter for every embedding and
 synthesis call. Record the decision and the date:
 
-- TODO: **Proceed with OpenRouter** for embeddings + synthesis on real data
-  (accept that real reading leaves the machine), **or** **revisit local
-  embeddings first** (the BAAI/bge-m3 DMR-absence blocker; this would be its
-  own ADR and a config change before any ingestion).
-- Decision: TODO. Date: TODO.
+- **Decision (2026-06-13): Proceed with OpenRouter** for both embeddings
+  (`BAAI/bge-m3`) and synthesis (Claude Sonnet 4.5) on real data. Accepted:
+  real reading leaves the machine for every embedding and synthesis call, and
+  may be cached/indexed by the provider. Local embeddings are not pursued for
+  v0.4; if the corpus later turns sensitive enough to reconsider, that is a new
+  ADR + config change, not a silent switch.
 
 ## 5. Signal tempo
 
-- TODO: **organic** (your natural backlog + ask rate) or **manufactured** (a
-  fixed reading list + a daily ask quota to force the thesis into measurable
-  range before patience runs out). State the cadence you commit to.
+- **Decision (2026-06-13): organic** — your natural reading backlog and ask
+  rate, no manufactured quota. Accepted consequence: the probe set and the
+  Phase 1 verdict arrive on the timeline your real cadence produces, not a
+  forced one. Revisit only if a quarter passes with the vault still near-empty
+  (the §10 failure mode).
 
 ---
 
