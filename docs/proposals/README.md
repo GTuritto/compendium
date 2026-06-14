@@ -18,7 +18,7 @@ Each item, when promoted, follows the standard loop: branch, OpenSpec change, Ph
 | 2 | Hard delete of sources | Hard purge of a source and everything derived; source unit | ADR-018 | First op that removes canonical knowledge; collides with append-only lineage | §1 below |
 | 3 | Admin / ops surface in TUI + WebUI | TUI = full incl. destructive; **WebUI = safe-only** (read + non-destructive) | ADR-020 | Destructive admin on a no-auth LAN surface | §2 below |
 | 4 | Tagging | Retrieval-filter grade; sources + pages; curator-assigned | ADR-019 | Threads into the indexes + pipeline; must not reinvent topics | §3 below |
-| 5 | Autocuration (fully autonomous synthesis) | System creates **and promotes** concept pages with no approval | supersedes ADR-001/009/014 | **Reverses the founding curator-driven invariant and a "forever" exclusion** | §4 below |
+| 5 | Curation autonomy knob (manual / semi-auto / auto) | Configurable mode; **manual is the default** (= today's invariant); semi-auto and auto are opt-in | ADR-022 (amends ADR-009) | Auto mode still reverses the "SYNTHESIZES forever" line; manual default keeps the v0.4 bet clean | §4 below |
 | 6 | Graph / galaxy visualization (WebUI) | Read-only Obsidian-style force-directed graph of the knowledge graph | ADR-021 | Low; read-only; renderer dependency to weigh | §5 below |
 
 ---
@@ -59,17 +59,21 @@ This refines, not reverses, ADR-011 ("curator/ops verbs stay CLI-only"): non-des
 
 **Open questions.** Free-form vs controlled vocabulary; AND vs OR filter semantics; tag inheritance (a source's tag flowing to its chunks/source page); rename/merge; whether agent-assigned tagging via the API is added later (it pairs with item 1 but is agent-write territory v0.4 defers).
 
-## 4. Autocuration — fully autonomous synthesis (supersedes ADR-001/009/014)
+## 4. Curation autonomy knob — manual / semi-auto / auto (draft ADR-022, amends ADR-009)
 
-**Chosen variant: fully autonomous synthesis** — the system creates and promotes concept pages (and `SYNTHESIZES` edges) with **no curator approval**.
+**Reframed (2026-06-14).** The original ask was "fully autonomous synthesis." The user's constraint is real (not enough time to curate everything by hand), but the resolution is a **configurable curation mode**, not a wholesale reversal. One knob, three levels:
 
-**This is not a routine feature.** It reverses the project's founding identity. It requires consciously superseding "synthesis is curator-driven" (ADR-001 era), the curator-drained slow loop (ADR-009), and the **"Autonomous `SYNTHESIZES`. Excluded forever by prior decision"** line that the v0.4 plan restates verbatim. It also sits in maximal tension with v0.4's thesis: it builds the most autonomy on the part of the engine least proven to work, and if the curated wiki turns out to beat chunks **because** a human curates it, automating the curator away trades off the very property under test.
+- **Manual (default).** Today's behavior exactly: the slow loop surfaces signals, the curator drains them, nothing is promoted without approval. This *is* the founding "synthesis is curator-driven" invariant, now expressed as the default mode rather than a hard law. Choosing it changes nothing.
+- **Semi-auto.** The autocurator drafts and proposes concept pages, merges, and promotions; the curator can approve, reject, **edit, or add detail** before any become canonical. This generalizes the ADR-014 contradiction-candidate pattern (propose autonomously, commit by hand) to synthesis. The machine does the legwork; the human stays the author of the final state. The intended answer to "I cannot curate from scratch."
+- **Auto.** Fully autonomous: drafts, self-reviews (LLM-as-judge), and promotes above a confidence threshold with no approval. This is the **only** mode that reverses the "Autonomous `SYNTHESIZES`. Excluded forever" line; it is opt-in, off by default, and everything it writes is marked auto-generated/unreviewed and is reversible (deprecate/delete).
 
-**Captured, not endorsed.** It is in this backlog so the idea is not lost. It must be re-decided explicitly when the v0.4 verdict lands — not promoted by default.
+**Why this resolves the tension.** The invariant is preserved as the default, so nothing is forced and the conflict shrinks to "manual is now a setting, not a law." And you can run **manual through v0.4** so the A/B still measures the human-curated wiki the bet is about, then flip to semi-auto (or auto) afterward. The autonomy waits as an opt-in for after the verdict, exactly where the measure-first discipline wants it.
 
-**Sketch, if ever pursued.** An autonomous synthesizer in the slow loop that drafts concept pages from signals, self-reviews via an LLM-as-judge pass, and promotes above a confidence threshold, with: full provenance, a normal revision + trace, an "auto-generated, unreviewed" page status so output is distinguishable and reversible (deprecate/delete), a confidence gate and rate limit, a hard rule never to overwrite curator pages, and a shadow/dry-run mode first that writes proposals without promoting. The intermediate **auto-suggest, curator-approves** pattern (the ADR-014 shape) remains the lower-risk alternative if the fully-autonomous version does not survive the v0.4-verdict re-decision.
+**Scope of the knob.** It governs **concept synthesis and promotion**. The already-settled autonomy is not re-litigated and keeps its current behavior: autonomous `RELATED_TO`/`PREREQUISITE_FOR` extraction (ADR-010) and curator-approved `CONTRADICTS` candidates (ADR-014).
 
-**Open questions.** Shadow mode before live, mandatory? What does "approval-free safety" even mean for a knowledge base whose value is curation? Is this desirable over the auto-suggest pattern at all?
+**Guardrails (semi-auto and auto).** Confidence gate, rate limit, never overwrite a curator-authored page, an "auto-generated / unreviewed" page status so machine output is always distinguishable and reversible, full provenance + revision + trace, and a shadow/dry-run mode that writes proposals without promoting before any live auto run.
+
+**Open questions.** Global knob, or per-operation (synth vs promote vs merge vs dedup) — e.g. semi-auto for promotion but manual for merges? Where does the setting live (config vs per-run flag)? Semi-auto proposals flow into the existing curation queue (likely yes — it becomes the unified inbox)? Should enabling **auto** require a separate explicit confirmation beyond the knob?
 
 ## 5. Graph / galaxy visualization in the WebUI (draft ADR-021)
 
@@ -83,4 +87,4 @@ This refines, not reverses, ADR-011 ("curator/ops verbs stay CLI-only"): non-des
 
 ## Sequencing note
 
-If the gate opens, a sensible order is: tagging (§3) and hard delete (§2) first (corpus hygiene + the filter dimension other items reuse), then the admin surface (§2) and the graph view (§5) which both build on existing UIs, then the agent object store (item 1) once agent-write is reconsidered, and autocuration (§4) last and only after an explicit re-decision. Nothing here starts before the v0.4 verdict.
+If the gate opens, a sensible order is: tagging (§3) and hard delete (§2) first (corpus hygiene + the filter dimension other items reuse), then the admin surface (§2) and the graph view (§5) which both build on existing UIs, then the agent object store (item 1) once agent-write is reconsidered, and the curation-autonomy knob (§4) last — manual stays the default throughout, and enabling semi-auto or auto is the explicit re-decision. Nothing here starts before the v0.4 verdict.
