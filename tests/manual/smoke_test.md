@@ -579,3 +579,16 @@ reindex state). Stubs are fine. The chunk arm is validate-only.
 | v0.4-1.4 | Frozen guard | `compendium validate run --probes <an unfrozen yaml>` | refuses, names the freeze step, exit 1 |
 | v0.4-1.5 | Harvest hygiene | `compendium validate harvest --out /tmp/probes` | `candidates.yaml` written under /tmp; `git status` clean |
 | v0.4-1.6 | Real run (post-Track-A) | freeze a probe set; `compendium backup`; `validate run --probes ~/.compendium/probes/probe-set.yaml` | report readable against the pre-registered criteria |
+
+## v0.5 — Hard delete of a source (ADR-018)
+
+Prerequisites: stores up; at least one source ingested + indexed (the smoke
+walk's ingest + reindex state). Destructive; run last or on a throwaway source.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-del.1 | Not on the surface | `compendium query --help`; inspect the HTTP/MCP verbs | no delete verb on query/facade/HTTP/MCP |
+| v0.5-del.2 | Dry run | `compendium source delete <slug> --dry-run` | impact summary (chunk count, page, derived); corpus unchanged (`index_status` counts steady) |
+| v0.5-del.3 | Real delete | `compendium source delete <slug> --force` then `compendium query "<a phrase from it>"` | source gone; query no longer returns it; `index_status` page/chunk counts dropped |
+| v0.5-del.4 | Re-ingest is clean | re-ingest the same file; `compendium index sync` | ingests as a fresh source (no tombstone) |
+| v0.5-del.5 | Dangling surfaced | delete a source that solely grounded a concept; `compendium curate run` | the concept still exists and is surfaced as a thin-grounding / dangling signal |

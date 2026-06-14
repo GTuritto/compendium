@@ -12,6 +12,18 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ## [Unreleased]
 
+### Added (v0.5, merged to `main`, ships with the next cut)
+
+- **Hard delete of a source** (ADR-018): `compendium source delete <id|slug>
+  [--dry-run] [--force]` removes a source and everything derived from it —
+  chunks, the source page + its vault file, `semantic_edges`, the
+  OpenSearch/Qdrant/Memgraph entries, and the `index_sync_state` rows.
+  Canonical-first and self-reconciling (a failed derived delete heals via
+  `reindex all` + `graph rebuild`); concept pages grounded on the source are
+  surfaced as dangling/thin-grounding signals, not cascade-deleted. CLI/TUI
+  only, never on the access surface (destructive). No schema migration. See
+  [docs/operations/delete.md](docs/operations/delete.md).
+
 ### Changed (merged to `main`, ships with the next cut)
 
 - **Automated tag + release on VERSION change** (`.github/workflows/ci.yml`):
