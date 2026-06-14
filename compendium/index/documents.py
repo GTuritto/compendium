@@ -58,7 +58,9 @@ def chunk_embed_text(body: str) -> str:
 # --- the shape (one row per field; both store values side by side) ----------
 
 
-def _page_rows(page: dict[str, Any], *, body: str, topic_ids: list[str]) -> _Rows:
+def _page_rows(
+    page: dict[str, Any], *, body: str, topic_ids: list[str], tags: Any = ()
+) -> _Rows:
     return [
         ("id", str(page["id"]), _SAME),
         ("kind", page["kind"], _SAME),
@@ -66,6 +68,7 @@ def _page_rows(page: dict[str, Any], *, body: str, topic_ids: list[str]) -> _Row
         ("slug", page["slug"], _SAME),
         ("status", page["status"], _SAME),
         ("corpus_revision", page.get("corpus_revision"), _SAME),
+        ("tags", sorted({str(t) for t in tags}), _SAME),
         ("topic_ids", [str(t) for t in topic_ids], _SAME),
         (
             "parent_topic_id",
@@ -82,11 +85,12 @@ def _page_rows(page: dict[str, Any], *, body: str, topic_ids: list[str]) -> _Row
     ]
 
 
-def _chunk_rows(chunk: dict[str, Any]) -> _Rows:
+def _chunk_rows(chunk: dict[str, Any], *, tags: Any = ()) -> _Rows:
     return [
         ("id", str(chunk["id"]), _SAME),
         ("source_id", str(chunk["source_id"]), _SAME),
         ("source_kind", chunk.get("source_kind"), _SAME),
+        ("tags", sorted({str(t) for t in tags}), _SAME),
         ("source_title", chunk.get("source_title"), _OMIT),
         ("position", chunk["position"], _SAME),
         ("parent_section", chunk.get("parent_section"), _SAME),
@@ -129,21 +133,25 @@ CHUNK_SEARCHABLE_FIELDS: tuple[str, ...] = ("source_title", "body")
 # --- the builders (derived from the rows) ------------------------------------
 
 
-def page_document(page: dict[str, Any], *, body: str, topic_ids: list[str]) -> dict[str, Any]:
+def page_document(
+    page: dict[str, Any], *, body: str, topic_ids: list[str], tags: Any = ()
+) -> dict[str, Any]:
     """The OpenSearch ``pages`` document for a wiki page."""
-    return _document(_page_rows(page, body=body, topic_ids=topic_ids))
+    return _document(_page_rows(page, body=body, topic_ids=topic_ids, tags=tags))
 
 
-def page_payload(page: dict[str, Any], *, topic_ids: list[str]) -> dict[str, Any]:
+def page_payload(
+    page: dict[str, Any], *, topic_ids: list[str], tags: Any = ()
+) -> dict[str, Any]:
     """The Qdrant ``pages`` payload for a wiki page."""
-    return _payload(_page_rows(page, body="", topic_ids=topic_ids))
+    return _payload(_page_rows(page, body="", topic_ids=topic_ids, tags=tags))
 
 
-def chunk_document(chunk: dict[str, Any]) -> dict[str, Any]:
+def chunk_document(chunk: dict[str, Any], *, tags: Any = ()) -> dict[str, Any]:
     """The OpenSearch ``chunks`` document for a chunk row (joined to its source)."""
-    return _document(_chunk_rows(chunk))
+    return _document(_chunk_rows(chunk, tags=tags))
 
 
-def chunk_payload(chunk: dict[str, Any]) -> dict[str, Any]:
+def chunk_payload(chunk: dict[str, Any], *, tags: Any = ()) -> dict[str, Any]:
     """The Qdrant ``chunks`` payload for a chunk row."""
-    return _payload(_chunk_rows(chunk))
+    return _payload(_chunk_rows(chunk, tags=tags))

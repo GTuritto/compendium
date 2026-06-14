@@ -94,3 +94,36 @@ def test_source_delete_cascades_tag_links(migrated_conn):
     repository.add_source_tag(conn, source_id, "y")
     repository.delete_source_row(conn, source_id)  # ADR-018 cascade
     assert repository.tags_for_source(conn, source_id) == []
+
+
+def test_index_tags_inherit_from_source(migrated_conn):
+    """TC-TAG-U3: source tags inherit to the source page and its chunks; a
+    concept page carries only its own tags; the index document carries them."""
+    from compendium.index import documents, projectors
+
+    conn = migrated_conn
+    source_id = repository.insert_source(
+        conn, kind="note", title="S", content_hash="hc"
+    )
+    src_page_id = repository.insert_wiki_page(
+        conn, kind="source", slug="s-src", title="S",
+        file_path="sources/s-src.md", content_hash="p",
+        source_id=source_id, source_kind="note",
+    )
+    repository.add_source_tag(conn, source_id, "trading")
+
+    src_page = repository.get_wiki_page(conn, src_page_id)
+    assert projectors.page_tags(conn, src_page) == ["trading"]
+    assert projectors.chunk_tags(conn, {"source_id": source_id}) == ["trading"]
+    doc = documents.page_document(
+        src_page, body="b", topic_ids=[], tags=projectors.page_tags(conn, src_page)
+    )
+    assert doc["tags"] == ["trading"]
+
+    cpage_id = repository.insert_wiki_page(
+        conn, kind="concept", slug="c", title="C",
+        file_path="concepts/c.md", content_hash="pc",
+    )
+    repository.add_page_tag(conn, cpage_id, "x")
+    cpage = repository.get_wiki_page(conn, cpage_id)
+    assert projectors.page_tags(conn, cpage) == ["x"]

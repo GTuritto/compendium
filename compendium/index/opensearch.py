@@ -68,6 +68,7 @@ def _pages_body(synonyms: list[str] | None = None) -> dict:
                 "slug": {"type": "keyword"},
                 "status": {"type": "keyword"},
                 "corpus_revision": {"type": "keyword"},
+                "tags": {"type": "keyword"},
                 "topic_ids": {"type": "keyword"},
                 "parent_topic_id": {"type": "keyword"},
                 "source_id": {"type": "keyword"},
@@ -95,6 +96,7 @@ def _chunks_body(synonyms: list[str] | None = None) -> dict:
                 "id": {"type": "keyword"},
                 "source_id": {"type": "keyword"},
                 "source_kind": {"type": "keyword"},
+                "tags": {"type": "keyword"},
                 "source_title": {
                     "type": "text",
                     "analyzer": "compendium_text",
