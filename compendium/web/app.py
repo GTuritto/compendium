@@ -241,4 +241,4 @@ elif view == "Graph":
                 f"{len(export['nodes'])} nodes · {len(export['edges'])} edges "
                 "(bounded, read-only)"
             )
-            st.graphviz_chart(dot, engine="fdp")
+            st.graphviz_chart(dot)

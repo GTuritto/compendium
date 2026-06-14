@@ -1,9 +1,11 @@
 """Pure DOT builder for the WebUI graph view (ADR-021).
 
 No I/O, no Streamlit: a graph export dict in, a Graphviz DOT string out. The
-WebUI renders it with ``st.graphviz_chart(dot, engine="fdp")`` (a force-directed
-layout, no extra dependency — Streamlit renders the DOT string client-side).
-Read-only by construction: it only emits ``digraph`` text.
+WebUI renders it with ``st.graphviz_chart(dot)``; the force-directed layout is
+requested inside the DOT itself (``layout="fdp"``) rather than via the
+``engine=`` kwarg, which only exists on newer Streamlit (no extra dependency —
+Streamlit renders the DOT string client-side). Read-only by construction: it
+only emits ``digraph`` text.
 """
 
 from __future__ import annotations
@@ -39,7 +41,13 @@ def build_dot(
         nodes = [n for n in nodes if n.get("kind") in kinds]
     keep = {n["id"] for n in nodes}
 
-    lines = ['digraph "g" {', "  node [style=filled, shape=ellipse, fontsize=10];"]
+    lines = [
+        'digraph "g" {',
+        '  layout="fdp";',
+        "  overlap=false;",
+        "  splines=true;",
+        "  node [style=filled, shape=ellipse, fontsize=10];",
+    ]
     for n in nodes:
         color = _KIND_COLOR.get(n.get("kind", ""), "#dddddd")
         label = _esc(n.get("label") or n["id"])[:30]

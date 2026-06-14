@@ -33,6 +33,7 @@ def test_build_dot_renders_nodes_and_edges():
     assert dot.startswith("digraph")
     assert '"c1"' in dot and '"GROUNDS"' in dot
     assert "->" in dot  # directed
+    assert 'layout="fdp"' in dot  # force-directed requested in the DOT, not via engine= kwarg
 
 
 def test_build_dot_filters(_=None):
