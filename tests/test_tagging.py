@@ -127,3 +127,65 @@ def test_index_tags_inherit_from_source(migrated_conn):
     repository.add_page_tag(conn, cpage_id, "x")
     cpage = repository.get_wiki_page(conn, cpage_id)
     assert projectors.page_tags(conn, cpage) == ["x"]
+
+
+# --- TC-TAG-U4 / U5: the tag filter is built at the index, and an unfiltered
+#     run is byte-identical (no stores needed; the search builders are pure). ---
+
+
+class _FakeOS:
+    def __init__(self) -> None:
+        self.body: dict = {}
+
+    async def search(self, index: str, body: dict) -> dict:
+        self.body = body
+        return {"hits": {"hits": []}}
+
+
+class _FakeQ:
+    def __init__(self) -> None:
+        self.query_filter: object = "UNSET"
+
+    async def query_points(self, **kw):  # noqa: ANN003
+        self.query_filter = kw.get("query_filter")
+
+        class _R:
+            points: list = []
+
+        return _R()
+
+
+def test_opensearch_tag_filter_construction():
+    import asyncio
+
+    from compendium.retrieve import search
+
+    os_no = _FakeOS()
+    asyncio.run(search.opensearch_pages(os_no, "q", 5))
+    assert "filter" not in os_no.body["query"]["bool"]  # I2: unfiltered unchanged
+
+    os_yes = _FakeOS()
+    asyncio.run(search.opensearch_pages(os_yes, "q", 5, tags=["trading"]))
+    assert os_yes.body["query"]["bool"]["filter"] == {"terms": {"tags": ["trading"]}}
+
+    chunks_no = _FakeOS()
+    asyncio.run(search.opensearch_chunks(chunks_no, "q", 5))
+    assert "bool" not in chunks_no.body["query"]  # bare multi_match preserved
+
+    chunks_yes = _FakeOS()
+    asyncio.run(search.opensearch_chunks(chunks_yes, "q", 5, tags=["x"]))
+    assert chunks_yes.body["query"]["bool"]["filter"] == {"terms": {"tags": ["x"]}}
+
+
+def test_qdrant_tag_filter_construction():
+    import asyncio
+
+    from compendium.retrieve import search
+
+    q_no = _FakeQ()
+    asyncio.run(search.qdrant_chunks(q_no, [0.1, 0.2], 5))
+    assert q_no.query_filter is None  # I2: no filter when unset
+
+    q_yes = _FakeQ()
+    asyncio.run(search.qdrant_chunks(q_yes, [0.1, 0.2], 5, tags=["x"]))
+    assert q_yes.query_filter is not None and q_yes.query_filter.must
