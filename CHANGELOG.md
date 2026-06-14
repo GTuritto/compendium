@@ -14,6 +14,14 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ### Added (v0.5, merged to `main`, ships with the next cut)
 
+- **Curation autonomy knob** (ADR-022, amends ADR-009): `curation.mode` —
+  `manual` | `semi-auto` (default) | `auto` — over concept synthesis/promotion
+  only (edge extraction ADR-010 + contradicts ADR-014 unchanged). semi-auto
+  drafts concept pages from signals as drafts (curator approves); auto (opt-in,
+  off by default) self-reviews + promotes above a confidence threshold, with a
+  shadow mode; manual is the pre-knob loop. Never overwrites an existing page.
+  See [docs/operations/autocuration.md](docs/operations/autocuration.md).
+
 - **Agent object store + promote** (ADR-017, migration 0016): verbatim agent
   key-value storage (`agent_objects`, LWW upsert) with `object_put/get/list/
   delete/promote` on REST + MCP + CLI (`compendium object …`). Bodies round-trip

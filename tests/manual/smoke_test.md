@@ -640,3 +640,15 @@ Prerequisites: stores up. Stubs fine.
 | v0.5-obj.3 | promote | `object put p note.md`; `object promote p --kind note`; `query "<phrase>"` | a source page appears for the body |
 | v0.5-obj.4 | isolation | `query "<phrase>"` before promote | the object is NOT returned (invisible until promoted) |
 | v0.5-obj.5 | surface parity | object_get via REST `/object_get` / MCP / CLI `--format json` | identical JSON |
+
+## v0.5 — Curation autonomy knob (ADR-022)
+
+Prerequisites: stores up; some corpus. Stubs fine.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-ck.1 | default semi-auto | `compendium curate run` (mode unset) | drafts appear as `draft` concept pages; none canonical |
+| v0.5-ck.2 | manual | set `curation.mode=manual`; `curate run` | signals only; nothing synthesized/promoted |
+| v0.5-ck.3 | approve | `compendium page promote <draft-slug> --to canonical` | the drafted concept becomes canonical |
+| v0.5-ck.4 | auto opt-in | set `curation.mode=auto`; `curate run` | passing drafts promoted; off unless set |
+| v0.5-ck.5 | scope | any mode | edge extraction (ADR-010) + contradicts (ADR-014) unchanged |
