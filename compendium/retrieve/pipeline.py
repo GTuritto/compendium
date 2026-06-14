@@ -132,6 +132,7 @@ async def run(
     alias_index: AliasIndex | None = None,
     arm: str = "pages",
     exact: bool = False,
+    tags: list[str] | None = None,
 ) -> RetrievalResult:
     """Run the page-first pipeline. Clients/embedder are injectable for tests.
 
@@ -177,10 +178,11 @@ async def run(
             with timed("pages_fanout", sink=latencies):
                 os_pages, qd_pages = await asyncio.gather(
                     search.opensearch_pages(
-                        os_client, query_text, CANDIDATE_POOL_SIZE
+                        os_client, query_text, CANDIDATE_POOL_SIZE, tags=tags
                     ),
                     search.qdrant_pages(
-                        qd_client, query_vector, CANDIDATE_POOL_SIZE, exact=exact
+                        qd_client, query_vector, CANDIDATE_POOL_SIZE,
+                        exact=exact, tags=tags,
                     ),
                 )
 
@@ -231,9 +233,12 @@ async def run(
         if fallback:
             with timed("chunks_fanout", sink=latencies):
                 os_chunks, qd_chunks = await asyncio.gather(
-                    search.opensearch_chunks(os_client, query_text, CANDIDATE_POOL_SIZE),
+                    search.opensearch_chunks(
+                        os_client, query_text, CANDIDATE_POOL_SIZE, tags=tags
+                    ),
                     search.qdrant_chunks(
-                        qd_client, query_vector, CANDIDATE_POOL_SIZE, exact=exact
+                        qd_client, query_vector, CANDIDATE_POOL_SIZE,
+                        exact=exact, tags=tags,
                     ),
                 )
             fused_chunks = reciprocal_rank_fusion(
@@ -296,6 +301,10 @@ async def run(
         # ADR-016: the control arm stamps itself; the pages arm's trace stays
         # byte-identical to pre-v0.4 (the Phase 0 wire snapshots pin it).
         trace["pipeline"]["arm"] = arm
+    if tags:
+        # ADR-019: the tag filter is recorded only when set, so an unfiltered
+        # run's trace stays byte-identical to pre-tagging (invariant I2).
+        trace["pipeline"]["tags_filter"] = list(tags)
 
     return RetrievalResult(
         query_text=raw_query,

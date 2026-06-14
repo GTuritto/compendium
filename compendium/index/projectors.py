@@ -41,6 +41,21 @@ def load_page(conn: psycopg.Connection, page_id: str, vault_path: str):
     return page, topic_ids, body
 
 
+def page_tags(conn: psycopg.Connection, page: dict[str, Any]) -> list[str]:
+    """Effective tags for a page: its own tags, plus (for a source page) the
+    tags on its source — source tags inherit to the derived source page
+    (ADR-019). Sorted, deduplicated."""
+    tags = set(repository.tags_for_page(conn, str(page["id"])))
+    if page.get("kind") == "source" and page.get("source_id"):
+        tags |= set(repository.tags_for_source(conn, str(page["source_id"])))
+    return sorted(tags)
+
+
+def chunk_tags(conn: psycopg.Connection, chunk: dict[str, Any]) -> list[str]:
+    """Effective tags for a chunk: the tags on its source, inherited."""
+    return repository.tags_for_source(conn, str(chunk["source_id"]))
+
+
 class OpenSearchProjector:
     """Projects pages and chunks into the OpenSearch (BM25) indexes."""
 
@@ -50,7 +65,9 @@ class OpenSearchProjector:
         if loaded is None:
             return "skipped"
         page, topic_ids, body = loaded
-        doc = documents.page_document(page, body=body, topic_ids=topic_ids)
+        doc = documents.page_document(
+            page, body=body, topic_ids=topic_ids, tags=page_tags(conn, page)
+        )
         opensearch.index_document(stores.os, opensearch.PAGES_INDEX, entity_id, doc)
         return "indexed"
 
@@ -59,7 +76,7 @@ class OpenSearchProjector:
         chunk = repository.get_chunk_for_index(conn, entity_id)
         if chunk is None:
             return "skipped"
-        doc = documents.chunk_document(chunk)
+        doc = documents.chunk_document(chunk, tags=chunk_tags(conn, chunk))
         opensearch.index_document(stores.os, opensearch.CHUNKS_INDEX, entity_id, doc)
         return "indexed"
 
@@ -73,7 +90,9 @@ class QdrantProjector:
         if loaded is None:
             return "skipped"
         page, topic_ids, body = loaded
-        payload = documents.page_payload(page, topic_ids=topic_ids)
+        payload = documents.page_payload(
+            page, topic_ids=topic_ids, tags=page_tags(conn, page)
+        )
         vector = stores.embedder.embed([documents.page_embed_text(page["title"], body)])[0]
         qdrant.upsert_point(stores.q, qdrant.PAGES_COLLECTION, entity_id, vector, payload)
         return "indexed"
@@ -83,7 +102,7 @@ class QdrantProjector:
         chunk = repository.get_chunk_for_index(conn, entity_id)
         if chunk is None:
             return "skipped"
-        payload = documents.chunk_payload(chunk)
+        payload = documents.chunk_payload(chunk, tags=chunk_tags(conn, chunk))
         vector = stores.embedder.embed([documents.chunk_embed_text(chunk["body"])])[0]
         qdrant.upsert_point(stores.q, qdrant.CHUNKS_COLLECTION, entity_id, vector, payload)
         return "indexed"

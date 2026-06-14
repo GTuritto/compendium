@@ -605,3 +605,14 @@ Prerequisites: stores up. WebUI via `compendium web`; TUI via `compendium tui`.
 | v0.5-adm.4 | WebUI has no destructive ops | inspect the Dashboard | no delete/wipe/restore/unit-install control (ADR-020 P1) |
 | v0.5-adm.5 | TUI full admin | in the TUI dashboard press `R`/`G`/`I`; on sources press `D` and type DELETE | each op runs and notifies; delete prompts for confirmation first |
 | v0.5-adm.6 | Inbox sweep backstop | drop a file the watcher misses; wait ~10 min | `compendium-inbox-sweep.timer` drains it (no-op when empty) |
+## v0.5 — Tagging (ADR-019)
+
+Prerequisites: stores up; at least one source ingested + indexed. Stubs fine.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-tag.1 | CLI round-trip | `compendium tag add <slug> trading`; `compendium tag ls`; `compendium tag rm <slug> trading` | tag appears with usage counts, reindex reported, then removed |
+| v0.5-tag.2 | Filtered query | tag a source `trading`; `compendium query "<q>" --tag trading --format json` | only trading-tagged pages returned (filter narrows the set) |
+| v0.5-tag.3 | Isolation (I2) | `compendium query "<q>"` (no `--tag`) | results identical to pre-tagging; no `tags_filter` in the trace |
+| v0.5-tag.4 | Index carries tags (1b/I3) | tag a source; the tag verb auto-reindexes; filtered query | the index-level filter returns the tagged source page (inherited tag) |
+| v0.5-tag.5 | Surfaces (1d) | `compendium query --help`; `compendium ask --help`; `compendium tag --help` | `--tag` on query/ask; `tag add/rm/ls` present |

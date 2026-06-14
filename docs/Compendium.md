@@ -826,6 +826,27 @@ The admin surface is split by **posture**. The **TUI** (local, over SSH) gets th
 #### Alternatives considered
 
 **Full admin parity in the WebUI** was rejected: destructive ops on a no-auth LAN surface is the exact risk ADR-011 deferred. **Adding auth to the WebUI to allow parity** was rejected for v0.5 (the deferred auth bundle stays deferred); the posture split delivers the value without it. **Duplicating op logic per UI** was rejected for the one-seam rule, which keeps CLI/TUI/WebUI behaviour identical.
+### ADR-019: Tags on sources and pages (v0.5)
+
+**Status:** Accepted (v0.5). Curator-assigned, retrieval-filter-grade labels on sources and wiki pages, orthogonal to synthesized topics (ADR-006) and to aliases.
+
+#### Context
+
+The corpus had no lightweight, user-applied organization. Topics are synthesized structural groupings owned by the wiki/graph; aliases feed lexical recall. Neither lets the curator say "this source is for project-x" or "answer only within my trading reading." A tag is a flat, curator-owned label that also scopes retrieval.
+
+#### Decision
+
+PostgreSQL is the system of record: a `tags` table plus `source_tags` / `page_tags` join tables (migration 0015), both cascading on their parent's delete (so an ADR-018 source delete drops its tag links). Tags propagate into the derived indexes as a filterable field — a `tags` keyword on both OpenSearch mappings and both Qdrant payload-indexed collections — written on `reindex` / sync through the one-row-per-field document shape (arch-index-document-shape), so the field lands in both stores at once. **Source tags inherit to the derived content**: a source's tags flow onto its source page and its chunks at projection time; concept/topic pages carry only their own tags. Retrieval gains an optional tag filter on `pipeline.run` (`--tag`, repeatable, OR semantics) enforced **at the index** (an OpenSearch `terms` filter, a Qdrant `MatchAny`) and recorded in the query trace **only when set**, so an unfiltered query is byte-identical to pre-tagging. Surfaces: `compendium tag add/rm/ls` and `--tag` on `query` / `ask` (the TUI/WebUI controls ship with the UI phases); the WebUI surface is non-destructive, so it is permitted (ADR-020). Tagging a source page tags its source (covering the whole source via inheritance); tagging a concept/topic tags that page.
+
+#### Consequences
+
+- The corpus can be organized and retrieval scoped without touching topics, aliases, or the graph.
+- Tagging re-projects the affected page + chunks so the index reflects the change immediately; a Qdrant re-projection re-embeds the chunk (the vector is unchanged), an accepted inefficiency a later payload-only update can remove.
+- The unfiltered path is provably unchanged (the frozen wire-format and the no-`tags_filter`-key trace pin it).
+
+#### Alternatives considered
+
+**Array columns on `sources`/`wiki_pages`** were rejected in favour of join tables: rename/merge and usage counts are clean with a `tags` table. **Reusing topics** was rejected: topics are synthesized and graph-bearing; tags are flat curator labels and must not create topics/aliases/edges. **Post-hoc filtering** (fetch then drop) was rejected for index-level filtering, which is correct and cheaper. **AND-by-default multi-tag** was rejected for OR-by-default, matching common tag UIs.
 
 ## Part III: Data Contracts and Schemas
 

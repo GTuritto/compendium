@@ -235,6 +235,100 @@ def delete_sync_rows_for_entities(
     return cur.rowcount
 
 
+# --- tags (v0.5, ADR-019) -------------------------------------------------
+
+
+def ensure_tag(conn: psycopg.Connection, name: str) -> UUID:
+    """Return the id of the tag named ``name``, inserting it if new."""
+    row = conn.execute(
+        """
+        INSERT INTO tags (name) VALUES (%s)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        """,
+        (name,),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
+def add_source_tag(conn: psycopg.Connection, source_id: str | UUID, name: str) -> None:
+    """Attach tag ``name`` to a source (idempotent)."""
+    tag_id = ensure_tag(conn, name)
+    conn.execute(
+        "INSERT INTO source_tags (source_id, tag_id) VALUES (%s, %s) "
+        "ON CONFLICT DO NOTHING",
+        (str(source_id), tag_id),
+    )
+
+
+def add_page_tag(conn: psycopg.Connection, page_id: str | UUID, name: str) -> None:
+    """Attach tag ``name`` to a wiki page (idempotent)."""
+    tag_id = ensure_tag(conn, name)
+    conn.execute(
+        "INSERT INTO page_tags (page_id, tag_id) VALUES (%s, %s) "
+        "ON CONFLICT DO NOTHING",
+        (str(page_id), tag_id),
+    )
+
+
+def remove_source_tag(
+    conn: psycopg.Connection, source_id: str | UUID, name: str
+) -> None:
+    """Detach tag ``name`` from a source."""
+    conn.execute(
+        "DELETE FROM source_tags st USING tags t "
+        "WHERE st.tag_id = t.id AND st.source_id = %s AND t.name = %s",
+        (str(source_id), name),
+    )
+
+
+def remove_page_tag(conn: psycopg.Connection, page_id: str | UUID, name: str) -> None:
+    """Detach tag ``name`` from a wiki page."""
+    conn.execute(
+        "DELETE FROM page_tags pt USING tags t "
+        "WHERE pt.tag_id = t.id AND pt.page_id = %s AND t.name = %s",
+        (str(page_id), name),
+    )
+
+
+def tags_for_source(conn: psycopg.Connection, source_id: str | UUID) -> list[str]:
+    """The tag names on a source, sorted."""
+    return [
+        r["name"]
+        for r in conn.execute(
+            "SELECT t.name FROM source_tags st JOIN tags t ON t.id = st.tag_id "
+            "WHERE st.source_id = %s ORDER BY t.name",
+            (str(source_id),),
+        )
+    ]
+
+
+def tags_for_page(conn: psycopg.Connection, page_id: str | UUID) -> list[str]:
+    """The tag names directly on a wiki page, sorted."""
+    return [
+        r["name"]
+        for r in conn.execute(
+            "SELECT t.name FROM page_tags pt JOIN tags t ON t.id = pt.tag_id "
+            "WHERE pt.page_id = %s ORDER BY t.name",
+            (str(page_id),),
+        )
+    ]
+
+
+def list_tags(conn: psycopg.Connection) -> list[dict[str, Any]]:
+    """All tags with their source/page usage counts, sorted by name."""
+    return conn.execute(
+        """
+        SELECT t.name,
+               (SELECT count(*) FROM source_tags st WHERE st.tag_id = t.id) AS sources,
+               (SELECT count(*) FROM page_tags pt WHERE pt.tag_id = t.id) AS pages
+        FROM tags t
+        ORDER BY t.name
+        """
+    ).fetchall()
+
+
 def count_chunks(conn: psycopg.Connection, source_id: UUID) -> int:
     """Number of chunks stored for a source."""
     row = conn.execute(
