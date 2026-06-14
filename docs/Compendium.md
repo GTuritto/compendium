@@ -805,6 +805,28 @@ PostgreSQL already cascades a `sources` delete to its `chunks` and `source_docum
 
 **Soft delete (deprecate) only** was rejected for this need: the existing `deprecated` status keeps the content in the corpus and indexes, so it would still pollute retrieval and the A/B. **A tombstone** (keep a record it existed) was rejected for v0.5 simplicity; hard delete leaves no resurrectable identity. **Deleting derived stores inside the PostgreSQL transaction** was rejected: cross-store atomicity is impossible, so the canonical-first + reconcile-on-failure model is the honest one. **Cascade-deleting grounded concepts** was rejected: it would let a source delete silently destroy curated synthesis; surfacing them as signals keeps the curator in control.
 
+### ADR-019: Tags on sources and pages (v0.5)
+
+**Status:** Accepted (v0.5). Curator-assigned, retrieval-filter-grade labels on sources and wiki pages, orthogonal to synthesized topics (ADR-006) and to aliases.
+
+#### Context
+
+The corpus had no lightweight, user-applied organization. Topics are synthesized structural groupings owned by the wiki/graph; aliases feed lexical recall. Neither lets the curator say "this source is for project-x" or "answer only within my trading reading." A tag is a flat, curator-owned label that also scopes retrieval.
+
+#### Decision
+
+PostgreSQL is the system of record: a `tags` table plus `source_tags` / `page_tags` join tables (migration 0015), both cascading on their parent's delete (so an ADR-018 source delete drops its tag links). Tags propagate into the derived indexes as a filterable field — a `tags` keyword on both OpenSearch mappings and both Qdrant payload-indexed collections — written on `reindex` / sync through the one-row-per-field document shape (arch-index-document-shape), so the field lands in both stores at once. **Source tags inherit to the derived content**: a source's tags flow onto its source page and its chunks at projection time; concept/topic pages carry only their own tags. Retrieval gains an optional tag filter on `pipeline.run` (`--tag`, repeatable, OR semantics) enforced **at the index** (an OpenSearch `terms` filter, a Qdrant `MatchAny`) and recorded in the query trace **only when set**, so an unfiltered query is byte-identical to pre-tagging. Surfaces: `compendium tag add/rm/ls` and `--tag` on `query` / `ask` (the TUI/WebUI controls ship with the UI phases); the WebUI surface is non-destructive, so it is permitted (ADR-020). Tagging a source page tags its source (covering the whole source via inheritance); tagging a concept/topic tags that page.
+
+#### Consequences
+
+- The corpus can be organized and retrieval scoped without touching topics, aliases, or the graph.
+- Tagging re-projects the affected page + chunks so the index reflects the change immediately; a Qdrant re-projection re-embeds the chunk (the vector is unchanged), an accepted inefficiency a later payload-only update can remove.
+- The unfiltered path is provably unchanged (the frozen wire-format and the no-`tags_filter`-key trace pin it).
+
+#### Alternatives considered
+
+**Array columns on `sources`/`wiki_pages`** were rejected in favour of join tables: rename/merge and usage counts are clean with a `tags` table. **Reusing topics** was rejected: topics are synthesized and graph-bearing; tags are flat curator labels and must not create topics/aliases/edges. **Post-hoc filtering** (fetch then drop) was rejected for index-level filtering, which is correct and cheaper. **AND-by-default multi-tag** was rejected for OR-by-default, matching common tag UIs.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
