@@ -101,6 +101,51 @@ def create_app() -> Any:
     def http_index_status() -> Any:
         return to_payload(facade.index_status())
 
+    @app.post("/object_put")
+    def http_object_put(payload: dict = Body(...)) -> Any:
+        p = payload or {}
+        if not p.get("key"):
+            raise HTTPException(status_code=400, detail="key is required")
+        try:
+            return facade.object_put(
+                p["key"], collection=p.get("collection", "default"),
+                content_text=p.get("content_text"),
+                content_base64=p.get("content_base64"),
+                content_type=p.get("content_type"), metadata=p.get("metadata"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/object_get")
+    def http_object_get(key: str = Query(...), collection: str = Query("default")) -> Any:
+        obj = facade.object_get(key, collection=collection)
+        if obj is None:
+            raise HTTPException(status_code=404, detail="object not found")
+        return obj
+
+    @app.get("/object_list")
+    def http_object_list(
+        collection: str | None = Query(None), prefix: str | None = Query(None)
+    ) -> Any:
+        return facade.object_list(collection=collection, prefix=prefix)
+
+    @app.post("/object_delete")
+    def http_object_delete(payload: dict = Body(...)) -> Any:
+        p = payload or {}
+        if not p.get("key"):
+            raise HTTPException(status_code=400, detail="key is required")
+        return facade.object_delete(p["key"], collection=p.get("collection", "default"))
+
+    @app.post("/object_promote")
+    def http_object_promote(payload: dict = Body(...)) -> Any:
+        p = payload or {}
+        if not p.get("key"):
+            raise HTTPException(status_code=400, detail="key is required")
+        return facade.object_promote(
+            p["key"], collection=p.get("collection", "default"),
+            kind=p.get("kind", "note"),
+        )
+
     return app
 
 

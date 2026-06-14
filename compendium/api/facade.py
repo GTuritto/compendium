@@ -156,3 +156,97 @@ def index_status() -> Any:
     from compendium.index.sync import status
 
     return status()
+
+
+# --- agent object store (ADR-017): verbatim agent storage + promote ---------
+# Agent-write verbs ("agents read memory and write documents"). The object
+# store is invisible to retrieval until an object is promoted.
+
+OBJECT_VERBS = (
+    "object_put", "object_get", "object_list", "object_delete", "object_promote",
+)
+
+
+def _object_meta(row: dict[str, Any]) -> dict[str, Any]:
+    """JSON-native object metadata (no body)."""
+    return {
+        "id": str(row["id"]),
+        "collection": row["collection"],
+        "key": row["key"],
+        "content_type": row["content_type"],
+        "metadata": row.get("metadata") or {},
+        "size": row.get("size"),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
+def object_put(
+    key: str,
+    *,
+    collection: str = "default",
+    content_text: str | None = None,
+    content_base64: str | None = None,
+    content_type: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from compendium import objects
+
+    if content_base64 is not None:
+        try:
+            body = base64.b64decode(content_base64)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"invalid content_base64: {exc}") from exc
+        ctype = content_type or "application/octet-stream"
+    elif content_text is not None:
+        body = content_text.encode("utf-8")
+        ctype = content_type or "text/plain"
+    else:
+        raise ValueError("object_put requires 'content_text' or 'content_base64'")
+    row = objects.put(
+        key, body, collection=collection, content_type=ctype, metadata=metadata
+    )
+    return _object_meta(row)
+
+
+def object_get(key: str, *, collection: str = "default") -> dict[str, Any] | None:
+    from compendium import objects
+
+    row = objects.get(key, collection=collection)
+    if row is None:
+        return None
+    out = _object_meta(row)
+    out["size"] = len(row["body"])
+    out["body_base64"] = base64.b64encode(row["body"]).decode("ascii")  # verbatim
+    out["body_text"] = (
+        row["body"].decode("utf-8")
+        if (row["content_type"] or "").startswith("text")
+        else None
+    )
+    return out
+
+
+def object_list(
+    *, collection: str | None = None, prefix: str | None = None
+) -> list[dict[str, Any]]:
+    from compendium import objects
+
+    return [_object_meta(r) for r in objects.list_objects(collection=collection, prefix=prefix)]
+
+
+def object_delete(key: str, *, collection: str = "default") -> dict[str, Any]:
+    from compendium import objects
+
+    return {
+        "collection": collection,
+        "key": key,
+        "deleted": objects.delete(key, collection=collection),
+    }
+
+
+def object_promote(
+    key: str, *, collection: str = "default", kind: str = "note"
+) -> dict[str, Any]:
+    from compendium import objects
+
+    return objects.promote(key, collection=collection, kind=kind)

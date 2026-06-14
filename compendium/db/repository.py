@@ -1621,3 +1621,81 @@ def concept_pages_changed_since(
         "ORDER BY updated_at",
         (since,),
     ).fetchall()
+
+
+# --- agent objects (v0.5, ADR-017) -----------------------------------------
+
+
+def put_object(
+    conn: psycopg.Connection,
+    *,
+    collection: str,
+    key: str,
+    body: bytes,
+    content_type: str = "text/plain",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Upsert an agent object (last-write-wins on (collection, key)). Returns the
+    row metadata (no body)."""
+    row = conn.execute(
+        """
+        INSERT INTO agent_objects (collection, key, content_type, body, metadata)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (collection, key) DO UPDATE
+          SET content_type = EXCLUDED.content_type,
+              body = EXCLUDED.body,
+              metadata = EXCLUDED.metadata,
+              updated_at = now()
+        RETURNING id, collection, key, content_type, metadata,
+                  octet_length(body) AS size, created_at, updated_at
+        """,
+        (collection, key, content_type, bytes(body), Json(metadata or {})),
+    ).fetchone()
+    assert row is not None
+    return row
+
+
+def get_object(
+    conn: psycopg.Connection, *, collection: str, key: str
+) -> dict[str, Any] | None:
+    """Read an agent object verbatim, or None. ``body`` is returned as bytes."""
+    row = conn.execute(
+        "SELECT * FROM agent_objects WHERE collection = %s AND key = %s",
+        (collection, key),
+    ).fetchone()
+    if row is not None and not isinstance(row["body"], bytes):
+        row["body"] = bytes(row["body"])
+    return row
+
+
+def list_objects(
+    conn: psycopg.Connection,
+    *,
+    collection: str | None = None,
+    prefix: str | None = None,
+) -> list[dict[str, Any]]:
+    """List object metadata (no bodies), optionally filtered by collection/prefix."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if collection:
+        clauses.append("collection = %s")
+        params.append(collection)
+    if prefix:
+        clauses.append("key LIKE %s")
+        params.append(prefix + "%")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return conn.execute(
+        "SELECT id, collection, key, content_type, metadata, "
+        f"octet_length(body) AS size, created_at, updated_at FROM agent_objects{where} "
+        "ORDER BY collection, key",
+        params,
+    ).fetchall()
+
+
+def delete_object(conn: psycopg.Connection, *, collection: str, key: str) -> bool:
+    """Delete an agent object; returns whether a row was removed."""
+    cur = conn.execute(
+        "DELETE FROM agent_objects WHERE collection = %s AND key = %s",
+        (collection, key),
+    )
+    return cur.rowcount > 0

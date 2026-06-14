@@ -43,7 +43,11 @@ def test_mcp_lists_the_six_verbs_with_schemas():
     server = build_server()
     tools = asyncio.run(server.list_tools())
     names = {t.name for t in tools}
-    assert names == {"query", "ask", "ingest", "page_get", "page_list", "index_status"}
+    assert names == {
+        "query", "ask", "ingest", "page_get", "page_list", "index_status",
+        # v0.5 agent object store (ADR-017)
+        "object_put", "object_get", "object_list", "object_delete", "object_promote",
+    }
 
     by_name = {t.name: t for t in tools}
     assert "text" in by_name["query"].inputSchema["properties"]
