@@ -192,6 +192,49 @@ def delete_chunks(conn: psycopg.Connection, source_id: UUID) -> None:
     conn.execute("DELETE FROM chunks WHERE source_id = %s", (source_id,))
 
 
+# --- hard delete (v0.5, ADR-018) ------------------------------------------
+
+
+def delete_source_row(conn: psycopg.Connection, source_id: str | UUID) -> None:
+    """Delete a ``sources`` row; cascades its chunks and source_documents."""
+    conn.execute("DELETE FROM sources WHERE id = %s", (str(source_id),))
+
+
+def delete_wiki_page(conn: psycopg.Connection, page_id: str | UUID) -> None:
+    """Delete a ``wiki_pages`` row; cascades its revisions, topic links, and
+    promotion events (all ``ON DELETE CASCADE``)."""
+    conn.execute("DELETE FROM wiki_pages WHERE id = %s", (str(page_id),))
+
+
+def delete_semantic_edges_for_nodes(
+    conn: psycopg.Connection, node_ids: list[str]
+) -> int:
+    """Delete ``semantic_edges`` rows touching any node id (as ``from`` or
+    ``to``). Node ids are the graph keys (source_id for source pages, page_id
+    for concept/topic pages, chunk_id for chunks). Returns the count removed."""
+    if not node_ids:
+        return 0
+    cur = conn.execute(
+        "DELETE FROM semantic_edges WHERE from_id = ANY(%s) OR to_id = ANY(%s)",
+        (node_ids, node_ids),
+    )
+    return cur.rowcount
+
+
+def delete_sync_rows_for_entities(
+    conn: psycopg.Connection, entity_ids: list[str]
+) -> int:
+    """Delete ``index_sync_state`` rows for any of ``entity_ids`` (page/chunk
+    ids). Returns the count removed."""
+    if not entity_ids:
+        return 0
+    cur = conn.execute(
+        "DELETE FROM index_sync_state WHERE entity_id = ANY(%s::uuid[])",
+        ([str(e) for e in entity_ids],),
+    )
+    return cur.rowcount
+
+
 def count_chunks(conn: psycopg.Connection, source_id: UUID) -> int:
     """Number of chunks stored for a source."""
     row = conn.execute(

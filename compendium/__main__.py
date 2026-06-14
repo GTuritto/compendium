@@ -144,6 +144,63 @@ def _synth(kind: str, name: str, aliases: list[str]) -> int:
     return 0
 
 
+def _source_delete(ident: str, dry_run: bool, force: bool, fmt: str) -> int:
+    import json as _json
+
+    from compendium.maintenance.delete import delete_source
+
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    # Non-destructive preview first (resolves the source, counts derivatives).
+    preview = delete_source(ident, dry_run=True)
+    if not preview.found:
+        print(f"source delete: no source matched '{ident}'", file=sys.stderr)
+        return 1
+
+    if dry_run:
+        if fmt == "json":
+            print(_json.dumps(preview.__dict__))
+        else:
+            print(
+                f"[dry-run] would delete source '{preview.slug}' "
+                f"({preview.title}) — {preview.chunk_count} chunk(s), "
+                f"its source page, and all derived index/graph entries"
+            )
+        return 0
+
+    if not force:
+        try:
+            answer = input(
+                f"Delete source '{preview.slug}' ({preview.chunk_count} chunks)? "
+                "This cannot be undone [y/N] "
+            )
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("aborted", file=sys.stderr)
+            return 1
+
+    report = delete_source(ident, dry_run=False)
+    if fmt == "json":
+        print(_json.dumps(report.__dict__))
+    else:
+        msg = (
+            f"deleted source '{report.slug}' — {report.chunk_count} chunk(s), "
+            f"page removed: {report.page_removed}, "
+            f"semantic edges removed: {report.semantic_edges_removed}"
+        )
+        if report.derived_errors:
+            msg += (
+                f"\nWARN: derived cleanup had errors (reconcile with "
+                f"'reindex all' + 'graph rebuild'): {report.derived_errors}"
+            )
+        print(msg)
+    return 1 if report.derived_errors else 0
+
+
 def _reindex(target: str, fmt: str) -> int:
     log = get_logger("compendium.reindex")
     try:
@@ -907,6 +964,22 @@ def main(argv: list[str] | None = None) -> int:
         "--to", dest="to_status", required=True, choices=["canonical", "deprecated"]
     )
 
+    source_parser = subparsers.add_parser("source", help="source operations")
+    source_sub = source_parser.add_subparsers(dest="source_action", required=True)
+    source_delete = source_sub.add_parser(
+        "delete",
+        help="hard-delete a source and everything derived from it (ADR-018)",
+        parents=[fmt],
+    )
+    source_delete.add_argument("ident", help="source id or source-page slug")
+    source_delete.add_argument(
+        "--dry-run", action="store_true",
+        help="report what would be removed; remove nothing",
+    )
+    source_delete.add_argument(
+        "--force", action="store_true", help="skip the confirmation prompt",
+    )
+
     promotions_parser = subparsers.add_parser("promotions", help="promotion events")
     promotions_sub = promotions_parser.add_subparsers(dest="promotions_action", required=True)
     promotions_list = promotions_sub.add_parser("list", help="list promotion events", parents=[fmt])
@@ -1137,6 +1210,10 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
         )
     if args.command == "page":
         return _page(args.page_action, args.slug, args)
+    if args.command == "source":
+        return _source_delete(
+            args.ident, args.dry_run, args.force, fmt_arg
+        )
     if args.command == "promotions":
         return _promotions(args.slug, fmt_arg)
     if args.command == "tui":
