@@ -89,31 +89,37 @@ def _opensearch_hits(response: dict[str, Any]) -> list[Hit]:
 
 
 async def opensearch_pages(
-    client: AsyncOpenSearch, query_text: str, size: int
+    client: AsyncOpenSearch, query_text: str, size: int, *,
+    tags: list[str] | None = None,
 ) -> list[Hit]:
-    """BM25 page search, excluding deprecated pages."""
-    body = {
-        "size": size,
-        "query": {
-            "bool": {
-                "must": {
-                    "multi_match": {"query": query_text, "fields": _PAGE_FIELDS}
-                },
-                "must_not": {"term": {"status": "deprecated"}},
-            }
-        },
+    """BM25 page search, excluding deprecated pages. ``tags`` (ADR-019) adds an
+    index-level OR filter; unset leaves the query byte-identical."""
+    bool_q: dict[str, Any] = {
+        "must": {"multi_match": {"query": query_text, "fields": _PAGE_FIELDS}},
+        "must_not": {"term": {"status": "deprecated"}},
     }
+    if tags:
+        bool_q["filter"] = {"terms": {"tags": list(tags)}}
+    body = {"size": size, "query": {"bool": bool_q}}
     return _opensearch_hits(await client.search(index=PAGES_INDEX, body=body))
 
 
 async def opensearch_chunks(
-    client: AsyncOpenSearch, query_text: str, size: int
+    client: AsyncOpenSearch, query_text: str, size: int, *,
+    tags: list[str] | None = None,
 ) -> list[Hit]:
-    """BM25 chunk search."""
-    body = {
-        "size": size,
-        "query": {"multi_match": {"query": query_text, "fields": _CHUNK_FIELDS}},
-    }
+    """BM25 chunk search. ``tags`` adds an index-level OR filter; unset leaves
+    the bare multi_match byte-identical."""
+    if tags:
+        query: dict[str, Any] = {
+            "bool": {
+                "must": {"multi_match": {"query": query_text, "fields": _CHUNK_FIELDS}},
+                "filter": {"terms": {"tags": list(tags)}},
+            }
+        }
+    else:
+        query = {"multi_match": {"query": query_text, "fields": _CHUNK_FIELDS}}
+    body = {"size": size, "query": query}
     return _opensearch_hits(await client.search(index=CHUNKS_INDEX, body=body))
 
 
@@ -138,10 +144,21 @@ def _qdrant_params(exact: bool) -> Any:
     return models.SearchParams(exact=True)
 
 
+def _tag_must(tags: list[str] | None) -> list[Any] | None:
+    """A Qdrant ``must`` clause matching any of ``tags`` (OR), or None (ADR-019)."""
+    if not tags:
+        return None
+    from qdrant_client import models
+
+    return [models.FieldCondition(key="tags", match=models.MatchAny(any=list(tags)))]
+
+
 async def qdrant_pages(
-    client: AsyncQdrantClient, vector: list[float], size: int, *, exact: bool = False
+    client: AsyncQdrantClient, vector: list[float], size: int, *,
+    exact: bool = False, tags: list[str] | None = None,
 ) -> list[Hit]:
-    """Dense page search, excluding deprecated pages."""
+    """Dense page search, excluding deprecated pages. ``tags`` adds an OR
+    payload filter; unset leaves the filter byte-identical."""
     from qdrant_client import models
 
     query_filter = models.Filter(
@@ -149,7 +166,8 @@ async def qdrant_pages(
             models.FieldCondition(
                 key="status", match=models.MatchValue(value="deprecated")
             )
-        ]
+        ],
+        must=_tag_must(tags),
     )
     response = await client.query_points(
         collection_name=PAGES_COLLECTION,
@@ -163,14 +181,20 @@ async def qdrant_pages(
 
 
 async def qdrant_chunks(
-    client: AsyncQdrantClient, vector: list[float], size: int, *, exact: bool = False
+    client: AsyncQdrantClient, vector: list[float], size: int, *,
+    exact: bool = False, tags: list[str] | None = None,
 ) -> list[Hit]:
-    """Dense chunk search."""
+    """Dense chunk search. ``tags`` adds an OR payload filter; unset passes no
+    filter (byte-identical)."""
+    from qdrant_client import models
+
+    must = _tag_must(tags)
     response = await client.query_points(
         collection_name=CHUNKS_COLLECTION,
         query=vector,
         limit=size,
         with_payload=True,
+        query_filter=models.Filter(must=must) if must else None,
         search_params=_qdrant_params(exact),
     )
     return _qdrant_hits(response.points)

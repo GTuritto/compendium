@@ -22,12 +22,13 @@ _PAYLOAD_INDEXES = {
         "kind",
         "status",
         "corpus_revision",
+        "tags",
         "topic_ids",
         "parent_topic_id",
         "source_id",
         "source_kind",
     ),
-    CHUNKS_COLLECTION: ("source_id", "source_kind"),
+    CHUNKS_COLLECTION: ("source_id", "source_kind", "tags"),
 }
 
 _VECTORS = models.VectorParams(size=EMBED_DIM, distance=models.Distance.COSINE)

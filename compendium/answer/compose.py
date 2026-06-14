@@ -227,6 +227,7 @@ def ask(
     *,
     on_token: Callable[[str], None] | None = None,
     answerer: Answerer | None = None,
+    tags: list[str] | None = None,
 ) -> AskResult:
     """Compose an answer over the top-K pages for ``question``.
 
@@ -255,7 +256,7 @@ def ask(
     with connection() as conn:
         corpus_revision = repository.ensure_corpus_revision(conn)
         result = asyncio.run(
-            pipeline.run(retrieval_query, corpus_revision=corpus_revision)
+            pipeline.run(retrieval_query, corpus_revision=corpus_revision, tags=tags)
         )
         query_trace_id = pipeline.persist_query_trace(conn, result.trace)
         context = _build_context(

@@ -592,3 +592,15 @@ walk's ingest + reindex state). Destructive; run last or on a throwaway source.
 | v0.5-del.3 | Real delete | `compendium source delete <slug> --force` then `compendium query "<a phrase from it>"` | source gone; query no longer returns it; `index_status` page/chunk counts dropped |
 | v0.5-del.4 | Re-ingest is clean | re-ingest the same file; `compendium index sync` | ingests as a fresh source (no tombstone) |
 | v0.5-del.5 | Dangling surfaced | delete a source that solely grounded a concept; `compendium curate run` | the concept still exists and is surfaced as a thin-grounding / dangling signal |
+
+## v0.5 — Tagging (ADR-019)
+
+Prerequisites: stores up; at least one source ingested + indexed. Stubs fine.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-tag.1 | CLI round-trip | `compendium tag add <slug> trading`; `compendium tag ls`; `compendium tag rm <slug> trading` | tag appears with usage counts, reindex reported, then removed |
+| v0.5-tag.2 | Filtered query | tag a source `trading`; `compendium query "<q>" --tag trading --format json` | only trading-tagged pages returned (filter narrows the set) |
+| v0.5-tag.3 | Isolation (I2) | `compendium query "<q>"` (no `--tag`) | results identical to pre-tagging; no `tags_filter` in the trace |
+| v0.5-tag.4 | Index carries tags (1b/I3) | tag a source; the tag verb auto-reindexes; filtered query | the index-level filter returns the tagged source page (inherited tag) |
+| v0.5-tag.5 | Surfaces (1d) | `compendium query --help`; `compendium ask --help`; `compendium tag --help` | `--tag` on query/ask; `tag add/rm/ls` present |

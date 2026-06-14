@@ -14,6 +14,16 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ### Added (v0.5, merged to `main`, ships with the next cut)
 
+- **Tagging** (ADR-019, migration 0015): curator-assigned, retrieval-filter-grade
+  tags on sources and wiki pages, distinct from topics/aliases. `compendium tag
+  add/rm/ls`, and `--tag` (repeatable, OR) on `query` / `ask`. Tags live in
+  PostgreSQL (`tags` + `source_tags` / `page_tags`, cascading on delete),
+  propagate into the OpenSearch/Qdrant payloads as a filterable field with source
+  tags inheriting to the source's page + chunks, and the filter is enforced at the
+  index and recorded in the trace only when set (so unfiltered retrieval is
+  byte-identical). CLI today; TUI/WebUI controls ship with the UI phases. See
+  [docs/operations/tagging.md](docs/operations/tagging.md).
+
 - **Hard delete of a source** (ADR-018): `compendium source delete <id|slug>
   [--dry-run] [--force]` removes a source and everything derived from it —
   chunks, the source page + its vault file, `semantic_edges`, the
