@@ -106,6 +106,17 @@ def graph_walk(node_id: str, hops: int = 2) -> dict[str, Any]:
         return browse.walk(driver, node_id, hops)
 
 
+def graph_export(node_id: str | None = None, *, hops: int = 2, limit: int = 300):
+    """Bounded read-only node+edge export for the WebUI graph view (ADR-021)."""
+    from compendium.graph import browse
+    from compendium.graph.client import graph_connection, graph_reachable
+
+    with graph_connection() as driver:
+        if not graph_reachable(driver):
+            raise GraphUnreachable()
+        return browse.graph_export(driver, node_id=node_id, hops=hops, limit=limit)
+
+
 class GraphUnreachable(Exception):
     """Raised when the graph browser cannot reach Memgraph."""
 

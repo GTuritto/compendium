@@ -616,3 +616,15 @@ Prerequisites: stores up; at least one source ingested + indexed. Stubs fine.
 | v0.5-tag.3 | Isolation (I2) | `compendium query "<q>"` (no `--tag`) | results identical to pre-tagging; no `tags_filter` in the trace |
 | v0.5-tag.4 | Index carries tags (1b/I3) | tag a source; the tag verb auto-reindexes; filtered query | the index-level filter returns the tagged source page (inherited tag) |
 | v0.5-tag.5 | Surfaces (1d) | `compendium query --help`; `compendium ask --help`; `compendium tag --help` | `--tag` on query/ask; `tag add/rm/ls` present |
+
+## v0.5 — Graph view (ADR-021)
+
+Prerequisites: Memgraph up + populated (`graph rebuild`); WebUI via `compendium web`.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-gv.1 | Neighbourhood render | WebUI → Graph → search a focus node | the node + neighbours render (force-directed), bounded |
+| v0.5-gv.2 | Re-center | pick another focus node | the view re-renders around it |
+| v0.5-gv.3 | Filter | restrict node kinds / edge types | only matching nodes/edges render |
+| v0.5-gv.4 | Bounded full graph | choose "Full graph (sampled)" | capped at the node limit, not an unbounded dump |
+| v0.5-gv.5 | Read-only | use the view | no create/edit/delete affordance (ADR-020/021) |

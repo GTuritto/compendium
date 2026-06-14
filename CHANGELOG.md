@@ -14,6 +14,13 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ### Added (v0.5, merged to `main`, ships with the next cut)
 
+- **Graph view in the WebUI** (ADR-021): a read-only, force-directed view of the
+  knowledge graph — a bounded `graph_export` (page neighbourhood or sampled full
+  graph, node-capped, MATCH/RETURN only) rendered via
+  `st.graphviz_chart(engine="fdp")` (no new dependency), with node-kind and
+  edge-type filters and a focus search to re-center. Fits the WebUI safe-only
+  posture (no mutation). See [docs/operations/graph-view.md](docs/operations/graph-view.md).
+
 - **Admin/ops surface in the TUI + WebUI** (ADR-020): the admin verbs are
   reachable from the UIs, split by posture. The **TUI** gets the full set incl.
   destructive ops (dashboard `R` reindex / `g` graph rebuild / `i` process

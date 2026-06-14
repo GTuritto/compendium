@@ -848,6 +848,28 @@ PostgreSQL is the system of record: a `tags` table plus `source_tags` / `page_ta
 
 **Array columns on `sources`/`wiki_pages`** were rejected in favour of join tables: rename/merge and usage counts are clean with a `tags` table. **Reusing topics** was rejected: topics are synthesized and graph-bearing; tags are flat curator labels and must not create topics/aliases/edges. **Post-hoc filtering** (fetch then drop) was rejected for index-level filtering, which is correct and cheaper. **AND-by-default multi-tag** was rejected for OR-by-default, matching common tag UIs.
 
+### ADR-021: Read-only graph view in the WebUI (v0.5)
+
+**Status:** Accepted (v0.5). A visual, Obsidian-style force-directed view of the knowledge graph in the WebUI; read-only, so it fits the WebUI safe-only posture (ADR-020).
+
+#### Context
+
+The typed graph already exists in Memgraph and the TUI has a text graph browser, but there was no visual map of the relationships. The WebUI is the place for it, but it is no-auth and must stay read-only.
+
+#### Decision
+
+A `graph_export` reader (`graph/browse.py`) returns a **bounded** node+edge payload — a page neighbourhood (within N hops) or a sampled full graph, capped (hard max 2000 nodes) so the view never dumps an unbounded graph. It is **read-only** (MATCH/RETURN Cypher only). The WebUI "Graph" view renders it with `st.graphviz_chart(dot, engine="fdp")` — a force-directed layout that needs **no new dependency** (Streamlit renders the DOT string client-side) — built by a pure DOT builder (`compendium/web/graphviz.py`) with node-kind and edge-type filters. A focus search re-centers the neighbourhood. Both halves go through the `tui/data.py` provider seam, consistent with the other UIs.
+
+#### Consequences
+
+- A visual graph with zero added dependencies and no mutation affordance; the read-only invariant is enforced by a source check (no CREATE/MERGE/DELETE/SET).
+- Bounded by construction, so a large graph degrades to a sample rather than hanging the browser.
+- `st.graphviz_chart` emits no click events, so "open a node's page" is a focus/re-center selectbox rather than a direct click; an interactive component (streamlit-agraph) is the noted future upgrade if click-to-open and tag-coloured nodes are wanted.
+
+#### Alternatives considered
+
+**streamlit-agraph / pyvis** (interactive, click events) were deferred to avoid a JS-component dependency for v0.5; `graphviz_chart` with the `fdp` engine gives the force-directed look dependency-free. **An unbounded full-graph render** was rejected — it does not scale (Obsidian degrades the same way), hence the node cap and neighbourhood default. **Tag-coloured/tag-filtered nodes** were deferred: graph nodes do not carry tags (tags live in PostgreSQL/indexes), so a tag filter needs a PG join — a follow-up.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.

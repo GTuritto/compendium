@@ -65,6 +65,65 @@ def walk_semantic(driver: Driver, seed_ids: list[str], max_hops: int) -> list[di
     return rows
 
 
+def graph_export(
+    driver: Driver,
+    *,
+    node_id: str | None = None,
+    hops: int = 2,
+    limit: int = 300,
+) -> dict[str, Any]:
+    """A bounded, read-only node+edge export for the WebUI graph view (ADR-021).
+
+    ``node_id`` gives a page neighbourhood (within ``hops``); otherwise a bounded
+    full-graph sample. ``limit`` caps the node count (hard max 2000) so the view
+    never renders an unbounded dump. Only MATCH/RETURN Cypher — never mutates.
+    Returns ``{"nodes": [{"id","label","kind"}], "edges": [{"type","from_id","to_id"}]}``.
+    """
+    limit = max(1, min(int(limit), 2000))
+    if node_id:
+        h = max(1, min(int(hops), _MAX_HOPS))
+        node_rows = run_cypher(
+            driver,
+            f"MATCH (start {{id: $node_id}}) "
+            f"OPTIONAL MATCH (start)-[*1..{h}]-(m) "
+            "WITH [start] + collect(DISTINCT m) AS ns "
+            "UNWIND ns AS n WITH DISTINCT n WHERE n IS NOT NULL "
+            "RETURN n.id AS id, labels(n) AS labels, "
+            "coalesce(n.title, n.slug, n.id) AS label LIMIT $limit",
+            node_id=node_id,
+            limit=limit,
+        )
+    else:
+        node_rows = run_cypher(
+            driver,
+            "MATCH (n) RETURN n.id AS id, labels(n) AS labels, "
+            "coalesce(n.title, n.slug, n.id) AS label LIMIT $limit",
+            limit=limit,
+        )
+    nodes = [
+        {
+            "id": r["id"],
+            "label": r["label"],
+            "kind": next((x for x in r["labels"] if x in NODE_LABELS), "?"),
+        }
+        for r in node_rows
+    ]
+    ids = [n["id"] for n in nodes]
+    edges: list[dict[str, Any]] = []
+    if ids:
+        edge_rows = run_cypher(
+            driver,
+            "MATCH (a)-[r]->(b) WHERE a.id IN $ids AND b.id IN $ids "
+            "RETURN type(r) AS type, a.id AS from_id, b.id AS to_id",
+            ids=ids,
+        )
+        edges = [
+            {"type": r["type"], "from_id": r["from_id"], "to_id": r["to_id"]}
+            for r in edge_rows
+        ]
+    return {"nodes": nodes, "edges": edges}
+
+
 def walk(driver: Driver, node_id: str, hops: int = 2) -> dict[str, Any]:
     """Nodes and typed edges reachable within ``hops`` of ``node_id``.
 
