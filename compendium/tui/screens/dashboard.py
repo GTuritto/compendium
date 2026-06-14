@@ -17,7 +17,12 @@ from compendium.tui.screens.base import DataScreen
 class DashboardScreen(DataScreen):
     """Point-in-time operational state, refreshable with ``r``."""
 
-    BINDINGS = [("r", "refresh", "Refresh")]
+    BINDINGS = [
+        ("r", "refresh", "Refresh"),
+        ("R", "reindex", "Reindex"),
+        ("G", "graph_rebuild", "Rebuild graph"),
+        ("I", "process_inbox", "Process inbox"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -38,6 +43,38 @@ class DashboardScreen(DataScreen):
         self.load()
 
     def action_refresh(self) -> None:
+        self.load()
+
+    # --- admin ops (ADR-020): non-destructive, call the shared CLI seam ------
+
+    def action_reindex(self) -> None:
+        self._admin(
+            tui_data.reindex_all, "reindex",
+            lambda r: f"reindexed {r.indexed}, failed {r.failed}",
+        )
+
+    def action_graph_rebuild(self) -> None:
+        self._admin(tui_data.graph_rebuild, "graph rebuild", lambda r: "graph rebuilt")
+
+    def action_process_inbox(self) -> None:
+        self._admin(
+            tui_data.process_inbox, "inbox process",
+            lambda r: f"processed {getattr(r, 'processed', 0)}, "
+            f"failed {getattr(r, 'failed', 0)}",
+        )
+
+    @work(thread=True, exclusive=False)
+    def _admin(self, fn: Any, label: str, summary: Any) -> None:
+        self.run_threaded(
+            fn,
+            on_ok=lambda r: self._admin_done(label, summary(r)),
+            on_error=lambda exc: self.notify(
+                f"{label} failed: {exc}", severity="error"
+            ),
+        )
+
+    def _admin_done(self, label: str, message: str) -> None:
+        self.notify(f"{label}: {message}")
         self.load()
 
     @work(thread=True, exclusive=True)

@@ -147,3 +147,11 @@ def process_inbox() -> Any:
 
     inbox = Path(load_config().inbox_path).expanduser().resolve()
     return _process(inbox)
+
+
+def delete_source(ident: str) -> Any:
+    """Hard-delete a source and everything derived (ADR-018). DESTRUCTIVE — the
+    TUI/CLI only call this; the WebUI never does (ADR-020 P1)."""
+    from compendium.maintenance.delete import delete_source as _delete
+
+    return _delete(ident, dry_run=False)

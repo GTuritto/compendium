@@ -805,6 +805,28 @@ PostgreSQL already cascades a `sources` delete to its `chunks` and `source_docum
 
 **Soft delete (deprecate) only** was rejected for this need: the existing `deprecated` status keeps the content in the corpus and indexes, so it would still pollute retrieval and the A/B. **A tombstone** (keep a record it existed) was rejected for v0.5 simplicity; hard delete leaves no resurrectable identity. **Deleting derived stores inside the PostgreSQL transaction** was rejected: cross-store atomicity is impossible, so the canonical-first + reconcile-on-failure model is the honest one. **Cascade-deleting grounded concepts** was rejected: it would let a source delete silently destroy curated synthesis; surfacing them as signals keeps the curator in control.
 
+### ADR-020: Admin/ops surface in the TUI and WebUI, split by posture (v0.5)
+
+**Status:** Accepted (v0.5). Refines ADR-011 ("curator/ops verbs stay CLI-only") now that the WebUI (ADR-015) is, in practice, LAN-exposed and no-auth.
+
+#### Context
+
+The admin/ops verbs (reindex, graph rebuild, backup, source delete, inbox recovery, unit control) lived on the CLI. Driving them meant SSH + CLI. The UIs should expose them — but the WebUI is no-auth and reachable from the LAN, so it cannot host operations that lose data.
+
+#### Decision
+
+The admin surface is split by **posture**. The **TUI** (local, over SSH) gets the full set, including destructive operations (source delete behind a typed confirmation; restore; wipe) and unit management. The **WebUI** (no-auth, LAN) gets a dashboard (store/index counts + health) and **non-destructive ops only**: reindex, graph rebuild, backup export, and the inbox "process now" recovery action — all of which rebuild/recover from the canonical layer (ADR-001) and so cannot lose data. The WebUI never exposes source delete, wipe, restore, or unit install/uninstall, and neither do HTTP/MCP. Both UIs are **thin callers of one operations seam**: they invoke the same functions the CLI uses (`sync.reindex`, `graph.rebuild`, `inbox.process`, `maintenance.delete_source`) via the `tui/data.py` provider — no admin logic is duplicated in a UI. The inbox recovery pairs the manual "process now" action with a periodic safety-net sweep (a systemd timer firing the inbox processor) for the edge-triggered watcher's missed files.
+
+#### Consequences
+
+- Day-to-day ops move into the UIs without widening the no-auth attack surface: the worst a LAN client can do via the WebUI is trigger a rebuild-from-canonical, never destroy data.
+- One seam means a new operation is exposed once and reached by all three surfaces; the posture rule is enforced by a source-level test (no destructive symbol in the WebUI) plus the seam-routing test.
+- Curation **commit** actions (approve/reject) are reversible curator writes, not data loss, so they remain permitted in the WebUI (the existing ADR-014 flow).
+
+#### Alternatives considered
+
+**Full admin parity in the WebUI** was rejected: destructive ops on a no-auth LAN surface is the exact risk ADR-011 deferred. **Adding auth to the WebUI to allow parity** was rejected for v0.5 (the deferred auth bundle stays deferred); the posture split delivers the value without it. **Duplicating op logic per UI** was rejected for the one-seam rule, which keeps CLI/TUI/WebUI behaviour identical.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.

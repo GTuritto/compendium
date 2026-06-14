@@ -14,6 +14,17 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ### Added (v0.5, merged to `main`, ships with the next cut)
 
+- **Admin/ops surface in the TUI + WebUI** (ADR-020): the admin verbs are
+  reachable from the UIs, split by posture. The **TUI** gets the full set incl.
+  destructive ops (dashboard `R` reindex / `g` graph rebuild / `i` process
+  inbox; sources `d` delete behind a typed confirmation). The **WebUI** gets a
+  Dashboard view (counts/health) and **non-destructive** ops only (reindex,
+  graph rebuild, process-inbox) — no delete/wipe/restore/unit-install on the
+  no-auth surface. Both UIs are thin callers of one operations seam
+  (`tui/data.py` → the same CLI functions); a source-level test enforces the
+  posture. Pairs with the periodic inbox safety-net sweep. See
+  [docs/operations/admin-surface.md](docs/operations/admin-surface.md).
+
 - **Hard delete of a source** (ADR-018): `compendium source delete <id|slug>
   [--dry-run] [--force]` removes a source and everything derived from it —
   chunks, the source page + its vault file, `semantic_edges`, the

@@ -55,3 +55,35 @@ def test_provider_ops_route_to_the_cli_seam(monkeypatch):
     assert seen["graph"] is True
     # the inbox recovery op exists and is callable on the same seam
     assert callable(provider.process_inbox)
+
+
+def test_tui_admin_bindings_and_actions_exist():
+    """TC-ADM-U5/U6 (structural): the TUI exposes the full admin surface — safe
+    ops on the dashboard, destructive delete on the sources screen."""
+    from compendium.tui.screens.dashboard import DashboardScreen
+    from compendium.tui.screens.sources import SourcesScreen
+
+    dash_keys = {b[0] for b in DashboardScreen.BINDINGS}
+    assert {"R", "G", "I"} <= dash_keys  # capitals avoid the lowercase nav keys
+    for action in ("action_reindex", "action_graph_rebuild", "action_process_inbox"):
+        assert callable(getattr(DashboardScreen, action))
+
+    src_keys = {b[0] for b in SourcesScreen.BINDINGS}
+    assert "D" in src_keys  # capital D: lowercase d is the global dashboard nav
+    assert callable(getattr(SourcesScreen, "action_delete"))
+
+
+def test_provider_delete_routes_to_maintenance(monkeypatch):
+    """The TUI delete goes through the ADR-018 orchestration (not a copy)."""
+    from compendium.tui import data as provider
+
+    seen: dict[str, object] = {}
+
+    def fake_delete(ident, *, dry_run):
+        seen["ident"] = ident
+        seen["dry_run"] = dry_run
+        return "DELETED"
+
+    monkeypatch.setattr("compendium.maintenance.delete.delete_source", fake_delete)
+    assert provider.delete_source("abc-123") == "DELETED"
+    assert seen == {"ident": "abc-123", "dry_run": False}
