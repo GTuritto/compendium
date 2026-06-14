@@ -25,11 +25,27 @@ class CurateReport:
     skipped_generators: list[str] = field(default_factory=list)
     extracted_edges: dict[str, int] = field(default_factory=dict)
     contradictions: dict[str, int] = field(default_factory=dict)
+    autocurated: dict[str, int] = field(default_factory=dict)
 
 
 def _curation_cfg() -> tuple[int, float]:
     c = config_sections.curation()
     return c["thin_grounding_min"], c["low_coverage_threshold"]
+
+
+def _autocurate(conn: Any, signal_ids: list[str]) -> dict[str, int]:
+    """ADR-022: draft (semi-auto) / promote (auto) concepts from new signals."""
+    from compendium.config import load_config
+    from compendium.curate.autocurate import autocurate
+
+    c = config_sections.curation()
+    if c["mode"] == "manual" or not signal_ids:
+        return {}
+    rep = autocurate(
+        conn, signal_ids, mode=c["mode"], vault_path=load_config().vault_path,
+        max_drafts=c["autocurate_max"], confidence=c["auto_confidence"],
+    )
+    return {"drafted": rep.drafted, "promoted": rep.promoted, "skipped": rep.skipped}
 
 
 def run() -> CurateReport:
@@ -104,20 +120,27 @@ def run() -> CurateReport:
             run_id=str(run_id), skipped_generators=skipped,
             extracted_edges=extracted, contradictions=contradictions,
         )
+        inserted_ids: list[str] = []
         for kind, priority, payload in candidates:
             key = (kind, repository._signal_dedup_key(payload))
             if key in open_keys:
                 continue
-            repository.insert_curation_signal(
+            sid = repository.insert_curation_signal(
                 conn, kind=kind, priority=priority, payload=payload, run_id=run_id
             )
+            inserted_ids.append(str(sid))
             open_keys.add(key)
             report.inserted += 1
             report.by_kind[kind] = report.by_kind.get(kind, 0) + 1
 
+        # Curation autonomy (ADR-022): draft/promote concept pages per the mode.
+        # manual is a no-op; semi-auto (default) drafts; auto (opt-in) promotes.
+        report.autocurated = _autocurate(conn, inserted_ids)
+
         summary: dict[str, Any] = {
             "by_kind": report.by_kind, "skipped": skipped,
             "extracted_edges": extracted, "contradictions": contradictions,
+            "autocurated": report.autocurated,
         }
         repository.complete_analysis_run(
             conn, run_id, signal_count=report.inserted, summary=summary

@@ -65,9 +65,14 @@ def ask() -> dict[str, Any]:
 def curation() -> dict[str, Any]:
     """``curation``: slow-loop thresholds."""
     c = _section("curation")
+    mode = str(c.get("mode", "semi-auto"))
     return {
         "thin_grounding_min": int(c.get("thin_grounding_min", 2)),
         "low_coverage_threshold": float(c.get("low_coverage_threshold", 0.5)),
+        # ADR-022: curation autonomy. manual | semi-auto (default) | auto.
+        "mode": mode if mode in ("manual", "semi-auto", "auto") else "semi-auto",
+        "auto_confidence": float(c.get("auto_confidence", 0.8)),
+        "autocurate_max": int(c.get("autocurate_max", 10)),
     }
 
 
