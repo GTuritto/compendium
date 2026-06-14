@@ -11,7 +11,7 @@ log-file stem because those are data a caller declares, not logic.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 

@@ -4,11 +4,10 @@ All notable changes to Compendium are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The canonical version is the root [`VERSION`](VERSION) file; `compendium.__version__`
-reads it. **Versioning policy during the v0.3 build:** the package stays on the
-`0.2.x` line and bumps the patch by one on each completed v0.3 phase; the minor
-bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
-[docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md).
+The canonical version is the root [`VERSION`](VERSION) file;
+`compendium.__version__` reads it. Version-plan history lives in
+`docs/COMPENDIUM*_BUILD.md`; the active plan is
+[docs/COMPENDIUM_V0.4_BUILD.md](docs/COMPENDIUM_V0.4_BUILD.md).
 
 ## [Unreleased]
 

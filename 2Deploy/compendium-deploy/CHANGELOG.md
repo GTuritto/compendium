@@ -4,13 +4,24 @@ All notable changes to Compendium are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims at
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The canonical version is the root [`VERSION`](VERSION) file; `compendium.__version__`
-reads it. **Versioning policy during the v0.3 build:** the package stays on the
-`0.2.x` line and bumps the patch by one on each completed v0.3 phase; the minor
-bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
-[docs/COMPENDIUM_V0.3_BUILD.md](docs/COMPENDIUM_V0.3_BUILD.md).
+The canonical version is the root [`VERSION`](VERSION) file;
+`compendium.__version__` reads it. Version-plan history lives in
+`docs/COMPENDIUM*_BUILD.md`; the active plan is
+[docs/COMPENDIUM_V0.4_BUILD.md](docs/COMPENDIUM_V0.4_BUILD.md).
 
 ## [Unreleased]
+
+### Changed (merged to `main`, ships with the next cut)
+
+- **Automated tag + release on VERSION change** (`.github/workflows/ci.yml`):
+  the `distribution` job now owns the tag. On a push to `main` whose `VERSION`
+  has no matching `v*` tag, it creates and pushes `v<VERSION>` and publishes
+  the GitHub Release in the same smoke-gated run; a hand-pushed `v*` tag still
+  releases as before. `release.sh` keeps owning the version *number* (bumped
+  in a phase's completion commit); CI owns turning that bump into a tagged
+  release. Fixes the decoupling where a bumped `VERSION` never became a tagged
+  release unless someone tagged by hand. No version churn: merges that do not
+  touch `VERSION` (docs, phase-prep) produce no tag and no release.
 
 ### Added (merged to `main`, ships with the next cut)
 
@@ -52,7 +63,32 @@ ships under the `0.2.x` line:
 
 ## [0.3.2] - 2026-06-13
 
-- _Describe the changes in this release._
+v0.4 Phase 1 — the single-point A/B (**ADR-016**), per
+[docs/COMPENDIUM_V0.4_BUILD.md](docs/COMPENDIUM_V0.4_BUILD.md) § 5. The first
+instrument that can give the core wiki-over-chunks bet a verdict.
+
+### Added
+
+- **Chunk-only retrieval control arm (ADR-016)**: `pipeline.run`/`query` gain
+  an `arm` parameter — `"pages"` is the byte-identical supported path,
+  `"chunks"` is the validation control (the existing chunk fan-out + RRF
+  fusion, unconditional, no page ranking, no coverage gate, arm stamped into
+  the trace). Reachable only via `compendium validate`; `query`/facade stay
+  page-first. `search.qdrant_*` gain `exact` for repeatable measurement.
+- **`compendium validate harvest`**: lists distinct real questions from
+  `ask_traces` into a candidate probe set under `~/.compendium/probes/` —
+  outside the repo and the bundle.
+- **`compendium validate run --probes <file>`**: runs a frozen probe set
+  through both arms (exact search), scores page-space hit@k/recall@k/MRR (a
+  chunk credits its parent source page), and reports the per-query delta +
+  aggregate under a pre-registered methodology header.
+- `docs/operations/validation.md`; the v0.4 Phase 1 smoke section; 17 tests
+  (`tests/test_validate.py`, acceptance suite TC-AB-001..008).
+
+### Pre-registered (ADR-016)
+
+- Scoring unit is the page; normalization applies to both arms (both
+  conservative toward the control); exact search for measurement runs only.
 
 ## [0.3.1] - 2026-06-12
 

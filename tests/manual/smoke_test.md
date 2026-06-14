@@ -201,7 +201,7 @@ Prerequisites: the full stack up. The golden suite is hermetic (stub embedder) �
 Opt-in walk that exercises the real model seams (`OpenAIEmbedder` →
 `https://openrouter.ai/api/v1`, `LLMSynthesizer` → same endpoint) on the
 primary host. Default `.env` and stub flags unset; see
-[../docs/operations/real-models.md](../docs/operations/real-models.md) for
+[../../docs/operations/real-models.md](../../docs/operations/real-models.md) for
 the per-host strategy and cost note. Captured runs land under
 [test-runs/](test-runs/) (`v0.2-phase-1-real-models.md`).
 
@@ -221,7 +221,7 @@ populated per `docs/operations/real-models.md`; `docker compose up -d`.
 Opt-in walk that exercises the new `compendium backup` and
 `compendium restore` CLI verbs and the per-OS scheduled unit. The
 operational reference is
-[../docs/operations/backup-restore.md](../docs/operations/backup-restore.md).
+[../../docs/operations/backup-restore.md](../../docs/operations/backup-restore.md).
 
 Prerequisites: `pg_dump` / `pg_restore` / `tar` on PATH (macOS:
 `brew install libpq && brew link --force libpq`); a populated
@@ -242,7 +242,7 @@ populated.
 Opt-in walk that exercises the new `compendium schedule
 install/uninstall/status` verbs and confirms a kicked fire produces
 a `graph_analysis_runs` row. The operational reference is
-[../docs/operations/schedule.md](../docs/operations/schedule.md).
+[../../docs/operations/schedule.md](../../docs/operations/schedule.md).
 
 Prerequisites: the v0.1 Phase 2 + Phase 4 corpus seeded (so curate
 has something to look at); `.env` populated; stores up.
@@ -260,7 +260,7 @@ has something to look at); `.env` populated; stores up.
 
 Opt-in walk that exercises `compendium inbox install` / `process` /
 `status` / `uninstall`. The operational reference is
-[../docs/operations/inbox.md](../docs/operations/inbox.md).
+[../../docs/operations/inbox.md](../../docs/operations/inbox.md).
 
 Prerequisites: stores up; `.env` populated. The walk uses a
 tmp inbox at `/tmp/cdb-inbox-smoke` so it does not collide with the
@@ -283,7 +283,7 @@ Opt-in walk that exercises `tests/golden/baseline.json`, the
 `--golden-baseline` regeneration flag, the rule-based query
 normalizer, and the OpenSearch synonym filter + Qdrant HNSW
 parameters. The operational reference is
-[../docs/operations/retrieval-tuning.md](../docs/operations/retrieval-tuning.md).
+[../../docs/operations/retrieval-tuning.md](../../docs/operations/retrieval-tuning.md).
 
 Prerequisites: stores up; `.env` populated; the golden corpus
 fixture (the test seeds it under `compendium_golden` on first
@@ -303,7 +303,7 @@ invocation).
 Opt-in walk that exercises `compendium ask`: a covered question (answer with
 citations), an uncovered question (refusal with suggested actions), and the
 `ask_traces` row joined to `query_traces`. The operational reference is
-[../docs/operations/ask.md](../docs/operations/ask.md).
+[../../docs/operations/ask.md](../../docs/operations/ask.md).
 
 Prerequisites: stores up; `.env` populated; a populated wiki (run the earlier
 phases' seeding or ingest a source + synth a concept first). The LLM uses the
@@ -323,7 +323,7 @@ traces are real).
 
 Opt-in walk that exercises `compendium serve` (HTTP on `127.0.0.1`) and
 `compendium mcp` (stdio). The operational reference is
-[../docs/operations/access-surface.md](../docs/operations/access-surface.md).
+[../../docs/operations/access-surface.md](../../docs/operations/access-surface.md).
 
 Prerequisites: stores up; `.env` populated; a populated wiki (run the earlier
 phases' seeding or ingest a source first). The LLM uses the `SYNTHESIS_*`
@@ -349,7 +349,7 @@ Opt-in walk that exercises the `from_extracted_edges` generator inside
 `compendium curate run`: it pulls Qdrant neighbours per changed page, labels
 pairs with the LLM, and writes `RELATED_TO`/`PREREQUISITE_FOR` edges into
 Memgraph with provenance. The operational reference is
-[../docs/operations/edge-extraction.md](../docs/operations/edge-extraction.md).
+[../../docs/operations/edge-extraction.md](../../docs/operations/edge-extraction.md).
 
 Prerequisites: stores up; `.env` populated; a seeded corpus with at least two
 concept/source pages and the indexes + graph built (`reindex all` +

@@ -11,7 +11,6 @@ reminder; this module emits the structlog event and returns normally.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 

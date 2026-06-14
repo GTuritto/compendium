@@ -62,7 +62,7 @@ def test_macos_plist_carries_label_and_watch_paths(tmp_path) -> None:
     # ProgramArguments invokes inbox process with the path.
     assert "inbox" in xml
     assert "process" in xml
-    assert f"<string>{tmp_path}/inbox</string>" in xml or f"--path</string>" in xml
+    assert f"<string>{tmp_path}/inbox</string>" in xml or "--path</string>" in xml
 
 
 def test_macos_plist_does_not_run_at_load(tmp_path) -> None:

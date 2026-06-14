@@ -7,7 +7,7 @@ the inbox watcher, and the access surface. This page is the runbook; the
 one-shot deployer and the lifecycle script live in [`deploy/`](../../deploy/).
 
 Posture: localhost / single-user / **no auth** (ADR-011). The access surface
-binds `127.0.0.1`; network exposure + auth are v0.3.
+binds `127.0.0.1`; network exposure + auth remain deferred.
 
 ## One-shot install
 

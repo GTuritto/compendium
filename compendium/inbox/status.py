@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from compendium.inbox.install import INBOX_KINDS, watcher_loaded
+from compendium.inbox import install
 
 
 @dataclass
@@ -85,12 +85,12 @@ def read_status(path: Path) -> InboxStatus:
     yesterday = _yesterday_str()
 
     waiting: dict[str, int] = {}
-    for kind in INBOX_KINDS:
+    for kind in install.INBOX_KINDS:
         waiting[kind] = _count_eligible(path / kind)
 
     return InboxStatus(
         path=path,
-        watcher_loaded=watcher_loaded(),
+        watcher_loaded=install.watcher_loaded(),
         waiting=waiting,
         processed_today=_count_eligible(path / "processed" / today),
         processed_yesterday=_count_eligible(path / "processed" / yesterday),

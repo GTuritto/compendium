@@ -13,8 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import UUID
-
 from compendium.db import repository
 from compendium.db.connection import connection
 from compendium.wiki.page import parse_markdown

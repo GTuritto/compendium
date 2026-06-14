@@ -56,7 +56,7 @@ def test_each_role_returns_its_real_client_by_default(env):
 
 
 def test_per_role_flag_forces_only_its_role(env):
-    from compendium.index.embedder import StubEmbedder, OpenAIEmbedder
+    from compendium.index.embedder import StubEmbedder
     from compendium.wiki.synth import LLMSynthesizer
 
     env.setenv("COMPENDIUM_EMBED_STUB", "1")

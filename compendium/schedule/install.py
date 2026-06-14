@@ -5,8 +5,8 @@ LaunchAgent with ``StartInterval``; Linux gets a systemd user ``.timer``
 (``OnUnitActiveSec`` + ``Persistent``) plus a oneshot ``.service``. The seam owns
 the rendering, the launchctl / systemctl lifecycle, and platform dispatch.
 
-The render and path helpers below are kept as thin shims because
-``compendium/schedule/status.py`` and the existing tests reference them.
+The render helpers below are kept as thin shims because the existing tests
+reference them.
 """
 
 from __future__ import annotations
@@ -49,15 +49,11 @@ def _descriptor(interval_seconds: int) -> UnitDescriptor:
     )
 
 
-# --- render / path shims (consumed by status.py and tests) ----------------
+# --- render shims (consumed by tests) -------------------------------------
 
 
 def _macos_plist_xml(interval_seconds: int) -> str:
     return launchd.render(_descriptor(interval_seconds))
-
-
-def _macos_plist_path() -> Path:
-    return launchd.plist_path(LABEL)
 
 
 def _linux_service_unit() -> str:
@@ -66,14 +62,6 @@ def _linux_service_unit() -> str:
 
 def _linux_timer_unit(interval_seconds: int) -> str:
     return systemd.render_trigger(_descriptor(interval_seconds))
-
-
-def _linux_service_path() -> Path:
-    return systemd.service_path(_descriptor(0))
-
-
-def _linux_timer_path() -> Path:
-    return systemd.trigger_unit_path(_descriptor(0))
 
 
 # --- public surface --------------------------------------------------------

@@ -4,7 +4,12 @@
 
 # Compendium v0.4 — Validation Build Plan (draft)
 
-Status: proposed, 2026-06-12. Successor to v0.3 (`v0.3.0`, commit `fcf7778`). This is the first plan whose deliverable is not a feature. v0.4 ships measurement and real use. It exists to answer one question the prior three plans built the machinery for but never asked: does the core bet hold against a real corpus.
+Status: active, 2026-06-13. Phase 0 and Phase 1 are complete; Track A is
+accumulating real-corpus queries. Successor to v0.3 (`v0.3.0`, commit
+`fcf7778`). This is the first plan whose deliverable is not a feature. v0.4
+ships measurement and real use. It exists to answer one question the prior
+three plans built the machinery for but never asked: does the core bet hold
+against a real corpus.
 
 ## 1. The bet, restated as something that can fail
 

@@ -12,8 +12,8 @@ inline in [Compendium.md](Compendium.md), the build contracts in
 resolved choices in its `openspec/changes/<phase>/design.md`. This document
 pulls them together so the "why" is in one place.
 
-Scope as of this writing: **v0.1 complete (Phases 0–10); v0.2 complete (Phases
-1–8); deployment tooling shipped.**
+Scope as of 2026-06-13: **v0.1-v0.3 complete; v0.4 Phase 0 and Phase 1
+complete; Track A active; ADR-001 through ADR-016 accepted.**
 
 ---
 
@@ -28,7 +28,7 @@ or deferred.
 
 ---
 
-## 2. Architecture Decision Records (ADR-001 … ADR-015)
+## 2. Architecture Decision Records (ADR-001 … ADR-016)
 
 Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 
@@ -47,6 +47,9 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 | 011 | **Callable access surface: MCP (stdio) + HTTP (`127.0.0.1`), no auth, six verbs.** | Colocated agents need to call in without CLI spawn; localhost-only means there is no exposure to authenticate against yet. (v0.2 Phase 7) |
 | 012 | **Always-on personal service** via launchd/systemd on the curator's hardware. | v0.2 needs Compendium to stay up (daemon, watcher, access surface); a personal-host service reverses "no daemon" only for that case. (v0.2 Phase 3) |
 | 013 | **Semantic edges are persisted in PostgreSQL (`semantic_edges`) and replayed on `graph rebuild`**, written through one dual-write coordinator. | Closes a data-loss defect: semantic edges lived only in Memgraph, so a rebuild wiped them. Reconciles ADR-004/005 — the graph becomes fully derived. (post-v0.2 fix, PR #52) |
+| 014 | **The LLM proposes contradiction candidates; only the curator writes `CONTRADICTS`.** | Keeps the strongest semantic claim human-gated while allowing the slow loop to surface likely conflicts. (v0.3 Phase 1) |
+| 015 | **A loopback-only Streamlit web UI over existing interfaces.** | Adds a browser workflow without adding a data path, auth surface, or network exposure. (v0.3 Phase 2) |
+| 016 | **A chunk-only retrieval control arm, reachable only through validation.** | Measures the core page-first thesis against identical corpus snapshots without turning the control into a supported product surface. (v0.4 Phase 1) |
 
 ---
 
@@ -178,7 +181,8 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
   docker + migrations + units; shell is the right altitude, and it stays out of
   the application's stack-discipline surface.
 - **Posture stays localhost / single-user / no-auth.** The serve unit binds
-  `127.0.0.1`; MCP is per-session stdio. Network exposure + auth are v0.3.
+  `127.0.0.1`; MCP is per-session stdio. Network exposure + auth remain
+  deferred.
 - **`compendium start|stop|restart` are thin CLI adapters over `compendiumctl`**
   (post-v0.2, PR #63). *Why:* the operator should be able to drive the stack from
   the one CLI, but the lifecycle logic keeps a single home in the script — the
@@ -278,11 +282,11 @@ exposure) and ADR-014/ADR-015 are reserved by the v0.3 plan.
   and stack discipline for a single-user workload whose data is already
   SQL-queryable; a profiler in a container cannot ptrace the host process the
   units actually run. If visualization ever earns its place, the cheap path is
-  one Grafana container reading PostgreSQL directly — a v0.3+ argument.
+  one Grafana container reading PostgreSQL directly — a future argument.
 
 ---
 
-## 7. Deliberate deferrals to v0.3+ (and why)
+## 7. Deliberate deferrals (and why)
 
 | Deferred | Why deferred |
 | --- | --- |
@@ -293,7 +297,6 @@ exposure) and ADR-014/ADR-015 are reserved by the v0.3 plan.
 | **gRPC.** | No cross-machine / typed-polyglot earning case for a single personal host; HTTP/JSON + MCP suffice. |
 | **pgvector.** | Adopt only if trace-similarity analysis earns it; Qdrant owns vector search today. |
 | **A web UI.** | **Shipped in v0.3 Phase 2 as ADR-015** — Streamlit, loopback-only, over the existing facade + provider. LAN exposure stays deferred with auth/TLS. |
-| **Full C4 diagram refresh for v0.2 surfaces.** | The prose/operational docs cover ask, the access surface, the daemon, and extracted edges; the diagram redraw is a tracked follow-up. |
 
 ---
 

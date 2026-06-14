@@ -7,7 +7,7 @@ ADR-011. The agents are external systems to Compendium; they reach it through th
 
 The honest constraint: **callers are colocated**. The surface binds loopback
 (`127.0.0.1`) or runs over stdio; there is no network to authenticate against, so
-there is no auth. Network exposure, token auth, and TLS are deferred to v0.3+.
+there is no auth. Network exposure, token auth, and TLS remain deferred.
 See [../operations/access-surface.md](../operations/access-surface.md).
 
 ## 1. Who calls Compendium (agent context)

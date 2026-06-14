@@ -312,7 +312,7 @@ def test_curate_run_preserves_curator_edge(extract_corpus):
 @pytest.mark.integration
 def test_extracted_edges_are_walkable_by_expansion(extract_corpus):
     from compendium.curate.run import run as curate_run
-    from compendium.graph import browse, schema
+    from compendium.graph import browse
     from compendium.graph.client import graph_connection
 
     curate_run()

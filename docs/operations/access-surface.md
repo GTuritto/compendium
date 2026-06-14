@@ -9,7 +9,7 @@ without spawning a CLI per call or parsing vault files.
 
 The constraint that keeps the scope honest: **the callers are colocated**. There
 is no network to authenticate against, so there is no auth. Network exposure
-(MCP-SSE, HTTP over LAN/Tailscale), token auth, and TLS are deferred to v0.3+.
+(MCP-SSE, HTTP over LAN/Tailscale), token auth, and TLS remain deferred.
 
 ## The six verbs
 
@@ -64,8 +64,8 @@ curl -s -XPOST 127.0.0.1:8787/ingest -H 'content-type: application/json' \
   -d "{\"kind\":\"note\",\"filename\":\"n.md\",\"content_base64\":\"$(base64 < note.md)\"}"
 ```
 
-`--host` can bind a non-loopback interface, but doing so is **unsafe until
-v0.3** (no auth, no TLS). Keep it on `127.0.0.1`.
+`--host` can bind a non-loopback interface, but doing so is **unsafe**
+(no auth, no TLS). Keep it on `127.0.0.1`.
 
 ## MCP — `compendium mcp`
 
@@ -101,11 +101,11 @@ the CLI. Streaming: chunked HTTP (`POST /ask/stream`) and MCP log notifications.
 A refusal returns the structured refusal (`refused=true`, `gap`,
 `suggested_actions`) with no streamed answer.
 
-## Posture and the v0.3 path
+## Posture and the deferred exposure path
 
 - **HTTP binds `127.0.0.1`; MCP is stdio.** Colocated callers only.
 - **No auth, no TLS.** There is no network exposure to authenticate against.
-- **Deferred to v0.3+:** MCP-SSE, HTTP over LAN / Tailscale, token / Tailscale-identity
+- **Deferred:** MCP-SSE, HTTP over LAN / Tailscale, token / Tailscale-identity
   auth, TLS. gRPC is deferred indefinitely (no cross-machine / typed-polyglot case).
-- **Not on the surface:** curator/ops verbs, and a `compendium serve` always-on
-  service unit + in-process scheduling (a later ADR-012 refactor).
+- **Not on the surface:** curator/ops verbs. In-process scheduling absorption
+  remains a deferred ADR-012 refactor; the `compendium serve` unit has shipped.

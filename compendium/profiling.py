@@ -223,13 +223,13 @@ def install_memory_signal_handlers() -> bool:
     """
     import signal
 
-    def _arm(signum: int, frame: object) -> None:
+    def _arm(_signum: int, _frame: object) -> None:
         try:
             mem_arm()
         except Exception as exc:
             log.warning("mem_arm_failed", error=repr(exc))
 
-    def _report(signum: int, frame: object) -> None:
+    def _report(_signum: int, _frame: object) -> None:
         try:
             mem_report()
         except Exception as exc:

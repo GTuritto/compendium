@@ -80,7 +80,6 @@ def graph_corpus(monkeypatch, tmp_path):
     """A migrated DB seeded with a fixture source and a synthesized concept,
     plus a clean Memgraph rebuilt from it. Skips if a store is unreachable."""
     from compendium.graph.client import graph_driver, graph_reachable
-    from compendium.graph import schema
 
     base = load_config().postgres_url
     admin_url = _swap_db(base, "postgres")

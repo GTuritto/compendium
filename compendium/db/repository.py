@@ -903,17 +903,6 @@ def get_revision(conn: psycopg.Connection, revision_id: str | UUID) -> dict[str,
     ).fetchone()
 
 
-def update_page_status(
-    conn: psycopg.Connection, page_id: str | UUID, status: str
-) -> None:
-    """Set a page's lifecycle status."""
-    conn.execute(
-        "UPDATE wiki_pages SET status = %s::page_status, updated_at = now() "
-        "WHERE id = %s",
-        (status, str(page_id)),
-    )
-
-
 def record_promotion(
     conn: psycopg.Connection,
     *,
@@ -1138,16 +1127,6 @@ def set_signal_status(
             "id": str(signal_id),
         },
     )
-
-
-def signal_for_revision(
-    conn: psycopg.Connection, revision_id: str | UUID
-) -> dict[str, Any] | None:
-    """The signal addressed by a given revision, if any (for the promote hook)."""
-    return conn.execute(
-        "SELECT * FROM graph_curation_signals WHERE addressed_revision_id = %s",
-        (str(revision_id),),
-    ).fetchone()
 
 
 def attach_synth_page(

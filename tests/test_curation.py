@@ -158,7 +158,6 @@ def test_curate_run_memgraph_down_still_yields_postgres_signals(curation_env, mo
 
 def test_expansion_logs_graph_expansion(curation_env):
     from compendium.db.connection import connection
-    from compendium.db import repository
     from compendium.graph.links import link
     from compendium.retrieve.pipeline import run
 

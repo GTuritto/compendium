@@ -4,7 +4,7 @@
 
 # Compendium — Architecture (C4)
 
-C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
+C4-model architecture + UML documentation for Compendium, in Mermaid.
 
 | Level | Diagram | Audience |
 |---|---|---|
@@ -21,9 +21,9 @@ C4-model architecture + UML documentation for Compendium v0.2, in Mermaid.
 | UML | [Data model](uml-data-model.md) — persisted entities + result/contract types | Developers |
 | — | [Agents](agents.md) — colocated agents using Compendium as memory (ADR-011) | Developers / Integrators |
 
-These diagrams describe the **as-built v0.2 architecture** plus the post-v0.2 architecture
-fixes: all v0.1 phases (0–10), all v0.2 phases (1–8), the deployment tooling, and the
-post-v0.2 deepening seams (PRs #48–#55, incl. ADR-013) are implemented and merged to `main`.
+These diagrams describe the **as-built architecture** through v0.4 Phase 1:
+all v0.1-v0.3 phases, the deployment tooling, the post-v0.2 deepening seams,
+and the ADR-016 validation control arm are implemented and merged to `main`.
 They are derived from the code under `compendium/`, not the design intent in
 [../Compendium.md](../Compendium.md) — where the two differ, the code wins. Build history is in
 [../COMPENDIUM_BUILD.md](../COMPENDIUM_BUILD.md) and [../COMPENDIUM_V0.2_BUILD.md](../COMPENDIUM_V0.2_BUILD.md).
@@ -60,8 +60,8 @@ facade + the TUI provider — it adds no component-level data path of its own. T
   PR #63–#68 surface assessed clean. Visuals:
   [architecture-review-2026-06-11.html](architecture-review-2026-06-11.html) /
   [-2.html](architecture-review-2026-06-11-2.html). Roadmap:
-  [../../Plans/arch-review-4-plan.md](../../Plans/arch-review-4-plan.md) — **planned,
-  not started**.
+  [../../Plans/arch-review-4-plan.md](../../Plans/arch-review-4-plan.md) — all
+  four candidates implemented and merged.
 
 ## Architecture seams (from the review-#2 refactors)
 

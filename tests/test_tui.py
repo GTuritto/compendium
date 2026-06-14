@@ -147,7 +147,7 @@ def test_app_boots_and_screens_reachable(tui_env):
 
 
 def test_keyboard_session(tui_env):
-    from textual.widgets import DataTable, Input, Static
+    from textual.widgets import DataTable, Input
 
     from compendium.tui.app import CompendiumTUI
     from compendium.tui.screens.graph import GraphScreen
