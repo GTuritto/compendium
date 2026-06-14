@@ -206,6 +206,69 @@ def _tag(action: str, slug: str | None, name: str | None, fmt: str) -> int:
     return 0
 
 
+def _guess_content_type(path: str) -> str:
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return {
+        "md": "text/markdown", "markdown": "text/markdown", "txt": "text/plain",
+        "json": "application/json", "html": "text/html",
+    }.get(ext, "application/octet-stream")
+
+
+def _object(args: Any, fmt: str) -> int:
+    import json as _json
+    from pathlib import Path
+
+    from compendium import objects
+    from compendium.api import facade
+
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    action = args.object_action
+    coll = getattr(args, "collection", "default")
+    if action == "put":
+        body = sys.stdin.buffer.read() if args.file == "-" else Path(args.file).read_bytes()
+        ctype = args.content_type or _guess_content_type(args.file)
+        row = objects.put(args.key, body, collection=coll, content_type=ctype)
+        print(f"object put: {coll}/{args.key} ({row['size']} bytes, {row['content_type']})")
+        return 0
+    if action == "get":
+        row = objects.get(args.key, collection=coll)
+        if row is None:
+            print(f"object get: not found {coll}/{args.key}", file=sys.stderr)
+            return 1
+        if args.out:
+            Path(args.out).write_bytes(row["body"])
+            print(f"wrote {len(row['body'])} bytes to {args.out}")
+        else:
+            sys.stdout.buffer.write(row["body"])
+        return 0
+    if action == "list":
+        rows = facade.object_list(collection=coll, prefix=args.prefix)
+        if fmt == "json":
+            print(_json.dumps(rows))
+        elif not rows:
+            print("(no objects)")
+        else:
+            for r in rows:
+                print(f"{r['collection']}/{r['key']}  {r['size']}b  {r['content_type']}")
+        return 0
+    if action == "rm":
+        ok = objects.delete(args.key, collection=coll)
+        print(f"object rm: {'deleted' if ok else 'not found'} {coll}/{args.key}")
+        return 0 if ok else 1
+    if action == "promote":
+        result = objects.promote(args.key, collection=coll, kind=args.kind)
+        print(
+            f"object promote: {coll}/{args.key} -> source "
+            f"'{result['slug']}' ({result['status']})"
+        )
+        return 0
+    return 2
+
+
 def _source_delete(ident: str, dry_run: bool, force: bool, fmt: str) -> int:
     import json as _json
 
@@ -999,6 +1062,31 @@ def main(argv: list[str] | None = None) -> int:
     tag_rm.add_argument("name")
     tag_sub.add_parser("ls", help="list tags with usage counts", parents=[fmt])
 
+    obj_parser = subparsers.add_parser("object", help="agent object store (ADR-017)")
+    obj_sub = obj_parser.add_subparsers(dest="object_action", required=True)
+    obj_common = lambda p: p.add_argument(  # noqa: E731
+        "--collection", default="default", help="namespace (default: default)"
+    )
+    obj_put = obj_sub.add_parser("put", help="store an object from a file")
+    obj_put.add_argument("key")
+    obj_put.add_argument("file", help="path to the body (use - for stdin)")
+    obj_put.add_argument("--content-type", default=None)
+    obj_common(obj_put)
+    obj_get = obj_sub.add_parser("get", help="read an object verbatim")
+    obj_get.add_argument("key")
+    obj_get.add_argument("--out", default=None, help="write body to a file (default: stdout)")
+    obj_common(obj_get)
+    obj_ls = obj_sub.add_parser("list", help="list objects (metadata)", parents=[fmt])
+    obj_ls.add_argument("--prefix", default=None)
+    obj_common(obj_ls)
+    obj_rm = obj_sub.add_parser("rm", help="delete an object")
+    obj_rm.add_argument("key")
+    obj_common(obj_rm)
+    obj_pr = obj_sub.add_parser("promote", help="promote an object into a source page")
+    obj_pr.add_argument("key")
+    obj_pr.add_argument("--kind", default="note")
+    obj_common(obj_pr)
+
     serve_parser = subparsers.add_parser(
         "serve",
         help="run the HTTP access surface on 127.0.0.1 (v0.2 Phase 7, ADR-011)",
@@ -1287,6 +1375,8 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
             args.tag_action, getattr(args, "slug", None),
             getattr(args, "name", None), fmt_arg,
         )
+    if args.command == "object":
+        return _object(args, fmt_arg)
     if args.command == "serve":
         return _serve(getattr(args, "serve_action", None), args.host, args.port, fmt_arg)
     if args.command == "mcp":

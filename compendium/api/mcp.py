@@ -107,6 +107,47 @@ def build_server() -> Any:
     async def index_status() -> str:
         return await anyio.to_thread.run_sync(lambda: _json(facade.index_status()))
 
+    @server.tool(description="Store an agent object verbatim (content_text or content_base64).")
+    async def object_put(
+        key: str,
+        content_text: str | None = None,
+        content_base64: str | None = None,
+        collection: str = "default",
+        content_type: str | None = None,
+    ) -> str:
+        return await anyio.to_thread.run_sync(
+            lambda: _json(facade.object_put(
+                key, collection=collection, content_text=content_text,
+                content_base64=content_base64, content_type=content_type,
+            ))
+        )
+
+    @server.tool(description="Read an agent object verbatim (body_text/body_base64).")
+    async def object_get(key: str, collection: str = "default") -> str:
+        return await anyio.to_thread.run_sync(
+            lambda: _json(facade.object_get(key, collection=collection))
+        )
+
+    @server.tool(description="List agent objects (metadata only).")
+    async def object_list(collection: str | None = None, prefix: str | None = None) -> str:
+        return await anyio.to_thread.run_sync(
+            lambda: _json(facade.object_list(collection=collection, prefix=prefix))
+        )
+
+    @server.tool(description="Delete an agent object.")
+    async def object_delete(key: str, collection: str = "default") -> str:
+        return await anyio.to_thread.run_sync(
+            lambda: _json(facade.object_delete(key, collection=collection))
+        )
+
+    @server.tool(description="Promote an agent object into a queryable source page.")
+    async def object_promote(
+        key: str, collection: str = "default", kind: str = "note"
+    ) -> str:
+        return await anyio.to_thread.run_sync(
+            lambda: _json(facade.object_promote(key, collection=collection, kind=kind))
+        )
+
     return server
 
 
