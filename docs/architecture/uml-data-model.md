@@ -131,6 +131,25 @@ per directed edge, replayed into Memgraph on `graph rebuild`. The derived stores
 rows + the vault (Memgraph's structural edges from the projection, its semantic
 edges from `semantic_edges`).
 
+### v0.5 tables
+
+- **`tags` / `source_tags` / `page_tags`** (migration 0015, ADR-019). `tags`
+  (`id`, unique `name`) plus two join tables linking a tag to a `sources` row or
+  a `wiki_pages` row; both joins `ON DELETE CASCADE` from their parent (so a hard
+  delete drops tag links). Curator-assigned, retrieval-filter-grade; the tag set
+  is projected into the OpenSearch/Qdrant payloads (a source's tags inherit to
+  its source page + chunks) so the `--tag` filter is enforced at the index.
+- **`agent_objects`** (migration 0016, ADR-017). Verbatim agent key-value store:
+  `id`, `collection` (default `'default'`), `key`, `content_type`, `body` BYTEA,
+  `metadata` JSONB, timestamps; unique `(collection, key)`, upsert = last-write-
+  wins. **Not a derived-index source**: never synced into OpenSearch/Qdrant/
+  Memgraph. `object_promote` runs a body through ingest to become an ordinary
+  `source` (then a source page); the object is otherwise invisible to retrieval.
+
+The page/chunk index documents gain a `tags` keyword field (ADR-019). The
+curation autonomy knob (ADR-022) adds no table — `curation.mode` is config, and
+drafts are ordinary `wiki_pages` rows (`generator=synth` / `status=draft`).
+
 ## Result / contract types (the verb return shapes)
 
 These dataclasses are what `query` / `ask` / `ingest` / `index_status` return,

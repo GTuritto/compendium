@@ -158,3 +158,30 @@ Intel, MacBook Pro Intel, Raspberry Pi 5 also supported) under launchd or system
 run colocated on the same host; the curator reaches the host via SSH. The store containers
 stay on a Docker network only the Compendium app can reach. No cloud, no public exposure, no
 multi-user. See ADR-012.
+
+## v0.5 terms
+
+**Tag.** A lightweight, curator-assigned label on a source or wiki page ("trading",
+"to-reread"), orthogonal to **topics** (synthesized, graph-bearing) and aliases. Tags are
+system-of-record in PostgreSQL (`tags` + `source_tags` / `page_tags`), propagate into the
+OpenSearch/Qdrant payloads as a filterable field (source tags inherit to the source's page +
+chunks), and scope retrieval (`--tag`). _Avoid_: calling a tag a "topic" or "category". See ADR-019.
+
+**Hard delete.** Removal of a source and everything derived from it (chunks, source page +
+vault file, semantic edges, index entries, graph nodes) — the first operation that removes
+canonical knowledge. Canonical-first and self-reconciling; CLI/TUI only. _Avoid_: "archive"
+(that is the reversible `deprecated` status). See ADR-018.
+
+**Agent object.** A verbatim, agent-owned key-value blob in PostgreSQL (`agent_objects`),
+read back byte-for-byte. Invisible to retrieval until **promoted** (one-way) into a source
+page. Not the wiki, not a derived index. _Avoid_: "document"/"page" for an unpromoted object.
+See ADR-017.
+
+**Curation mode.** The autonomy knob (`curation.mode`): `manual` (signals only), `semi-auto`
+(default; the autocurator drafts concept pages, the curator approves), `auto` (opt-in;
+self-reviews + promotes above a threshold). Governs concept synthesis/promotion only. _Avoid_:
+"autocuration" as a synonym for `auto` — semi-auto is also autocuration. See ADR-022.
+
+**Ops seam (`tui/data.py`).** The single set of operation entry points the CLI, TUI, and
+WebUI all call (reindex, graph rebuild, inbox process, delete) — no admin logic duplicated in
+a UI. Destructive ops stay off the no-auth WebUI. See ADR-020.

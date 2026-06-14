@@ -28,7 +28,7 @@ or deferred.
 
 ---
 
-## 2. Architecture Decision Records (ADR-001 … ADR-015)
+## 2. Architecture Decision Records (ADR-001 … ADR-022)
 
 Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 
@@ -47,6 +47,15 @@ Full text + alternatives-considered in [Compendium.md](Compendium.md). Summary:
 | 011 | **Callable access surface: MCP (stdio) + HTTP (`127.0.0.1`), no auth, six verbs.** | Colocated agents need to call in without CLI spawn; localhost-only means there is no exposure to authenticate against yet. (v0.2 Phase 7) |
 | 012 | **Always-on personal service** via launchd/systemd on the curator's hardware. | v0.2 needs Compendium to stay up (daemon, watcher, access surface); a personal-host service reverses "no daemon" only for that case. (v0.2 Phase 3) |
 | 013 | **Semantic edges are persisted in PostgreSQL (`semantic_edges`) and replayed on `graph rebuild`**, written through one dual-write coordinator. | Closes a data-loss defect: semantic edges lived only in Memgraph, so a rebuild wiped them. Reconciles ADR-004/005 — the graph becomes fully derived. (post-v0.2 fix, PR #52) |
+| 014 | **Autonomous `CONTRADICTS` as curator-approved candidates.** | The slow loop proposes `contradiction_candidate` signals; only `curate resolve --approve` writes the edge. Autonomy in the proposal, human in the commit. (v0.3 Phase 1) |
+| 015 | **A loopback Streamlit web UI (`compendium web`).** | A browser view over the existing facade + provider; single-question, no session state, loopback-only. (v0.3 Phase 2) |
+| 016 | **A chunk-only retrieval control arm, `validate`-only.** | The instrument that gives the wiki-vs-chunks bet a verdict: same fan-out/fusion over chunks, fenced off the supported surface. (v0.4 Phase 1) |
+| 017 | **Agent object store + one-way promote.** | Verbatim agent storage (`agent_objects`) with `object_*` verbs; invisible to retrieval until promoted to a source. The agent-write half, without a second system of record. (v0.5) |
+| 018 | **Hard delete of a source.** | The first op that removes canonical knowledge: canonical-first, self-reconciling, curator-only; dangling concepts surfaced (not cascade-deleted). (v0.5) |
+| 019 | **Tags on sources + pages (retrieval-filter-grade).** | Curator labels orthogonal to topics/aliases; PG system-of-record, projected into the indexes; source tags inherit to derived content. (v0.5) |
+| 020 | **Admin/ops surface in TUI + WebUI, split by posture.** | TUI full incl. destructive; WebUI safe-only (no-auth/LAN); one ops seam. Refines ADR-011 for the UIs. (v0.5) |
+| 021 | **Read-only graph view in the WebUI.** | A bounded, force-directed view over Memgraph, dependency-free; read-only fits the WebUI safe-only posture. (v0.5) |
+| 022 | **Curation autonomy knob (manual / semi-auto / auto), amends ADR-009.** | Manual = pre-knob; semi-auto (default) drafts, curator approves; auto (opt-in) self-reviews + promotes. The founding "synthesis is curator-driven" invariant becomes the default of a knob, not a law. (v0.5) |
 
 ---
 
