@@ -593,6 +593,18 @@ walk's ingest + reindex state). Destructive; run last or on a throwaway source.
 | v0.5-del.4 | Re-ingest is clean | re-ingest the same file; `compendium index sync` | ingests as a fresh source (no tombstone) |
 | v0.5-del.5 | Dangling surfaced | delete a source that solely grounded a concept; `compendium curate run` | the concept still exists and is surfaced as a thin-grounding / dangling signal |
 
+## v0.5 — Admin/ops surface in TUI + WebUI (ADR-020)
+
+Prerequisites: stores up. WebUI via `compendium web`; TUI via `compendium tui`.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-adm.1 | WebUI dashboard | open the WebUI → Dashboard | store/index counts match `compendium index status` |
+| v0.5-adm.2 | WebUI safe op | click "Reindex all" | reindex runs; counts refresh |
+| v0.5-adm.3 | WebUI process-inbox | drop a file; click "Process inbox now" | the file ingests; routed to processed/ |
+| v0.5-adm.4 | WebUI has no destructive ops | inspect the Dashboard | no delete/wipe/restore/unit-install control (ADR-020 P1) |
+| v0.5-adm.5 | TUI full admin | in the TUI dashboard press `R`/`G`/`I`; on sources press `D` and type DELETE | each op runs and notifies; delete prompts for confirmation first |
+| v0.5-adm.6 | Inbox sweep backstop | drop a file the watcher misses; wait ~10 min | `compendium-inbox-sweep.timer` drains it (no-op when empty) |
 ## v0.5 — Tagging (ADR-019)
 
 Prerequisites: stores up; at least one source ingested + indexed. Stubs fine.

@@ -115,3 +115,43 @@ def resolve_signal(signal_id: str, *, approve: bool) -> str:
     from compendium.curate.resolve import resolve
 
     return resolve(signal_id, approve=approve).detail
+
+
+# --- admin / ops seam (ADR-020) -------------------------------------------
+# Thin wrappers so the TUI and WebUI call the SAME operation functions the CLI
+# uses (no duplicated logic). All non-destructive: reindex and graph rebuild
+# re-derive from the canonical layer; process drains the inbox.
+
+
+def reindex_all() -> Any:
+    """Rebuild all derived indexes from PostgreSQL + the vault (the CLI's seam)."""
+    from compendium.index.sync import reindex
+
+    return reindex("all")
+
+
+def graph_rebuild() -> Any:
+    """Drop and repopulate Memgraph from PostgreSQL + the vault."""
+    from compendium.graph.rebuild import rebuild
+
+    return rebuild()
+
+
+def process_inbox() -> Any:
+    """Drain the inbox now (manual recovery for the edge-triggered watcher);
+    resolves the inbox path the same way the CLI does."""
+    from pathlib import Path
+
+    from compendium.config import load_config
+    from compendium.inbox.process import process_inbox as _process
+
+    inbox = Path(load_config().inbox_path).expanduser().resolve()
+    return _process(inbox)
+
+
+def delete_source(ident: str) -> Any:
+    """Hard-delete a source and everything derived (ADR-018). DESTRUCTIVE — the
+    TUI/CLI only call this; the WebUI never does (ADR-020 P1)."""
+    from compendium.maintenance.delete import delete_source as _delete
+
+    return _delete(ident, dry_run=False)

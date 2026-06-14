@@ -22,7 +22,7 @@ _LOGO = Path(__file__).resolve().parent / "logo.png"
 
 st.set_page_config(page_title="Compendium", page_icon=str(_LOGO), layout="wide")
 
-VIEWS = ("Ask", "Search", "Pages", "Curation")
+VIEWS = ("Ask", "Search", "Pages", "Curation", "Dashboard")
 
 st.sidebar.image(str(_LOGO), width=140)
 st.sidebar.title("Compendium")
@@ -30,9 +30,55 @@ st.sidebar.caption(f"v{__version__} · loopback only (ADR-015)")
 view = st.sidebar.radio("View", VIEWS, key="view")
 
 
+# --- Dashboard ---------------------------------------------------------------
+# Counts/health + NON-DESTRUCTIVE ops only (ADR-020): reindex, graph rebuild,
+# and inbox "process now" rebuild/recover from the canonical layer. Destructive
+# ops (delete, wipe, restore) and unit management stay TUI/CLI only and are
+# deliberately absent here.
+
+if view == "Dashboard":
+    st.header("Dashboard")
+    status = facade.index_status()
+    data = provider.dashboard()
+
+    st.subheader("Counts")
+    counts = data["counts"]
+    cols = st.columns(len(counts) or 1)
+    for col, (name, n) in zip(cols, counts.items()):
+        col.metric(name, n)
+
+    st.subheader("Derived indexes")
+    st.json({"opensearch": status.opensearch, "qdrant": status.qdrant})
+    if status.sync_lag:
+        st.caption("Sync lag")
+        st.table(status.sync_lag)
+
+    st.subheader("Maintenance (non-destructive)")
+    c1, c2, c3 = st.columns(3)
+    if c1.button("Reindex all", key="adm_reindex"):
+        with st.spinner("Reindexing…"):
+            rep = provider.reindex_all()
+        st.success(f"reindexed {rep.indexed}, failed {rep.failed}")
+    if c2.button("Rebuild graph", key="adm_graph"):
+        with st.spinner("Rebuilding graph…"):
+            provider.graph_rebuild()
+        st.success("graph rebuilt from PostgreSQL + the vault")
+    if c3.button("Process inbox now", key="adm_inbox"):
+        with st.spinner("Processing inbox…"):
+            rep = provider.process_inbox()
+        st.success(
+            f"processed {getattr(rep, 'processed', 0)}, "
+            f"failed {getattr(rep, 'failed', 0)}"
+        )
+    st.caption(
+        "Destructive ops (delete, wipe, restore) and unit management are "
+        "TUI/CLI only — ADR-020."
+    )
+
+
 # --- Ask ---------------------------------------------------------------------
 
-if view == "Ask":
+elif view == "Ask":
     st.header("Ask")
     question = st.text_input("Question", key="ask_question")
     if st.button("Ask", key="ask_go") and question.strip():
