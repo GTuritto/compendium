@@ -22,7 +22,7 @@ _LOGO = Path(__file__).resolve().parent / "logo.png"
 
 st.set_page_config(page_title="Compendium", page_icon=str(_LOGO), layout="wide")
 
-VIEWS = ("Ask", "Search", "Pages", "Curation", "Dashboard")
+VIEWS = ("Ask", "Search", "Pages", "Curation", "Graph", "Dashboard")
 
 st.sidebar.image(str(_LOGO), width=140)
 st.sidebar.title("Compendium")
@@ -184,3 +184,61 @@ elif view == "Curation":
                 if col_b.button("Drop", key=f"drop-{sid}"):
                     st.toast(provider.resolve_signal(sid, approve=False))
                     st.rerun()
+
+
+# --- Graph -------------------------------------------------------------------
+# Read-only, bounded force-directed view over Memgraph (ADR-021). No mutation
+# affordance; fits the WebUI safe-only posture (ADR-020).
+
+elif view == "Graph":
+    from compendium.web.graphviz import build_dot
+
+    _NODE_KINDS = ["Source", "Concept", "Topic", "Chunk"]
+    _EDGE_TYPES = [
+        "PART_OF", "EVIDENCES", "GROUNDS", "RELATED_TO",
+        "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS",
+    ]
+    st.header("Graph")
+    mode = st.radio(
+        "Scope", ("Neighbourhood", "Full graph (sampled)"),
+        key="gv_mode", horizontal=True,
+    )
+    kinds = st.multiselect(
+        "Node kinds", _NODE_KINDS, default=["Source", "Concept", "Topic"], key="gv_kinds"
+    )
+    edge_types = st.multiselect("Edge types", _EDGE_TYPES, key="gv_edges")
+
+    node_id: str | None = None
+    if mode == "Neighbourhood":
+        term = st.text_input("Find a focus node (title/slug)", key="gv_term")
+        if term.strip():
+            try:
+                matches = provider.graph_search(term.strip())
+            except provider.GraphUnreachable:
+                matches = []
+                st.error("Memgraph unreachable.")
+            if matches:
+                labels = [f"{m['label']} ({m['kind']})" for m in matches]
+                pick = st.selectbox("Focus node", labels, key="gv_focus")
+                node_id = matches[labels.index(pick)]["id"]
+                st.caption(f"Focused on `{node_id}` — select another to re-center.")
+            elif term.strip():
+                st.info("No matching node.")
+
+    if mode == "Full graph (sampled)" or node_id:
+        try:
+            export = provider.graph_export(node_id=node_id)
+        except provider.GraphUnreachable:
+            st.error("Memgraph unreachable.")
+            export = None
+        if export is not None:
+            dot = build_dot(
+                export,
+                kinds=set(kinds) or None,
+                edge_types=set(edge_types) or None,
+            )
+            st.caption(
+                f"{len(export['nodes'])} nodes · {len(export['edges'])} edges "
+                "(bounded, read-only)"
+            )
+            st.graphviz_chart(dot, engine="fdp")
