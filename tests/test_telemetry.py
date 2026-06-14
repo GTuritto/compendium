@@ -120,7 +120,6 @@ def seeded(monkeypatch, tmp_path):
     monkeypatch.setenv("COMPENDIUM_SYNTH_STUB", "1")
 
     from compendium.db.connection import connection
-    from compendium.db import repository
     from compendium.index.sync import reindex
     from compendium.ingest.pipeline import ingest
     from compendium.retrieve.pipeline import query as run_query
@@ -192,7 +191,7 @@ def test_revision_history_and_diff(seeded):
     _, vault = seeded
     from compendium.db.connection import connection
     from compendium.db import repository
-    from compendium.trace.revisions import resolve_revision, body_diff
+    from compendium.trace.revisions import resolve_revision
     from compendium.trace.promote import promote
 
     # Promotion adds a second (human) revision differing in frontmatter status.

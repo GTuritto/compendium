@@ -1,8 +1,7 @@
 """The Compendium ops console (ADR-008): a keyboard-driven Textual app.
 
 One screen per operational concern, reached by a mnemonic key shown in the
-footer. Screens land sub-phase by sub-phase; until a screen is built its
-navigation target shows a placeholder, so every binding is reachable from 8a.
+footer.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Static
+from textual.widgets import Static
 
 from compendium.tui.screens.curation import CurationScreen
 from compendium.tui.screens.dashboard import DashboardScreen
@@ -43,7 +42,7 @@ class HelpScreen(ModalScreen):
 
 
 def _screen_for(name: str):
-    """The real screen for a built concern, else a placeholder."""
+    """Build the screen registered for a navigation target."""
     builders = {
         "dashboard": DashboardScreen,
         "sources": SourcesScreen,

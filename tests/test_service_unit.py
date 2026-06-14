@@ -25,7 +25,6 @@ from compendium.service_unit import (
     UnitDescriptor,
     WatchPaths,
     launchd,
-    platform,
     systemd,
 )
 from compendium.service_unit.runner import RunResult

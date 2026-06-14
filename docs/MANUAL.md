@@ -225,7 +225,7 @@ shape the CLI emits for `--format json`.
 > **Posture (read this first).** The access surface is **localhost / single-user
 > / no-auth** by design. HTTP binds `127.0.0.1`; MCP is stdio. Only processes on
 > the same machine can reach it. Do **not** expose it to a network — networked
-> access with authentication is a future (v0.3) capability. Keep callers
+> access with authentication remains deferred. Keep callers
 > colocated on the host.
 
 ### 3.1 The six verbs (the whole surface)

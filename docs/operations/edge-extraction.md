@@ -23,7 +23,7 @@ session, and is **skip-graceful**: if Memgraph or Qdrant is unreachable, or
 | `RELATED_TO` | LLM extractor + curator |
 | `PREREQUISITE_FOR` | LLM extractor + curator |
 | `SYNTHESIZES` | curator-driven via the promote hook (`curate/lifecycle`) — unchanged |
-| `CONTRADICTS` | curator-only via `compendium graph link` — unchanged; v0.3+ for a suggest-then-approve shape |
+| `CONTRADICTS` | LLM-proposed candidate; curator-approved write (ADR-014) |
 
 `SYNTHESIZES` is owned by the lifecycle (the promote hook writes it); autonomous
 extraction would race and double-write. `CONTRADICTS` makes the strongest claim
@@ -83,9 +83,8 @@ MATCH ()-[r {extracted_by:"llm"}]-() RETURN r.extracted_at, r.confidence ORDER B
 MATCH ()-[r {extracted_by:"curator"}]-() RETURN r;
 ```
 
-`compendium graph rebuild` drops and reprojects structural + curator edges; LLM
-edges are re-created on the next `curate run` (they are derived, like the rest of
-the graph).
+Semantic edges are persisted in PostgreSQL through the ADR-013 coordinator and
+replayed by `compendium graph rebuild`; Memgraph remains derived.
 
 ## Change detection and the full sweep
 
@@ -122,9 +121,10 @@ curation:
 
 The LLM endpoint/model/key reuse the `synthesis:` block.
 
-## Out of scope (v0.2 Phase 8)
+## Out of scope
 
-- Autonomous `SYNTHESIZES` (lifecycle-owned) and `CONTRADICTS` (curator-only; v0.3+).
+- Autonomous `SYNTHESIZES` (lifecycle-owned) and autonomous `CONTRADICTS`
+  writes (proposals are allowed; writes stay curator-owned).
 - A `compendium extract` CLI verb (runs inside `curate run`).
 - Retrieval re-ranking / filtering by `extracted_by` or `confidence` (expansion
   walks the edges as-is, weighted by `weight=confidence`).

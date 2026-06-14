@@ -134,18 +134,10 @@ uv run python -m compendium backup uninstall
 Both are idempotent; running them on a clean host exits 0 with "not
 installed".
 
-## Why this is an interim
+## Why the timer remains
 
-ADR-012's long-term home for scheduled curation is Phase 7's
-access-surface daemon (`compendium serve`). When that daemon ships,
-the slow loop becomes an in-process async task scheduled inside the
-daemon — one process, one log stream, in-memory coordination with the
-access surface. Phase 3 ships the launchd/systemd timer-fires-CLI
-because Phase 7 does not exist yet; a later refactor will absorb the
-schedule into the daemon and the per-OS unit will be removed.
-
-The `compendium schedule` CLI surface and the `com.compendium.curate`
-unit name are likely to stay in v0.3+ even after the absorption (the
-operator-visible verbs do not change; only the implementation moves
-from a timer to an async task). The `compendium/schedule/` Python
-module may be deleted or relocated when the daemon owns the schedule.
+The access-surface daemon has shipped, but scheduled curation still uses the
+launchd/systemd timer. v0.4 explicitly defers absorbing the slow loop into the
+daemon until real-corpus operation demonstrates cadence or crash-recovery
+pressure. Revisit only when runs overlap, fall behind, or miss material that the
+daily ask habit needs.

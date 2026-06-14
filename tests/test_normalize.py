@@ -7,10 +7,8 @@ here we hand-build AliasIndex instances and exercise normalize_query.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
 
 from compendium.retrieve.normalize import (
     STOP_WORDS,

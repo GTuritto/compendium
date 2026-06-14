@@ -21,7 +21,7 @@ from alembic.config import Config
 
 from compendium.validate import metrics
 from compendium.validate import probes as probes_mod
-from compendium.validate.probes import Probe, ProbeSet, ProbeSetError
+from compendium.validate.probes import ProbeSetError
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _FIXTURES = _REPO_ROOT / "tests" / "fixtures"

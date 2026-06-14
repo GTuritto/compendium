@@ -14,7 +14,6 @@ Phase 8 TUI); ``query()`` is the synchronous wrapper for the CLI.
 from __future__ import annotations
 
 import asyncio
-import os
 from dataclasses import dataclass, field
 from typing import Any
 

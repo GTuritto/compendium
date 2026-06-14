@@ -9,8 +9,8 @@ status reader stays here because it surfaces serve-specific fields (host / port,
 running state).
 
 Closes the ADR-012 gap: the access surface is managed like backup / curate /
-inbox. Posture stays localhost / no-auth (ADR-011); a non-loopback ``--host`` is
-a v0.3 concern.
+inbox. Posture stays localhost / no-auth (ADR-011); non-loopback exposure
+remains deferred.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def _descriptor(host: str, port: int) -> UnitDescriptor:
     )
 
 
-# --- render / path shims (consumed by status and tests) -------------------
+# --- render shims (consumed by tests) -------------------------------------
 
 
 def _macos_plist_xml(host: str, port: int) -> str:
@@ -92,14 +92,6 @@ def _macos_plist_xml(host: str, port: int) -> str:
 
 def _linux_service_unit(host: str, port: int) -> str:
     return systemd.render_service(_descriptor(host, port))
-
-
-def _macos_plist_path() -> Path:
-    return launchd.plist_path(LABEL)
-
-
-def _linux_service_path() -> Path:
-    return systemd.service_path(_descriptor(DEFAULT_HOST, DEFAULT_PORT))
 
 
 def _parse_host_port(unit_text: str) -> tuple[str | None, int | None]:
