@@ -80,7 +80,10 @@ def test_section_readers_expose_the_right_keys(env):
     assert set(cs.expansion()) == {"enabled", "seed_k", "max_hops", "decay", "weight"}
     assert set(cs.ask()) == {"refuse_below_coverage", "prompt_template_id", "rewrite", "top_k"}
     assert cs.ask()["top_k"] == cs.retrieval()["top_k"]  # cross-read via retrieval()
-    assert set(cs.curation()) == {"thin_grounding_min", "low_coverage_threshold"}
+    assert set(cs.curation()) == {
+        "thin_grounding_min", "low_coverage_threshold",
+        "mode", "auto_confidence", "autocurate_max",
+    }
     assert set(cs.extract()) == {"enabled", "min_confidence", "top_k_neighbours", "full_sweep_every"}
     ingestion = cs.ingestion()
     assert set(ingestion) == {"max_source_bytes", "min_text_tokens", "target_tokens", "overlap_tokens"}
@@ -112,7 +115,10 @@ def test_section_readers_fall_back_to_documented_defaults(monkeypatch, tmp_path)
     assert cs.retrieval() == {"rrf_k": 60, "page_coverage_threshold": 0.5, "top_k": 7}
     assert cs.expansion()["seed_k"] == 3
     assert cs.ask()["refuse_below_coverage"] == 0.3 and cs.ask()["rewrite"] is True
-    assert cs.curation() == {"thin_grounding_min": 2, "low_coverage_threshold": 0.5}
+    assert cs.curation() == {
+        "thin_grounding_min": 2, "low_coverage_threshold": 0.5,
+        "mode": "semi-auto", "auto_confidence": 0.8, "autocurate_max": 10,
+    }
     assert cs.extract() == {
         "enabled": True, "min_confidence": 0.7, "top_k_neighbours": 10, "full_sweep_every": 24,
     }

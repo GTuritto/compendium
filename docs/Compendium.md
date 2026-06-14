@@ -892,6 +892,28 @@ Compendium served memory and context to an agent but had nowhere for the agent t
 
 **A raw store with no promote** was rejected — a parallel store with no path into the wiki is the second system of record ADR-001/004 prevent. **Wiki-only (extend `ingest`, no verbatim store)** was rejected — synthesis transforms content, so there is no byte-for-byte read-back. **A separate object store (S3/MinIO)** was rejected by stack discipline; PostgreSQL BYTEA suffices at personal scale. **Auto-promote into concepts** was rejected — it crosses the curator-driven-synthesis line.
 
+### ADR-022: Curation autonomy knob — manual / semi-auto / auto (v0.5, amends ADR-009)
+
+**Status:** Accepted (v0.5). Curating concepts entirely by hand is not sustainable for one user; fully autonomous synthesis reverses the founding "synthesis is curator-driven" invariant. The resolution is a configurable mode, not a wholesale reversal.
+
+#### Context
+
+The slow loop (ADR-009) surfaces signals the curator drains. Making the system also *draft* concepts is the high-value step, but it must not silently make machine output canonical — the wiki's value is human-curated pages.
+
+#### Decision
+
+`curation.mode` — `manual` | `semi-auto` (default) | `auto` — governs **concept synthesis and promotion only**; autonomous edge extraction (ADR-010) and CONTRADICTS candidates (ADR-014) are untouched. **manual** is the pre-knob behaviour (signals only; nothing synthesized or promoted without the curator) — choosing it changes nothing. **semi-auto** (default) has the autocurator draft concept pages from eligible new signals as `draft` pages (via the existing synth-from-signal path); nothing becomes canonical without an explicit curator promote — the default changes *who drafts* (the machine), not *who approves* (the curator). **auto** (opt-in, off unless set) additionally self-reviews each draft (an LLM-as-judge gate, stub-friendly) and promotes those above a confidence threshold, with a `shadow` mode that drafts without promoting. Guardrail: autocuration never overwrites an existing concept page (it only creates brand-new drafts); machine drafts carry the synthesizer's `generator=synth`/`status=draft` marker, a revision, and provenance. Wired into `compendium curate run` and the scheduled daemon.
+
+#### Consequences
+
+- The load-bearing half of the invariant holds by default: in manual and semi-auto nothing is canonical without a curator commit; only the opt-in `auto` removes that, and it is off by default.
+- The knob ships post-v0.4, so the v0.4 A/B measured pure manual curation; semi-auto is the default only afterwards.
+- Drafts are reversible (deprecate/delete) and distinguishable (synth/draft), so a bad autocuration is cheap to undo.
+
+#### Alternatives considered
+
+**Fully autonomous synthesis as the only behaviour** was rejected — it overturns the founding invariant outright. **Auto as the default** was rejected — the default keeps the curator in the commit. **Overwriting/refreshing existing pages** was rejected for v0.5 — never-overwrite is the safe guardrail (C4); refreshing drafts is a later refinement.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
