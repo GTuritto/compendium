@@ -12,7 +12,15 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ## [Unreleased]
 
-### Added (v0.5, merged to `main`, ships with the next cut)
+## [0.5.0] - 2026-06-14
+
+The v0.5 feature build: six features over the page-first engine — hard delete
+(ADR-018), tagging (ADR-019), the TUI+WebUI admin surface (ADR-020), the
+read-only graph view (ADR-021), the agent object store + promote (ADR-017), and
+the curation autonomy knob (ADR-022) — plus the post-v0.2 profiler and review-#4
+architecture fixes. Migrations `0015` (tags) and `0016` (agent_objects).
+
+### Added (v0.5)
 
 - **Curation autonomy knob** (ADR-022, amends ADR-009): `curation.mode` —
   `manual` | `semi-auto` (default) | `auto` — over concept synthesis/promotion

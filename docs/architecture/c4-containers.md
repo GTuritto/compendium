@@ -65,3 +65,16 @@ C4Container
   (ADR-005). The graph now also holds LLM-extracted `RELATED_TO` /
   `PREREQUISITE_FOR` edges with provenance (ADR-010), rebuilt on the next
   `curate run`.
+
+### v0.5 (additive — no new container)
+
+The v0.5 features land inside the existing containers; the container boxes are
+unchanged. PostgreSQL gains `agent_objects` (verbatim agent store, ADR-017) and
+`tags`/`source_tags`/`page_tags` (ADR-019), and the page/chunk index documents
+gain a filterable `tags` field. The **access surface** adds five `object_*` verbs
+(REST + MCP + CLI); the **WebUI** adds a Dashboard, a read-only graph view
+(ADR-021), and safe (non-destructive) ops; the **TUI** adds the full admin set
+incl. confirmed delete — all through one `tui/data.py` ops seam (ADR-020).
+Destructive ops stay off the no-auth WebUI. The slow loop gains the curation
+autonomy knob (ADR-022); `compendium source delete` (ADR-018) is the first op
+that removes canonical knowledge (CLI/TUI only).
