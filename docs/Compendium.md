@@ -782,6 +782,29 @@ Three measurement decisions are **pre-registered** here so a verdict cannot be s
 
 **A separate chunk-RAG codebase** was rejected: the comparison must hold every variable but the arm constant — same fan-out, same fusion, same normalization, same process — which only a parameter on the one pipeline guarantees. **Scoring in chunk space** was rejected: the page arm returns pages, so a shared relevance unit is required; page space is the honest common denominator and its bias direction (favouring the control) is the safe one. **Averaging over HNSW runs for determinism** was rejected in favour of exact search: at personal-corpus scale the latency cost of exact kNN is irrelevant for measurement, and it removes the non-determinism outright rather than estimating around it.
 
+### ADR-018: Hard delete of a source (v0.5)
+
+**Status:** Accepted (v0.5). The first operation that removes canonical knowledge. Ingest was previously one-way; a mis-ingest (wrong file, bad parse, a test note) stayed in the corpus forever, polluting retrieval and the v0.4 A/B. Delete is scoped to a source, hard (purge), and curator-only.
+
+#### Context
+
+PostgreSQL already cascades a `sources` delete to its `chunks` and `source_documents`, and to a `wiki_pages` delete its revisions, topic links, and promotion events, and the index layer has per-document delete primitives. What was missing was an orchestration that also removes the canonical vault file, the Memgraph nodes, the system-of-record `semantic_edges` (ADR-013), and the `index_sync_state` rows, plus a surface to invoke it.
+
+#### Decision
+
+`compendium/maintenance/delete.py:delete_source(id_or_slug)` removes a source and everything derived, **canonical-first**: in one PostgreSQL transaction it deletes the `semantic_edges` touching the source/chunk/page nodes, the `index_sync_state` rows for the page and chunks, the source `wiki_pages` row (cascades), and the `sources` row (cascades chunks + source_documents); then it unlinks the vault file; then, best-effort, it deletes the OpenSearch documents, Qdrant points, and Memgraph nodes for the page and chunks. Because canonical leads, a failed derived delete is reconcilable: `reindex all` + `graph rebuild` rebuild the derived stores from the canonical layer (ADR-001), so a partial failure self-heals. Concept pages grounded on the deleted source are **not** cascade-deleted; the slow loop (ADR-009) surfaces them as thin-grounding / dangling signals, keeping synthesis curator-driven. The capability is exposed on the CLI (`compendium source delete <id|slug> [--dry-run] [--force]`) and the TUI (delivered with the admin surface), and **never** on the facade / HTTP / MCP, because it is destructive (ADR-011 / ADR-020). No schema migration: it reuses the existing cascades and primitives.
+
+#### Consequences
+
+- A mis-ingest can be removed cleanly, so the corpus (and the v0.4 measurement) can be kept honest.
+- Hard delete, not a tombstone, so re-ingesting the same file afterwards is a clean fresh ingest.
+- Old `query_traces` may reference a now-deleted page id; traces are immutable historical records, so they are left as-is (a trace is a snapshot of what happened, not a live pointer).
+- Promotion history for the deleted source page is removed with it (cascade); this is acceptable for an auto-generated source page.
+
+#### Alternatives considered
+
+**Soft delete (deprecate) only** was rejected for this need: the existing `deprecated` status keeps the content in the corpus and indexes, so it would still pollute retrieval and the A/B. **A tombstone** (keep a record it existed) was rejected for v0.5 simplicity; hard delete leaves no resurrectable identity. **Deleting derived stores inside the PostgreSQL transaction** was rejected: cross-store atomicity is impossible, so the canonical-first + reconcile-on-failure model is the honest one. **Cascade-deleting grounded concepts** was rejected: it would let a source delete silently destroy curated synthesis; surfacing them as signals keeps the curator in control.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
