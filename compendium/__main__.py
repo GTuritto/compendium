@@ -144,6 +144,68 @@ def _synth(kind: str, name: str, aliases: list[str]) -> int:
     return 0
 
 
+def _tag(action: str, slug: str | None, name: str | None, fmt: str) -> int:
+    import json as _json
+
+    from compendium.db import repository
+    from compendium.db.connection import connection
+
+    try:
+        load_config()
+    except ConfigError as exc:
+        return _config_error(exc)
+
+    with connection() as conn:
+        if action == "ls":
+            rows = repository.list_tags(conn)
+            if fmt == "json":
+                print(_json.dumps([dict(r) for r in rows]))
+            elif not rows:
+                print("(no tags)")
+            else:
+                for r in rows:
+                    print(f"{r['name']}  sources={r['sources']} pages={r['pages']}")
+            return 0
+
+        page = (
+            repository.get_wiki_page_by_slug(conn, "source", slug)
+            or repository.get_wiki_page_by_slug(conn, "concept", slug)
+            or repository.get_wiki_page_by_slug(conn, "topic", slug)
+        )
+        if page is None:
+            print(f"tag {action}: no page matched '{slug}'", file=sys.stderr)
+            return 1
+        is_source = page["kind"] == "source" and page.get("source_id")
+        target = page["source_id"] if is_source else page["id"]
+        if action == "add":
+            (repository.add_source_tag if is_source else repository.add_page_tag)(
+                conn, target, name
+            )
+        else:  # rm
+            (repository.remove_source_tag if is_source else repository.remove_page_tag)(
+                conn, target, name
+            )
+        # Re-project the affected entities so the index payload carries the tag.
+        repository.enqueue_index(
+            conn, entity_kind="page", entity_id=page["id"],
+            index_kinds=("opensearch_pages", "qdrant_pages"),
+        )
+        if is_source:
+            for cid in repository.all_chunk_ids_for_source(conn, page["source_id"]):
+                repository.enqueue_index(
+                    conn, entity_kind="chunk", entity_id=cid,
+                    index_kinds=("opensearch_chunks", "qdrant_chunks"),
+                )
+        conn.commit()
+
+    from compendium.index.sync import sync_pending
+
+    report = sync_pending()
+    kind = "source" if is_source else page["kind"]
+    print(f"tag {action}: '{name}' on {kind} '{slug}'; reindexed {report.indexed}")
+    return 0
+
+
 def _source_delete(ident: str, dry_run: bool, force: bool, fmt: str) -> int:
     import json as _json
 
@@ -249,7 +311,9 @@ def _index_status(fmt: str) -> int:
     return 0
 
 
-def _query(query_text: str, top_k: int | None, fmt: str) -> int:
+def _query(
+    query_text: str, top_k: int | None, fmt: str, tags: list[str] | None = None
+) -> int:
     log = get_logger("compendium.query")
     try:
         load_config()
@@ -258,7 +322,7 @@ def _query(query_text: str, top_k: int | None, fmt: str) -> int:
 
     from compendium.retrieve.pipeline import query as run_query
 
-    result = run_query(query_text)
+    result = run_query(query_text, tags=tags or None)
     pages = result.pages[:top_k] if top_k else result.pages
     print(render.query(result, pages, fmt))
     log.info(
@@ -270,7 +334,7 @@ def _query(query_text: str, top_k: int | None, fmt: str) -> int:
     return 0
 
 
-def _ask(question: str, fmt: str) -> int:
+def _ask(question: str, fmt: str, tags: list[str] | None = None) -> int:
     log = get_logger("compendium.ask")
     try:
         load_config()
@@ -279,8 +343,9 @@ def _ask(question: str, fmt: str) -> int:
 
     from compendium.answer import ask as run_ask
 
+    tags = tags or None
     if fmt == "json":
-        result = run_ask(question)
+        result = run_ask(question, tags=tags)
         print(render.ask(result, "json"))
     else:
         # Text mode streams the composed answer to stdout as it arrives; the
@@ -293,7 +358,7 @@ def _ask(question: str, fmt: str) -> int:
             sys.stdout.flush()
             streamed.append(token)
 
-        result = run_ask(question, on_token=on_token)
+        result = run_ask(question, on_token=on_token, tags=tags)
         if streamed:
             sys.stdout.write("\n")
         print(render.ask(result, "text", answer_streamed=bool(streamed)))
@@ -908,6 +973,10 @@ def main(argv: list[str] | None = None) -> int:
     query_parser.add_argument(
         "--top-k", type=int, default=None, help="number of pages to show"
     )
+    query_parser.add_argument(
+        "--tag", action="append", default=[], dest="tags",
+        help="restrict to pages/sources carrying this tag (repeatable; OR)",
+    )
 
     ask_parser = subparsers.add_parser(
         "ask",
@@ -915,6 +984,20 @@ def main(argv: list[str] | None = None) -> int:
         parents=[fmt],
     )
     ask_parser.add_argument("question", help="the natural-language question")
+    ask_parser.add_argument(
+        "--tag", action="append", default=[], dest="tags",
+        help="restrict retrieval to this tag (repeatable; OR)",
+    )
+
+    tag_parser = subparsers.add_parser("tag", help="curator tags (ADR-019)")
+    tag_sub = tag_parser.add_subparsers(dest="tag_action", required=True)
+    tag_add = tag_sub.add_parser("add", help="tag a source page or wiki page")
+    tag_add.add_argument("slug", help="source-page or wiki-page slug")
+    tag_add.add_argument("name", help="the tag")
+    tag_rm = tag_sub.add_parser("rm", help="remove a tag from a page/source")
+    tag_rm.add_argument("slug")
+    tag_rm.add_argument("name")
+    tag_sub.add_parser("ls", help="list tags with usage counts", parents=[fmt])
 
     serve_parser = subparsers.add_parser(
         "serve",
@@ -1196,9 +1279,14 @@ def _dispatch(args: argparse.Namespace, fmt_arg: str) -> int:
             return _graph_backfill(fmt_arg)
         return _graph(args.graph_action, fmt_arg)
     if args.command == "query":
-        return _query(args.text, args.top_k, fmt_arg)
+        return _query(args.text, args.top_k, fmt_arg, getattr(args, "tags", None))
     if args.command == "ask":
-        return _ask(args.question, fmt_arg)
+        return _ask(args.question, fmt_arg, getattr(args, "tags", None))
+    if args.command == "tag":
+        return _tag(
+            args.tag_action, getattr(args, "slug", None),
+            getattr(args, "name", None), fmt_arg,
+        )
     if args.command == "serve":
         return _serve(getattr(args, "serve_action", None), args.host, args.port, fmt_arg)
     if args.command == "mcp":
