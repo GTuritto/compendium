@@ -12,5 +12,10 @@ only. Depends on v0.5-source-hard-delete for the TUI delete action.
 - [ ] 1d WebUI safe ops: reindex / graph rebuild / backup controls; explicit
   exclusion of delete/wipe/restore/unit-install; headless tests asserting the
   destructive ops are absent.
-- [ ] 1e docs + close: `docs/operations/admin-surface.md`; CHANGELOG; smoke
+- [ ] 1e inbox recovery: a "process inbox now" action (TUI + WebUI,
+  non-destructive) running `inbox process`; inbox backlog count on the
+  dashboard; a periodic safety-net sweep (timer running `inbox process`,
+  no-op when empty) for the edge-triggered watcher's missed files. (The sweep
+  timer may ship earlier as deployment config, independent of this change.)
+- [ ] 1f docs + close: `docs/operations/admin-surface.md`; CHANGELOG; smoke
   section; full fast + golden green; version bump in the completion commit.

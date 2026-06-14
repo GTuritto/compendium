@@ -38,3 +38,26 @@ operation logic SHALL be duplicated inside a UI.
 #### Scenario: shared seam
 - **WHEN** reindex is triggered from the CLI, the TUI, and the WebUI
 - **THEN** all three call the same underlying operation, not three copies
+
+### Requirement: Inbox processing is recoverable and self-healing
+The edge-triggered inbox watcher can miss files dropped as a batch or while
+still copying (e.g. over SMB), leaving them unprocessed with no fresh trigger.
+The TUI SHALL provide a "process inbox now" action that runs `inbox process`
+(scanning the whole inbox), and the WebUI SHALL surface the inbox backlog count
+and the same non-destructive "process now" action. A periodic safety-net sweep
+(a timer running `inbox process` on a cadence) SHALL be available so stuck files
+are drained without manual action; the sweep is a no-op when the inbox is empty.
+
+#### Scenario: manual drain from the TUI
+- **WHEN** files are sitting unprocessed in the inbox and the curator triggers
+  "process inbox now"
+- **THEN** every eligible file is ingested and routed to processed/failed
+
+#### Scenario: safety-net sweep drains stuck files
+- **WHEN** a file is dropped but the watcher does not fire for it
+- **THEN** the next periodic sweep ingests it; an empty inbox makes the sweep a
+  cheap no-op
+
+#### Scenario: backlog visibility
+- **WHEN** the curator opens the dashboard (TUI or WebUI)
+- **THEN** the count of unprocessed inbox files is shown

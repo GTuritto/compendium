@@ -26,6 +26,12 @@ the v0.4 verdict (`docs/proposals/README.md` §2). Design fixed 2026-06-14:
 - **One operations seam.** Both UIs call the same operation functions the CLI
   uses (no logic duplicated in a UI); the UIs are thin callers, consistent with
   the facade/provider pattern already in place.
+- **Inbox recovery + self-healing.** A "process inbox now" action (TUI + WebUI,
+  non-destructive) plus a periodic safety-net sweep, because the edge-triggered
+  `.path` watcher silently misses files dropped as a batch or mid-SMB-copy. The
+  sweep (a timer running `inbox process`) is the root-cause fix and is a no-op on
+  an empty inbox; it can ship ahead of this change as pure deployment config (a
+  systemd timer), since it is not product code.
 
 ## Impact
 
