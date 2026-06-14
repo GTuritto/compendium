@@ -870,6 +870,28 @@ A `graph_export` reader (`graph/browse.py`) returns a **bounded** node+edge payl
 
 **streamlit-agraph / pyvis** (interactive, click events) were deferred to avoid a JS-component dependency for v0.5; `graphviz_chart` with the `fdp` engine gives the force-directed look dependency-free. **An unbounded full-graph render** was rejected — it does not scale (Obsidian degrades the same way), hence the node cap and neighbourhood default. **Tag-coloured/tag-filtered nodes** were deferred: graph nodes do not carry tags (tags live in PostgreSQL/indexes), so a tag filter needs a PG join — a follow-up.
 
+### ADR-017: Agent object store + one-way promote (v0.5)
+
+**Status:** Accepted (v0.5). The agent-write half of the access surface: a place for a colocated agent to store artifacts/working state verbatim and, when worth keeping, promote them into the curated wiki.
+
+#### Context
+
+Compendium served memory and context to an agent but had nowhere for the agent to write a blob and read it back byte-for-byte: `ingest` transforms its input through synthesis, and the wiki is curated. The agent needs durable, verbatim, agent-owned storage, with an on-ramp into the knowledge — without becoming a second, unsynthesized system of record.
+
+#### Decision
+
+`agent_objects` (migration 0016): a PostgreSQL key-value store — `(collection, key)` unique, verbatim `body` BYTEA, content type, JSONB metadata, last-write-wins upsert. It is **never** synced into OpenSearch/Qdrant/Memgraph; until promoted, an object is invisible to retrieval, so ADR-001/003 hold. Five verbs — `object_put/get/list/delete/promote` — on the shared facade, exposed on REST + MCP (byte-identical JSON; body carried as `body_text` + `body_base64`) and mirrored on the CLI (`compendium object …`). `object_promote(key, kind='note')` runs the body through the existing ingest pipeline, generates the deterministic `source` page, indexes it, and records the resulting source on the object's metadata; it is **one-way and stops at the source layer** — never creates concept/topic pages or edges, so synthesis stays curator-driven. Single namespace, no auth (loopback/LAN, ADR-011); `collection` is a reserved forward hook.
+
+#### Consequences
+
+- The agent gets real read-back storage and a curator-respecting on-ramp; `query`/`ask` and every existing surface are unchanged (objects are invisible until promoted).
+- PostgreSQL stays the single system of record; the store is operational data, deletable as a unit (drop the verbs + table and nothing else depends on them).
+- Promote re-ingests idempotently (content-hash dedup), so re-promoting an unchanged body is a no-op.
+
+#### Alternatives considered
+
+**A raw store with no promote** was rejected — a parallel store with no path into the wiki is the second system of record ADR-001/004 prevent. **Wiki-only (extend `ingest`, no verbatim store)** was rejected — synthesis transforms content, so there is no byte-for-byte read-back. **A separate object store (S3/MinIO)** was rejected by stack discipline; PostgreSQL BYTEA suffices at personal scale. **Auto-promote into concepts** was rejected — it crosses the curator-driven-synthesis line.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.

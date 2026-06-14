@@ -628,3 +628,15 @@ Prerequisites: Memgraph up + populated (`graph rebuild`); WebUI via `compendium 
 | v0.5-gv.3 | Filter | restrict node kinds / edge types | only matching nodes/edges render |
 | v0.5-gv.4 | Bounded full graph | choose "Full graph (sampled)" | capped at the node limit, not an unbounded dump |
 | v0.5-gv.5 | Read-only | use the view | no create/edit/delete affordance (ADR-020/021) |
+
+## v0.5 — Agent object store (ADR-017)
+
+Prerequisites: stores up. Stubs fine.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.5-obj.1 | round-trip | `compendium object put k <file>`; `object get k --out /tmp/o` | /tmp/o byte-identical to the input |
+| v0.5-obj.2 | list / delete | `object list`; `object rm k`; `object get k` | listed, then not-found |
+| v0.5-obj.3 | promote | `object put p note.md`; `object promote p --kind note`; `query "<phrase>"` | a source page appears for the body |
+| v0.5-obj.4 | isolation | `query "<phrase>"` before promote | the object is NOT returned (invisible until promoted) |
+| v0.5-obj.5 | surface parity | object_get via REST `/object_get` / MCP / CLI `--format json` | identical JSON |

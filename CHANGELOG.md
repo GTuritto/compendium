@@ -14,6 +14,14 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ### Added (v0.5, merged to `main`, ships with the next cut)
 
+- **Agent object store + promote** (ADR-017, migration 0016): verbatim agent
+  key-value storage (`agent_objects`, LWW upsert) with `object_put/get/list/
+  delete/promote` on REST + MCP + CLI (`compendium object …`). Bodies round-trip
+  byte-for-byte; the store is invisible to retrieval until `object_promote` runs
+  a body through ingest into a queryable `source` page (one-way, never
+  synthesizes). Single namespace, no auth. See
+  [docs/operations/object-store.md](docs/operations/object-store.md).
+
 - **Graph view in the WebUI** (ADR-021): a read-only, force-directed view of the
   knowledge graph — a bounded `graph_export` (page neighbourhood or sampled full
   graph, node-capped, MATCH/RETURN only) rendered via
