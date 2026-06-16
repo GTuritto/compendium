@@ -914,6 +914,29 @@ The slow loop (ADR-009) surfaces signals the curator drains. Making the system a
 
 **Fully autonomous synthesis as the only behaviour** was rejected — it overturns the founding invariant outright. **Auto as the default** was rejected — the default keeps the curator in the commit. **Overwriting/refreshing existing pages** was rejected for v0.5 — never-overwrite is the safe guardrail (C4); refreshing drafts is a later refinement.
 
+### ADR-023: Interactive 3D knowledge-galaxy in the WebUI (v0.6, extends ADR-021)
+
+**Status:** Accepted (v0.6). An interactive 3D force-directed "galaxy" of the knowledge graph in the WebUI, connecting pages by **semantic similarity**. It extends — does not replace — the read-only graphviz view of ADR-021, and stays read-only (WebUI safe-only posture, ADR-020).
+
+#### Context
+
+ADR-021 shipped a static `st.graphviz_chart` render: no drag, hover, zoom, or click, and edges limited to Memgraph's typed relationships. Its own operations doc names the next step ("an interactive component plus tag-coloured nodes are noted future upgrades"). The goal is the interactive, clustered "cloud" of agentic-patterns.com/graph: nodes drifting in 3D, clumping by subject, connected by how *similar* their content is — a different and complementary signal to the typed structural edges.
+
+#### Decision
+
+A **sibling** export, `graph/semantic_export.py:semantic_graph_export`, builds a `{nodes, links}` payload from **Qdrant nearest-neighbours** (reusing the edge-extractor's `nearest_neighbours`, ADR-010): for each page in scope (a focus neighbourhood, or a bounded full-graph sample), its top-K neighbours become undirected, similarity-weighted edges, kept only at/above a threshold; bounded by a node cap (default 300, hard max 2000). It reads only from Qdrant — never writes, never touches Memgraph. The WebUI "Graph" view gains a **2D-graphviz | 3D-galaxy renderer toggle**: the galaxy renders with **`3d-force-graph` (three.js), embedded via `st.components.v1.html` and vendored locally** (no pip dependency, no runtime CDN — the loopback WebUI stays offline-clean), built by a pure payload+HTML builder (`compendium/web/galaxy.py`) analogous to `graphviz.py`. Node colour by kind (the ADR-021 palette), size by degree, edge width by similarity; threshold/top-K/node-cap/kind controls. The graphviz view remains the **no-JS fallback**. Reached through the `tui/data.py` provider seam like the other UIs.
+
+#### Consequences
+
+- An interactive 3D galaxy with **zero pip dependencies** (vendored JS) that works offline; read-only enforced by a source check (no Qdrant writes / mutating Cypher).
+- Semantic similarity is a distinct lens from the typed edges — the same corpus, two complementary maps; graphviz stays for the structural view and as a fallback.
+- `st.components.v1.html` is a one-way embed, so **click-a-node-to-open-the-page is deferred** (it needs a bidirectional component build); navigation stays via the focus selectbox. This is the one capability gap versus the reference.
+- Computing kNN is one Qdrant query per in-scope node, bounded by the node cap; acceptable at personal scale.
+
+#### Alternatives considered
+
+**streamlit-agraph** (the ADR-021 noted upgrade) was rejected for the 3D galaxy — it wraps vis-network and is **2D-only**, and it adds a pip dependency. **A CDN-loaded renderer** was rejected — the loopback WebUI should carry no runtime network dependency, so the JS is vendored. **A bidirectional custom component** (for click-to-open) was deferred — it needs a JS build step; the one-way embed plus the existing selectbox covers navigation for v1. **Explicit-edge / shared-tag galaxy modes** were deferred — this phase is semantic-similarity only; other edge sources are a later add. **Replacing graphviz** was rejected — it is the dependency-free, no-JS fallback.
+
 ## Part III: Data Contracts and Schemas
 
 This part is the data contract layer. It defines the frontmatter every wiki page satisfies and the schemas for every backing store. The DDL, index mappings, collection definitions, and field tables here are skeletal reconstructions: the table sets, relationships, enum values, and the role of each structure are faithful, but exact column types, constraint names, index covering clauses, and analyzer or HNSW parameters may differ from the originals. Each section flags its own faithful-versus-skeletal boundary. Tune analyzers, thresholds, and vector parameters against the golden dataset before settling.
