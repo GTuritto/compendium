@@ -114,3 +114,49 @@ def test_export_is_read_only():
     # Qdrant/Cypher mutators (as method calls / clauses, not English prose).
     forbidden = ("CREATE", "MERGE", "DETACH", ".UPSERT", ".DELETE", ".SET_PAYLOAD", ".OVERWRITE")
     assert not any(f in src for f in forbidden), "semantic export must be read-only"
+
+
+# --- Nb: the pure HTML builder ----------------------------------------------
+
+def _payload():
+    return {
+        "nodes": [
+            {"id": "a", "label": "Alpha", "kind": "concept"},
+            {"id": "b", "label": "Beta", "kind": "source"},
+        ],
+        "links": [{"source": "a", "target": "b", "weight": 0.82}],
+    }
+
+
+def test_build_galaxy_html_is_pure_and_inlines_payload_and_lib():
+    """TC-GX-U5: payload + lib in -> deterministic self-contained HTML, no network."""
+    from compendium.web.galaxy import build_galaxy_html
+
+    lib = "/*VENDORED-FORCE-GRAPH*/window.ForceGraph3D=function(){};"
+    html = build_galaxy_html(_payload(), lib)
+    # deterministic
+    assert html == build_galaxy_html(_payload(), lib)
+    # the vendored lib is inlined, not referenced by URL
+    assert "/*VENDORED-FORCE-GRAPH*/" in html
+    assert "src=" not in html and "unpkg" not in html and "cdn" not in html.lower()
+    # the data is embedded
+    assert '"Alpha"' in html and '"weight": 0.82' in html
+
+
+def test_build_galaxy_html_encodes_kind_color_and_weight():
+    """TC-GX-U6: nodes coloured by kind, sized by degree; links use weight."""
+    from compendium.web.galaxy import KIND_COLOR, build_galaxy_html
+
+    html = build_galaxy_html(_payload(), "x")
+    assert KIND_COLOR["concept"] in html and KIND_COLOR["source"] in html
+    assert "nodeVal" in html and "linkWidth" in html  # degree size + weight width
+
+
+def test_vendored_asset_present_and_not_cdn():
+    """TC-GX-U8: the renderer loads from the vendored asset, not a CDN."""
+    from compendium.web import galaxy
+
+    lib = galaxy.load_lib()
+    assert "ForceGraph3D" in lib  # the real vendored bundle
+    builder_src = inspect.getsource(galaxy)
+    assert "unpkg" not in builder_src and "https://" not in builder_src
