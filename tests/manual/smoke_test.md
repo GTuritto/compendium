@@ -652,3 +652,18 @@ Prerequisites: stores up; some corpus. Stubs fine.
 | v0.5-ck.3 | approve | `compendium page promote <draft-slug> --to canonical` | the drafted concept becomes canonical |
 | v0.5-ck.4 | auto opt-in | set `curation.mode=auto`; `curate run` | passing drafts promoted; off unless set |
 | v0.5-ck.5 | scope | any mode | edge extraction (ADR-010) + contradicts (ADR-014) unchanged |
+
+## v0.6 — Interactive 3D knowledge-galaxy (ADR-023)
+
+Prerequisites: stores up (Qdrant populated — `compendium reindex pages`); some
+corpus. `compendium web` → **Graph** view.
+
+| # | Scenario | Steps | Expected |
+| --- | --- | --- | --- |
+| v0.6-gx.1 | galaxy render | Renderer → "3D galaxy"; Scope → Full graph | a 3D cloud renders; drag-orbit / scroll-zoom / drag-node work |
+| v0.6-gx.2 | threshold | raise "Similarity threshold" | fewer, stronger edges render |
+| v0.6-gx.3 | kind filter | deselect a kind in "Node kinds" | those nodes (and their dangling edges) drop out |
+| v0.6-gx.4 | bounded | lower "Node cap" | node count is capped, never an unbounded dump |
+| v0.6-gx.5 | fallback | Renderer → "2D graphviz" | the ADR-021 graphviz view still renders |
+| v0.6-gx.6 | read-only / offline | use the view with no network | renders (vendored JS, no CDN); no create/edit/delete affordance |
+| v0.6-gx.7 | qdrant down | stop Qdrant; open galaxy | "Qdrant unreachable."; graphviz fallback still works |
