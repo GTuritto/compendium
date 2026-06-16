@@ -187,10 +187,15 @@ elif view == "Curation":
 
 
 # --- Graph -------------------------------------------------------------------
-# Read-only, bounded force-directed view over Memgraph (ADR-021). No mutation
-# affordance; fits the WebUI safe-only posture (ADR-020).
+# Read-only, bounded views of the knowledge graph. Two renderers: the ADR-021
+# graphviz map over Memgraph's typed edges (the no-JS fallback), and the ADR-023
+# interactive 3D galaxy over Qdrant semantic similarity (vendored 3d-force-graph,
+# no pip dependency). Both read-only; fits the WebUI safe-only posture (ADR-020).
 
 elif view == "Graph":
+    import streamlit.components.v1 as components
+
+    from compendium.web.galaxy import build_galaxy_html, filter_by_kind, load_lib
     from compendium.web.graphviz import build_dot
 
     _NODE_KINDS = ["Source", "Concept", "Topic", "Chunk"]
@@ -198,16 +203,19 @@ elif view == "Graph":
         "PART_OF", "EVIDENCES", "GROUNDS", "RELATED_TO",
         "PREREQUISITE_FOR", "SYNTHESIZES", "CONTRADICTS",
     ]
+    _GX_KINDS = ["concept", "source", "topic", "chunk"]
+
     st.header("Graph")
+    renderer = st.radio(
+        "Renderer", ("2D graphviz (typed edges)", "3D galaxy (semantic similarity)"),
+        key="gv_renderer", horizontal=True,
+    )
     mode = st.radio(
         "Scope", ("Neighbourhood", "Full graph (sampled)"),
         key="gv_mode", horizontal=True,
     )
-    kinds = st.multiselect(
-        "Node kinds", _NODE_KINDS, default=["Source", "Concept", "Topic"], key="gv_kinds"
-    )
-    edge_types = st.multiselect("Edge types", _EDGE_TYPES, key="gv_edges")
 
+    # Shared focus search (title/slug -> node id; page ids match Qdrant points).
     node_id: str | None = None
     if mode == "Neighbourhood":
         term = st.text_input("Find a focus node (title/slug)", key="gv_term")
@@ -216,7 +224,7 @@ elif view == "Graph":
                 matches = provider.graph_search(term.strip())
             except provider.GraphUnreachable:
                 matches = []
-                st.error("Memgraph unreachable.")
+                st.error("Memgraph unreachable (focus search). Try Full graph.")
             if matches:
                 labels = [f"{m['label']} ({m['kind']})" for m in matches]
                 pick = st.selectbox("Focus node", labels, key="gv_focus")
@@ -225,20 +233,45 @@ elif view == "Graph":
             elif term.strip():
                 st.info("No matching node.")
 
-    if mode == "Full graph (sampled)" or node_id:
+    draw = mode == "Full graph (sampled)" or node_id
+
+    if draw and renderer.startswith("2D"):
+        kinds = st.multiselect(
+            "Node kinds", _NODE_KINDS, default=["Source", "Concept", "Topic"], key="gv_kinds"
+        )
+        edge_types = st.multiselect("Edge types", _EDGE_TYPES, key="gv_edges")
         try:
             export = provider.graph_export(node_id=node_id)
         except provider.GraphUnreachable:
             st.error("Memgraph unreachable.")
             export = None
         if export is not None:
-            dot = build_dot(
-                export,
-                kinds=set(kinds) or None,
-                edge_types=set(edge_types) or None,
-            )
+            dot = build_dot(export, kinds=set(kinds) or None, edge_types=set(edge_types) or None)
             st.caption(
                 f"{len(export['nodes'])} nodes · {len(export['edges'])} edges "
-                "(bounded, read-only)"
+                "(typed, bounded, read-only)"
             )
             st.graphviz_chart(dot)
+
+    elif draw:  # 3D galaxy
+        c1, c2, c3 = st.columns(3)
+        threshold = c1.slider("Similarity threshold", 0.30, 0.95, 0.60, 0.05, key="gx_thr")
+        top_k = c2.slider("Neighbours per node", 3, 20, 8, key="gx_k")
+        cap = c3.slider("Node cap", 50, 500, 300, 50, key="gx_cap")
+        gx_kinds = st.multiselect(
+            "Node kinds", _GX_KINDS, default=["concept", "source", "topic"], key="gx_kinds"
+        )
+        try:
+            galaxy = provider.semantic_graph(
+                node_id=node_id, top_k=top_k, threshold=threshold, limit=cap
+            )
+        except provider.GraphUnreachable:
+            st.error("Qdrant unreachable.")
+            galaxy = None
+        if galaxy is not None:
+            galaxy = filter_by_kind(galaxy, gx_kinds)
+            st.caption(
+                f"{len(galaxy['nodes'])} nodes · {len(galaxy['links'])} edges "
+                "(semantic similarity, bounded, read-only) · drag to orbit, scroll to zoom"
+            )
+            components.html(build_galaxy_html(galaxy, load_lib()), height=660)

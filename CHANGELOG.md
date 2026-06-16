@@ -12,6 +12,26 @@ bump to `0.3.0` happens only when the whole v0.3 build plan is complete. See
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-16
+
+Toward the v0.6 build (stay on the `0.5.x` line, patch per phase; the `0.6.0`
+minor bump happens when the v0.6 build is complete).
+
+### Added
+
+- **Interactive 3D knowledge-galaxy in the WebUI** (ADR-023, extends ADR-021):
+  the **Graph** view gains a **2D-graphviz | 3D-galaxy renderer toggle**. The
+  galaxy connects pages by **semantic similarity** — a new read-only, bounded
+  export (`compendium/graph/semantic_export.py`) builds undirected,
+  similarity-weighted edges from Qdrant nearest-neighbours (reusing the
+  edge-extractor's `nearest_neighbours`, ADR-010) — rendered with **vendored
+  `3d-force-graph`** (three.js, `compendium/web/static/`) through
+  `st.components.v1.html`: **no pip dependency, no CDN, offline-capable**. Node
+  colour by kind, size by degree, edge width by similarity; threshold / top-K /
+  node-cap / kind controls. Read-only (WebUI safe-only posture, ADR-020);
+  graphviz stays the no-JS fallback. Click-to-open-page is deferred (the one-way
+  embed cannot return events). No schema migration; no new dependency.
+
 ## [0.5.0] - 2026-06-14
 
 The v0.5 feature build: six features over the page-first engine — hard delete

@@ -117,8 +117,27 @@ def graph_export(node_id: str | None = None, *, hops: int = 2, limit: int = 300)
         return browse.graph_export(driver, node_id=node_id, hops=hops, limit=limit)
 
 
+def semantic_graph(
+    node_id: str | None = None, *, top_k: int = 8, threshold: float = 0.6, limit: int = 300
+):
+    """Bounded read-only semantic-similarity graph from Qdrant kNN (ADR-023).
+
+    Raises ``GraphUnreachable`` if Qdrant is down, so the WebUI galaxy view can
+    report it the same way the graphviz view reports Memgraph being down.
+    """
+    from compendium.graph.semantic_export import semantic_graph_export
+    from compendium.index.clients import qdrant_client, qdrant_reachable
+
+    client = qdrant_client()
+    if not qdrant_reachable(client):
+        raise GraphUnreachable()
+    return semantic_graph_export(
+        client, node_id=node_id, top_k=top_k, threshold=threshold, limit=limit
+    )
+
+
 class GraphUnreachable(Exception):
-    """Raised when the graph browser cannot reach Memgraph."""
+    """Raised when a graph view cannot reach its store (Memgraph or Qdrant)."""
 
 
 def resolve_signal(signal_id: str, *, approve: bool) -> str:
