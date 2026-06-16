@@ -31,6 +31,23 @@ def load_lib() -> str:
     return _LIB_PATH.read_text(encoding="utf-8")
 
 
+def filter_by_kind(payload: dict[str, Any], kinds: list[str] | set[str] | None) -> dict[str, Any]:
+    """Keep only nodes whose (lowercased) kind is in ``kinds``; drop dangling links.
+
+    Pure. An empty/None ``kinds`` is a no-op (keep everything).
+    """
+    if not kinds:
+        return payload
+    wanted = {k.lower() for k in kinds}
+    keep = {n["id"] for n in payload["nodes"] if (n.get("kind") or "").lower() in wanted}
+    return {
+        "nodes": [n for n in payload["nodes"] if n["id"] in keep],
+        "links": [
+            e for e in payload["links"] if e["source"] in keep and e["target"] in keep
+        ],
+    }
+
+
 def build_galaxy_html(
     payload: dict[str, Any],
     lib_js: str,

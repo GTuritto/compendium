@@ -160,3 +160,34 @@ def test_vendored_asset_present_and_not_cdn():
     assert "ForceGraph3D" in lib  # the real vendored bundle
     builder_src = inspect.getsource(galaxy)
     assert "unpkg" not in builder_src and "https://" not in builder_src
+
+
+def test_filter_by_kind_drops_nodes_and_dangling_links():
+    """TC-GX-U5: the node-kind filter narrows nodes and drops dangling links."""
+    from compendium.web.galaxy import filter_by_kind
+
+    out = filter_by_kind(_payload(), ["concept"])  # keep 'a', drop 'b' (source)
+    assert {n["id"] for n in out["nodes"]} == {"a"}
+    assert out["links"] == []  # the a-b link dangles once b is gone
+    # empty selection is a no-op
+    assert filter_by_kind(_payload(), [])["nodes"] == _payload()["nodes"]
+
+
+def test_galaxy_pipeline_headless():
+    """End-to-end (hermetic): stub export -> kind filter -> HTML, no store/network."""
+    from compendium.graph.semantic_export import semantic_graph_export
+    from compendium.web.galaxy import build_galaxy_html, filter_by_kind
+
+    g = semantic_graph_export(StubQdrant(_pages()), top_k=4, threshold=0.6)
+    g = filter_by_kind(g, ["concept", "source", "topic"])
+    html = build_galaxy_html(g, "/*lib*/")
+    assert html.startswith("<!doctype html>") and "ForceGraph3D" in html
+
+
+def test_galaxy_builder_is_read_only():
+    """TC-GX-U7: the galaxy builder has no store/mutation calls (pure render)."""
+    from compendium.web import galaxy
+
+    src = inspect.getsource(galaxy).upper()
+    forbidden = ("CREATE", "MERGE", "DETACH", ".UPSERT", ".DELETE", ".SET_PAYLOAD", "CONNECTION(")
+    assert not any(f in src for f in forbidden), "galaxy builder must not touch stores"
