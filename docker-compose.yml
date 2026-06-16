@@ -1,10 +1,14 @@
-# Dev-only: local backing stores for Compendium development.
-# Not a production or production-like deployment. Memgraph (Phase 6) is
-# appended here later.
+# Dev-only: local backing stores for Compendium development. Also used by the
+# personal always-on host deploy (ADR-012), which is why each store carries
+# `restart: unless-stopped` — on a reboot the docker daemon (enabled on boot)
+# brings the stores back without a manual `compendium start`. `unless-stopped`
+# (not `always`) so an explicit `docker compose stop` stays stopped in dev.
+# Not a production or production-like deployment.
 
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: compendium
       POSTGRES_USER: compendium
@@ -18,6 +22,7 @@ services:
   # single-user dev only, matching the Postgres dev posture.
   opensearch:
     image: opensearchproject/opensearch:2.18.0
+    restart: unless-stopped
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
@@ -41,6 +46,7 @@ services:
     # Pinned to the 1.18 line to match the qdrant-client version and avoid the
     # client/server compatibility warning.
     image: qdrant/qdrant:v1.18.0
+    restart: unless-stopped
     ports:
       - "6533:6333"
       - "6534:6334"
@@ -53,6 +59,7 @@ services:
   # container still listens on 7687/7444 internally).
   memgraph:
     image: memgraph/memgraph:2.18.1
+    restart: unless-stopped
     command: ["--log-level=WARNING"]
     ports:
       - "7688:7687"
