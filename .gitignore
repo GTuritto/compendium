@@ -60,3 +60,6 @@ vault/sources/*.md
 .DS_Store
 *.swp
 mutants/
+
+# Local docker compose overrides (host-specific store tweaks; not tracked).
+docker-compose.override.yml

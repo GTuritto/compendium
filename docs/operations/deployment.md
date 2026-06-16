@@ -107,10 +107,21 @@ Docker Desktop is set to launch at login).
 
 ## Backing stores on boot
 
-The stores run under the dev `docker-compose.yml`. For an always-on host, enable
-**Docker Desktop → Start at login** (macOS) or the docker service (Linux) so the
-containers come back after a reboot; the launchd/systemd units tolerate a brief
-store outage (the serve daemon restarts; the timers retry next fire).
+The stores run under `docker-compose.yml`, and each store carries
+`restart: unless-stopped`, so once the docker daemon is up after a reboot the
+containers come back on their own — no manual `compendium start`. Two things to
+ensure on an always-on host:
+
+1. **Docker starts on boot:** **Docker Desktop → Start at login** (macOS) or
+   `sudo systemctl enable --now docker` (Linux).
+2. That's it — the `restart: unless-stopped` policy (in compose) does the rest.
+   `unless-stopped` (not `always`) means an explicit `docker compose stop` stays
+   stopped, which is what you want in dev.
+
+The launchd/systemd units tolerate a brief store outage during the restart (the
+serve daemon restarts; the timers retry next fire). Host-specific store tweaks
+can go in an untracked `docker-compose.override.yml` (gitignored, auto-merged by
+compose).
 
 ## Ubuntu / Linux server
 
